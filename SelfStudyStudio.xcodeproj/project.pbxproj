@@ -1,0 +1,421 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000101 /* AddProofView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000201 /* AddProofView.swift */; };
+		100000000000000000000102 /* AttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000202 /* AttachmentStore.swift */; };
+		100000000000000000000103 /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000203 /* Domain.swift */; };
+		100000000000000000000104 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000204 /* ExportService.swift */; };
+		100000000000000000000105 /* JournalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000205 /* JournalService.swift */; };
+		100000000000000000000106 /* JournalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000206 /* JournalStore.swift */; };
+		100000000000000000000107 /* JournalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000207 /* JournalViewModel.swift */; };
+		100000000000000000000108 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000208 /* LibraryView.swift */; };
+		100000000000000000000109 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000209 /* OnboardingView.swift */; };
+		10000000000000000000010A /* PersonalLearningJournalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020A /* PersonalLearningJournalApp.swift */; };
+		10000000000000000000010B /* ProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020B /* ProjectsView.swift */; };
+		10000000000000000000010C /* QuickLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020C /* QuickLogView.swift */; };
+		10000000000000000000010D /* ReviewService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020D /* ReviewService.swift */; };
+		10000000000000000000010E /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020E /* ReviewView.swift */; };
+		10000000000000000000010F /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020F /* RootView.swift */; };
+		100000000000000000000110 /* TimerSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000210 /* TimerSessionView.swift */; };
+		100000000000000000000111 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000211 /* TodayView.swift */; };
+		100000000000000000000112 /* SelfStudyStudioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000212 /* SelfStudyStudioApp.swift */; };
+		100000000000000000000113 /* ProofAttachmentDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000213 /* ProofAttachmentDraft.swift */; };
+		100000000000000000000114 /* ProofPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000214 /* ProofPreview.swift */; };
+		100000000000000000000115 /* ProofDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* ProofDetailView.swift */; };
+		100000000000000000000116 /* AIReviewSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000216 /* AIReviewSettings.swift */; };
+		100000000000000000000117 /* AIReviewSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000217 /* AIReviewSettingsView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		100000000000000000000201 /* AddProofView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/AddProofView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000202 /* AttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/AttachmentStore.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000203 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Domain.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000204 /* ExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ExportService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000205 /* JournalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/JournalService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000206 /* JournalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/JournalStore.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000207 /* JournalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/JournalViewModel.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000208 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/LibraryView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000209 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/OnboardingView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000020A /* PersonalLearningJournalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/PersonalLearningJournalApp.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000020B /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ProjectsView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000020C /* QuickLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/QuickLogView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000020D /* ReviewService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ReviewService.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000020E /* ReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ReviewView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000020F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/RootView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000210 /* TimerSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/TimerSessionView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000211 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/TodayView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000212 /* SelfStudyStudioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/SelfStudyStudioApp.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000213 /* ProofAttachmentDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ProofAttachmentDraft.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000214 /* ProofPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ProofPreview.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000215 /* ProofDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ProofDetailView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000216 /* AIReviewSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/AIReviewSettings.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000217 /* AIReviewSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/AIReviewSettingsView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		100000000000000000000401 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		100000000000000000000501 = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000502 /* Sources */,
+				100000000000000000000503 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		100000000000000000000502 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000201 /* AddProofView.swift */,
+				100000000000000000000202 /* AttachmentStore.swift */,
+				100000000000000000000203 /* Domain.swift */,
+				100000000000000000000204 /* ExportService.swift */,
+				100000000000000000000205 /* JournalService.swift */,
+				100000000000000000000206 /* JournalStore.swift */,
+				100000000000000000000207 /* JournalViewModel.swift */,
+				100000000000000000000208 /* LibraryView.swift */,
+				100000000000000000000209 /* OnboardingView.swift */,
+				10000000000000000000020A /* PersonalLearningJournalApp.swift */,
+				100000000000000000000213 /* ProofAttachmentDraft.swift */,
+				100000000000000000000214 /* ProofPreview.swift */,
+				100000000000000000000215 /* ProofDetailView.swift */,
+				100000000000000000000216 /* AIReviewSettings.swift */,
+				100000000000000000000217 /* AIReviewSettingsView.swift */,
+				10000000000000000000020B /* ProjectsView.swift */,
+				10000000000000000000020C /* QuickLogView.swift */,
+				10000000000000000000020D /* ReviewService.swift */,
+				10000000000000000000020E /* ReviewView.swift */,
+				10000000000000000000020F /* RootView.swift */,
+				100000000000000000000210 /* TimerSessionView.swift */,
+				100000000000000000000211 /* TodayView.swift */,
+				100000000000000000000212 /* SelfStudyStudioApp.swift */,
+			);
+			name = Sources;
+			sourceTree = "<group>";
+		};
+		100000000000000000000503 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000301 /* SelfStudyStudio.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		100000000000000000000601 /* SelfStudyStudio */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000901 /* Build configuration list for PBXNativeTarget "SelfStudyStudio" */;
+			buildPhases = (
+				100000000000000000000701 /* Sources */,
+				100000000000000000000401 /* Frameworks */,
+				100000000000000000000702 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SelfStudyStudio;
+			productName = SelfStudyStudio;
+			productReference = 100000000000000000000301 /* SelfStudyStudio.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		100000000000000000000801 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1620;
+				LastUpgradeCheck = 1620;
+				TargetAttributes = {
+					100000000000000000000601 = {
+						CreatedOnToolsVersion = 16.2;
+					};
+				};
+			};
+			buildConfigurationList = 100000000000000000000902 /* Build configuration list for PBXProject "SelfStudyStudio" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 100000000000000000000501;
+			productRefGroup = 100000000000000000000503 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				100000000000000000000601 /* SelfStudyStudio */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		100000000000000000000702 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		100000000000000000000701 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000101 /* AddProofView.swift in Sources */,
+				100000000000000000000102 /* AttachmentStore.swift in Sources */,
+				100000000000000000000103 /* Domain.swift in Sources */,
+				100000000000000000000104 /* ExportService.swift in Sources */,
+				100000000000000000000105 /* JournalService.swift in Sources */,
+				100000000000000000000106 /* JournalStore.swift in Sources */,
+				100000000000000000000107 /* JournalViewModel.swift in Sources */,
+				100000000000000000000108 /* LibraryView.swift in Sources */,
+				100000000000000000000109 /* OnboardingView.swift in Sources */,
+				10000000000000000000010A /* PersonalLearningJournalApp.swift in Sources */,
+				10000000000000000000010B /* ProjectsView.swift in Sources */,
+				10000000000000000000010C /* QuickLogView.swift in Sources */,
+				10000000000000000000010D /* ReviewService.swift in Sources */,
+				10000000000000000000010E /* ReviewView.swift in Sources */,
+				10000000000000000000010F /* RootView.swift in Sources */,
+				100000000000000000000110 /* TimerSessionView.swift in Sources */,
+				100000000000000000000111 /* TodayView.swift in Sources */,
+				100000000000000000000112 /* SelfStudyStudioApp.swift in Sources */,
+				100000000000000000000113 /* ProofAttachmentDraft.swift in Sources */,
+				100000000000000000000114 /* ProofPreview.swift in Sources */,
+				100000000000000000000115 /* ProofDetailView.swift in Sources */,
+				100000000000000000000116 /* AIReviewSettings.swift in Sources */,
+				100000000000000000000117 /* AIReviewSettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		100000000000000000000A01 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		100000000000000000000A02 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		100000000000000000000B01 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Learning Journal";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Learning Journal lets you capture photo Proof for learning sessions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Learning Journal records optional audio Proof for practice sessions.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Learning Journal lets you attach photo Proof to learning sessions.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.local.selfstudystudio";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		100000000000000000000B02 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Learning Journal";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Learning Journal lets you capture photo Proof for learning sessions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Learning Journal records optional audio Proof for practice sessions.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Learning Journal lets you attach photo Proof to learning sessions.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.local.selfstudystudio";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		100000000000000000000901 /* Build configuration list for PBXNativeTarget "SelfStudyStudio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000B01 /* Debug */,
+				100000000000000000000B02 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000902 /* Build configuration list for PBXProject "SelfStudyStudio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000A01 /* Debug */,
+				100000000000000000000A02 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 100000000000000000000801 /* Project object */;
+}

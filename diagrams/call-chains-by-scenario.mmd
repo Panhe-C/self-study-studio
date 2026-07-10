@@ -1,0 +1,94 @@
+graph TD
+  %% Shared layers
+  subgraph UI[SwiftUI Views]
+    OVB[OnboardingView]
+    TV[TodayView / ProjectDetailView]
+    QLV[QuickLogView]
+    TSV[TimerSessionView]
+    APV[AddProofView]
+    RV[ReviewView]
+    LV[LibraryView]
+  end
+
+  subgraph VM[ViewModel Seam]
+    JVM[JournalViewModel]
+  end
+
+  subgraph Core[Core Modules]
+    JS[JournalService]
+    RS[ReviewService]
+    ES[ExportService]
+    AS[AttachmentStore]
+  end
+
+  subgraph Seams[Seams / Adapters]
+    JST[JournalStore protocol]
+    JSS[JSONJournalStore]
+    AIRP[AIReviewProvider protocol]
+    RBP[RuleBasedReviewProvider]
+    HAP[HTTPAIReviewProvider]
+  end
+
+  subgraph Files[Filesystem]
+    JSON[(LearningJournal/journal.json)]
+    ATT[(LearningJournal/Attachments/...)]
+    EXP[(LearningJournal/Exports/export-*/)]
+  end
+
+  %% 1) Onboarding
+  OVB -->|onboardProjects| JVM
+  JVM -->|createProject x N| JS
+  JS -->|persist| JST
+  JST --> JSS
+  JSS --> JSON
+  JS -->|snapshot| JVM
+
+  %% 2) Quick Log
+  TV -->|present| QLV
+  QLV -->|quickLog| JVM
+  JVM -->|quickLog| JS
+  JS -->|recordSession + trail event + next-step event| JST
+  JST --> JSS
+  JSS --> JSON
+  JS -->|snapshot refresh| JVM
+
+  %% 3) Timer Session
+  TV -->|present| TSV
+  TSV -->|saveTimerSession| JVM
+  JVM -->|saveTimerSession| JS
+  JS -->|recordSession + trail event + next-step event| JST
+  JST --> JSS
+  JSS --> JSON
+
+  %% 4) Add Proof
+  QLV -->|Save & Add Proof| APV
+  TSV -->|Save & Add Proof| APV
+  TV -->|project-level Add Proof| APV
+  APV -->|optional saveData/copyFile| AS
+  AS --> ATT
+  APV -->|addProof / addProofFrom*| JVM
+  JVM -->|addProof| JS
+  JS -->|appendTrailEvent proof + persist| JST
+  JST --> JSS
+  JSS --> JSON
+
+  %% 5) Weekly Review
+  TV -->|Weekly Review| JVM
+  JVM -->|createWeeklyReview| RS
+  RS -->|makeReview| AIRP
+  AIRP --> RBP
+  AIRP --> HAP
+  RS -->|recordReview| JS
+  JS -->|appendTrailEvent review + persist| JST
+  JST --> JSS
+  JSS --> JSON
+  RV -->|edit review| JVM
+  JVM -->|updateReview| JS
+
+  %% 6) Export
+  LV -->|exportJournal| JVM
+  JVM -->|exportBundle| ES
+  ES -->|exportJSON| EXP
+  ES -->|exportAttachments| EXP
+  EXP --> JSON
+  EXP --> ATT

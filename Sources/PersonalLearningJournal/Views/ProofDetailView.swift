@@ -1,0 +1,192 @@
+import AVFoundation
+import SwiftUI
+
+#if os(iOS)
+import QuickLook
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
+
+struct ProofDetailView: View {
+    let proof: Proof
+    let projectName: String
+    let sessionSummary: String
+
+    @StateObject private var audioPlayer = ProofAudioPlayer()
+    @State private var isShowingFilePreview = false
+
+    private var preview: ProofPreviewDescriptor {
+        ProofPreviewDescriptor(proof: proof)
+    }
+
+    var body: some View {
+        List {
+            Section("Proof") {
+                Text(proof.title)
+                    .font(.headline)
+                Text(proof.statement)
+                Label(projectName, systemImage: "folder")
+                Label(sessionSummary, systemImage: "clock")
+                Label(
+                    proof.createdAt.formatted(date: .abbreviated, time: .shortened),
+                    systemImage: "calendar"
+                )
+            }
+
+            Section("Attachment") {
+                attachmentView
+            }
+        }
+        .navigationTitle("Proof")
+        #if os(iOS)
+        .sheet(isPresented: $isShowingFilePreview) {
+            if case let .file(url) = preview.kind {
+                QuickLookFilePreview(url: url)
+            }
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private var attachmentView: some View {
+        switch preview.kind {
+        case let .image(url):
+            LocalProofImage(url: url)
+        case let .audio(url):
+            Button {
+                audioPlayer.toggle(url: url)
+            } label: {
+                Label(
+                    audioPlayer.isPlaying ? "Pause Recording" : "Play Recording",
+                    systemImage: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill"
+                )
+            }
+        case let .file(url):
+            #if os(iOS)
+            Button {
+                isShowingFilePreview = true
+            } label: {
+                Label("Open File", systemImage: "doc.richtext")
+            }
+            #else
+            ShareLink(item: url) {
+                Label("Share File", systemImage: "square.and.arrow.up")
+            }
+            #endif
+        case let .link(url):
+            Link(destination: url) {
+                Label(url.absoluteString, systemImage: "link")
+                    .lineLimit(2)
+            }
+        case .unavailable:
+            ContentUnavailableView(
+                "Attachment Unavailable",
+                systemImage: "exclamationmark.triangle",
+                description: Text("The original file is not stored on this device.")
+            )
+        }
+    }
+}
+
+@MainActor
+private final class ProofAudioPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
+    @Published private(set) var isPlaying = false
+    private var player: AVAudioPlayer?
+
+    func toggle(url: URL) {
+        if isPlaying {
+            player?.pause()
+            isPlaying = false
+            return
+        }
+
+        do {
+            if player?.url != url {
+                player = try AVAudioPlayer(contentsOf: url)
+                player?.delegate = self
+            }
+            player?.play()
+            isPlaying = true
+        } catch {
+            isPlaying = false
+        }
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor [weak self] in
+            self?.isPlaying = false
+        }
+    }
+}
+
+private struct LocalProofImage: View {
+    let url: URL
+
+    var body: some View {
+        #if os(iOS)
+        if let image = UIImage(contentsOfFile: url.path) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+        } else {
+            unavailableImage
+        }
+        #elseif os(macOS)
+        if let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+        } else {
+            unavailableImage
+        }
+        #else
+        unavailableImage
+        #endif
+    }
+
+    private var unavailableImage: some View {
+        ContentUnavailableView(
+            "Image Unavailable",
+            systemImage: "photo.badge.exclamationmark",
+            description: Text("The original image could not be loaded.")
+        )
+    }
+}
+
+#if os(iOS)
+private struct QuickLookFilePreview: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(url: url)
+    }
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: QLPreviewController, context: Context) {}
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        let url: URL
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+            1
+        }
+
+        func previewController(
+            _ controller: QLPreviewController,
+            previewItemAt index: Int
+        ) -> QLPreviewItem {
+            url as NSURL
+        }
+    }
+}
+#endif
