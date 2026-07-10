@@ -1,4 +1,5 @@
 .build/
 .swiftpm/
 build/
+.worktrees/
 .DS_Store
