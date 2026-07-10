@@ -216,6 +216,13 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
 
     public static func decodeDraft(from data: Data) throws -> ReviewDraft {
         let response = try JSONDecoder.journal.decode(HTTPAIReviewResponse.self, from: data)
+        var sourceReferences = response.sourceReferences ?? [:]
+        if !response.sourceSummary.isEmpty {
+            for insight in response.facts + response.patterns + response.decisions
+            where sourceReferences[insight, default: []].isEmpty {
+                sourceReferences[insight] = response.sourceSummary
+            }
+        }
         return ReviewDraft(
             facts: response.facts,
             patterns: response.patterns,
@@ -224,7 +231,7 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
                 .compactMapValues(ProjectStatus.init(rawValue:)),
             nextSteps: response.nextSteps.compactMapKeys(UUID.init),
             sourceSummary: response.sourceSummary,
-            sourceReferences: response.sourceReferences ?? [:]
+            sourceReferences: sourceReferences
         )
     }
 
