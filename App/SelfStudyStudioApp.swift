@@ -9,7 +9,9 @@ struct SelfStudyStudioApp: App {
             for: .documentDirectory,
             in: .userDomainMask
         ).first ?? FileManager.default.temporaryDirectory
-        let journalService = JournalService(store: Self.makeJournalStore(documentsDirectory: documents))
+        let journalService = JournalService(
+            repository: Self.makeJournalRepository(documentsDirectory: documents)
+        )
         let reviewProvider: any AIReviewProvider = AdaptiveAIReviewProvider()
         _viewModel = StateObject(
             wrappedValue: JournalViewModel(
@@ -29,14 +31,28 @@ struct SelfStudyStudioApp: App {
         }
     }
 
-    private static func makeJournalStore(documentsDirectory: URL) -> any JournalStore {
+    private static func makeJournalRepository(
+        documentsDirectory: URL
+    ) -> any JournalRepository {
         do {
-            return try JournalStoreFactory.makeDefault(documentsDirectory: documentsDirectory)
-        } catch {
-            let legacyURL = documentsDirectory
+            let journalDirectory = documentsDirectory
                 .appendingPathComponent("LearningJournal", isDirectory: true)
-                .appendingPathComponent("journal.json")
-            return JSONJournalStore(fileURL: legacyURL)
+            let repository = try RepositoryFactory.makeDefault(
+                storeURL: journalDirectory
+                    .appendingPathComponent("local", isDirectory: true)
+                    .appendingPathComponent("journal-v2.store")
+            )
+            let legacyStore = try JournalStoreFactory.makeDefault(
+                documentsDirectory: documentsDirectory
+            )
+            try RepositoryMigration().migrateIfNeeded(
+                from: legacyStore,
+                to: repository,
+                backupDirectory: journalDirectory
+            )
+            return repository
+        } catch {
+            return InMemoryJournalRepository()
         }
     }
 }

@@ -76,18 +76,44 @@ public enum MutationOrigin: Sendable {
     case remote
 }
 
+public struct JournalStateMetadata: Codable, Equatable, Sendable {
+    public var hasCompletedOnboarding: Bool
+    public var pendingFirstRecordProjectId: UUID?
+
+    public init(
+        hasCompletedOnboarding: Bool,
+        pendingFirstRecordProjectId: UUID?
+    ) {
+        self.hasCompletedOnboarding = hasCompletedOnboarding
+        self.pendingFirstRecordProjectId = pendingFirstRecordProjectId
+    }
+
+    public init(snapshot: JournalSnapshot) {
+        self.init(
+            hasCompletedOnboarding: snapshot.hasCompletedOnboarding,
+            pendingFirstRecordProjectId: snapshot.pendingFirstRecordProjectId
+        )
+    }
+}
+
 public struct JournalTransaction: Sendable {
     public var upserts: [JournalEntity]
     public var deletions: [JournalEntityReference]
     public var origin: MutationOrigin
+    public var stateMetadata: JournalStateMetadata?
+    public var completedMigrationIdentifier: String?
 
     public init(
         upserts: [JournalEntity] = [],
         deletions: [JournalEntityReference] = [],
-        origin: MutationOrigin
+        origin: MutationOrigin,
+        stateMetadata: JournalStateMetadata? = nil,
+        completedMigrationIdentifier: String? = nil
     ) {
         self.upserts = upserts
         self.deletions = deletions
         self.origin = origin
+        self.stateMetadata = stateMetadata
+        self.completedMigrationIdentifier = completedMigrationIdentifier
     }
 }

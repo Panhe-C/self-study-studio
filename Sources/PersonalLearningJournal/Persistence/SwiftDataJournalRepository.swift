@@ -34,12 +34,15 @@ public final class SwiftDataJournalRepository: JournalRepository {
     }
 
     public func snapshot() throws -> JournalSnapshot {
-        JournalSnapshot(
+        let metadata = try loadStateMetadata()
+        return JournalSnapshot(
             projects: try decodedRecords(StoredProjectV2.self, as: Project.self),
             sessions: try decodedRecords(StoredSessionV2.self, as: LearningSession.self),
             proofs: try decodedRecords(StoredProofV2.self, as: Proof.self),
             reviews: try decodedRecords(StoredReviewV2.self, as: Review.self),
-            trailEvents: try decodedRecords(StoredTrailEventV2.self, as: TrailEvent.self)
+            trailEvents: try decodedRecords(StoredTrailEventV2.self, as: TrailEvent.self),
+            hasCompletedOnboarding: metadata?.hasCompletedOnboarding,
+            pendingFirstRecordProjectId: metadata?.pendingFirstRecordProjectId
         )
     }
 
@@ -56,6 +59,18 @@ public final class SwiftDataJournalRepository: JournalRepository {
                 if case .user = transaction.origin {
                     insertMutation(for: reference, operation: .delete)
                 }
+            }
+            if let metadata = transaction.stateMetadata {
+                try storeRepositoryMetadata(
+                    key: Self.stateMetadataKey,
+                    value: JSONEncoder.journal.encode(metadata)
+                )
+            }
+            if let identifier = transaction.completedMigrationIdentifier {
+                try storeRepositoryMetadata(
+                    key: Self.migrationKey(identifier),
+                    value: Data("complete".utf8)
+                )
             }
             try context.save()
         } catch {
@@ -118,6 +133,12 @@ public final class SwiftDataJournalRepository: JournalRepository {
             context.rollback()
             throw error
         }
+    }
+
+    public func hasCompletedMigration(identifier: String) throws -> Bool {
+        let key = Self.migrationKey(identifier)
+        return try context.fetch(FetchDescriptor<StoredRepositoryMetadataV2>())
+            .contains { $0.key == key }
     }
 
     private func upsert(_ entity: JournalEntity) throws {
@@ -232,6 +253,29 @@ public final class SwiftDataJournalRepository: JournalRepository {
 
     private static func key(for reference: JournalEntityReference) -> String {
         "\(reference.kind.rawValue):\(reference.id.uuidString)"
+    }
+
+    private func loadStateMetadata() throws -> JournalStateMetadata? {
+        guard let record = try context.fetch(FetchDescriptor<StoredRepositoryMetadataV2>())
+            .first(where: { $0.key == Self.stateMetadataKey }) else {
+            return nil
+        }
+        return try JSONDecoder.journal.decode(JournalStateMetadata.self, from: record.value)
+    }
+
+    private func storeRepositoryMetadata(key: String, value: Data) throws {
+        let records = try context.fetch(FetchDescriptor<StoredRepositoryMetadataV2>())
+        if let existing = records.first(where: { $0.key == key }) {
+            existing.value = value
+        } else {
+            context.insert(StoredRepositoryMetadataV2(key: key, value: value))
+        }
+    }
+
+    private static let stateMetadataKey = "journal-state"
+
+    private static func migrationKey(_ identifier: String) -> String {
+        "migration:\(identifier)"
     }
 
     private static func makeContainer(_ configuration: ModelConfiguration) throws -> ModelContainer {
@@ -404,8 +448,8 @@ private protocol StoredEntityV2: PersistentModel {
 
 @Model private final class StoredRepositoryMetadataV2 {
     @Attribute(.unique) var key: String
-    var value: String
-    init(key: String, value: String) {
+    var value: Data
+    init(key: String, value: Data) {
         self.key = key
         self.value = value
     }

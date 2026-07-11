@@ -2,6 +2,32 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class JournalServiceTests: XCTestCase {
+    func testQuickLogCommitsOnlyChangedEntities() throws {
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Finish",
+            currentNextStep: "Lecture 1"
+        )
+        let repository = TransactionSpyRepository(
+            snapshot: JournalSnapshot(projects: [project])
+        )
+        let service = JournalService(repository: repository)
+
+        _ = try service.quickLog(
+            projectId: project.id,
+            durationMinutes: 30,
+            note: "Finished lecture one",
+            nextStep: "Lecture 2"
+        )
+
+        let transaction = try XCTUnwrap(repository.transactions.last)
+        XCTAssertEqual(
+            transaction.upserts.map(\.reference.kind),
+            [.project, .session, .trailEvent, .trailEvent]
+        )
+        XCTAssertTrue(transaction.deletions.isEmpty)
+    }
     func testOnboardingIsNotCompleteUntilFirstSessionIsRecorded() throws {
         let service = JournalService(store: InMemoryJournalStore())
         let project = try XCTUnwrap(
@@ -369,4 +395,32 @@ final class JournalServiceTests: XCTestCase {
         XCTAssertTrue(events[2].detail.contains("复现了 bigram baseline"))
         XCTAssertTrue(events[3].detail.contains("low-frequency"))
     }
+}
+
+private final class TransactionSpyRepository: JournalRepository {
+    private var storedSnapshot: JournalSnapshot
+    var transactions: [JournalTransaction] = []
+
+    init(snapshot: JournalSnapshot) {
+        self.storedSnapshot = snapshot
+    }
+
+    func snapshot() throws -> JournalSnapshot { storedSnapshot }
+
+    func commit(_ transaction: JournalTransaction) throws {
+        transactions.append(transaction)
+    }
+
+    func pendingMutations(limit: Int) throws -> [PendingMutation] { [] }
+
+    func acknowledge(
+        _ mutationIDs: Set<UUID>,
+        metadata: [SyncRecordMetadata]
+    ) throws {}
+
+    func conflicts() throws -> [SyncConflict] { [] }
+
+    func resolveConflict(id: UUID, with entity: JournalEntity) throws {}
+
+    func hasCompletedMigration(identifier: String) throws -> Bool { false }
 }

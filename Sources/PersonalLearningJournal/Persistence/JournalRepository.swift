@@ -7,6 +7,7 @@ public protocol JournalRepository: AnyObject {
     func acknowledge(_ mutationIDs: Set<UUID>, metadata: [SyncRecordMetadata]) throws
     func conflicts() throws -> [SyncConflict]
     func resolveConflict(id: UUID, with entity: JournalEntity) throws
+    func hasCompletedMigration(identifier: String) throws -> Bool
 }
 
 public final class InMemoryJournalRepository: JournalRepository {
@@ -17,6 +18,8 @@ public final class InMemoryJournalRepository: JournalRepository {
     private var outbox: [PendingMutation]
     private var recordMetadata: [JournalEntityReference: SyncRecordMetadata]
     private var storedConflicts: [SyncConflict]
+    private var stateMetadata: JournalStateMetadata
+    private var completedMigrations: Set<String>
 
     public init(
         snapshot: JournalSnapshot = JournalSnapshot(),
@@ -36,6 +39,8 @@ public final class InMemoryJournalRepository: JournalRepository {
         self.outbox = []
         self.recordMetadata = [:]
         self.storedConflicts = []
+        self.stateMetadata = JournalStateMetadata(snapshot: snapshot)
+        self.completedMigrations = []
     }
 
     public func snapshot() throws -> JournalSnapshot {
@@ -63,7 +68,9 @@ public final class InMemoryJournalRepository: JournalRepository {
                 trailEvents: visibleEntities.compactMap {
                     guard case let .trailEvent(value) = $0 else { return nil }
                     return value
-                }
+                },
+                hasCompletedOnboarding: stateMetadata.hasCompletedOnboarding,
+                pendingFirstRecordProjectId: stateMetadata.pendingFirstRecordProjectId
             )
         }
     }
@@ -84,6 +91,12 @@ public final class InMemoryJournalRepository: JournalRepository {
                     entities[reference] = entity.deleting(at: now())
                 }
                 enqueueIfNeeded(reference, operation: .delete, origin: transaction.origin)
+            }
+            if let metadata = transaction.stateMetadata {
+                stateMetadata = metadata
+            }
+            if let identifier = transaction.completedMigrationIdentifier {
+                completedMigrations.insert(identifier)
             }
         }
     }
@@ -121,6 +134,10 @@ public final class InMemoryJournalRepository: JournalRepository {
             entities[reference] = entity
             enqueueIfNeeded(reference, operation: .save, origin: .user)
         }
+    }
+
+    public func hasCompletedMigration(identifier: String) throws -> Bool {
+        withLock { completedMigrations.contains(identifier) }
     }
 
     private func enqueueIfNeeded(
