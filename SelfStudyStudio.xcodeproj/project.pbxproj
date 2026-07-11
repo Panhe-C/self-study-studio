@@ -36,6 +36,7 @@
 		10000000000000000000011B /* SwiftDataJournalRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021B /* SwiftDataJournalRepository.swift */; };
 		10000000000000000000011C /* RepositoryMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021C /* RepositoryMigration.swift */; };
 		10000000000000000000011D /* CloudRecordMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021D /* CloudRecordMapper.swift */; };
+		10000000000000000000011E /* SyncMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021E /* SyncMergeService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +69,7 @@
 		10000000000000000000021B /* SwiftDataJournalRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Persistence/SwiftDataJournalRepository.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000021C /* RepositoryMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Persistence/RepositoryMigration.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000021D /* CloudRecordMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/CloudRecordMapper.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000021E /* SyncMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/SyncMergeService.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -114,6 +116,7 @@
 				10000000000000000000021B /* SwiftDataJournalRepository.swift */,
 				10000000000000000000021C /* RepositoryMigration.swift */,
 				10000000000000000000021D /* CloudRecordMapper.swift */,
+				10000000000000000000021E /* SyncMergeService.swift */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -231,6 +234,7 @@
 				10000000000000000000011B /* SwiftDataJournalRepository.swift in Sources */,
 				10000000000000000000011C /* RepositoryMigration.swift in Sources */,
 				10000000000000000000011D /* CloudRecordMapper.swift in Sources */,
+				10000000000000000000011E /* SyncMergeService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
