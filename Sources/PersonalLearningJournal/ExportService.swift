@@ -43,11 +43,16 @@ public struct ExportService {
     }
 
     public func exportJSON(snapshot: JournalSnapshot) throws -> Data {
+        let exportProofs = snapshot.proofs.map { proof in
+            var exportProof = proof
+            exportProof.localPath = nil
+            return exportProof
+        }
         let export = JournalExport(
             exportedAt: now(),
             projects: snapshot.projects,
             sessions: snapshot.sessions,
-            proofs: snapshot.proofs,
+            proofs: exportProofs,
             reviews: snapshot.reviews
         )
         return try JSONEncoder.journal.encode(export)

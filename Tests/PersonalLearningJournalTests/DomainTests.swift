@@ -13,6 +13,79 @@ final class DomainTests: XCTestCase {
         XCTAssertEqual(project.schemaVersion, JournalSchema.currentVersion)
     }
 
+    func testLegacyJournalEntitiesDecodeWithCurrentSchemaAndNoDeletion() throws {
+        let projectId = UUID()
+        let sourceId = UUID()
+        let date = Date(timeIntervalSinceReferenceDate: 1_000)
+        let entities: [(Data, (Data) throws -> (Date?, Int))] = [
+            (
+                try legacyData(for: LearningSession(
+                    projectId: projectId,
+                    source: .quickLog,
+                    actionType: .course,
+                    startedAt: date,
+                    endedAt: date.addingTimeInterval(1_800),
+                    durationMinutes: 30,
+                    note: "Read chapter one",
+                    nextStepBefore: "Start",
+                    nextStepAfter: "Continue"
+                )),
+                { data in
+                    let value = try JSONDecoder.journal.decode(LearningSession.self, from: data)
+                    return (value.deletedAt, value.schemaVersion)
+                }
+            ),
+            (
+                try legacyData(for: Proof(
+                    projectId: projectId,
+                    type: .link,
+                    title: "Notes",
+                    statement: "Shows the chapter was summarized"
+                )),
+                { data in
+                    let value = try JSONDecoder.journal.decode(Proof.self, from: data)
+                    return (value.deletedAt, value.schemaVersion)
+                }
+            ),
+            (
+                try legacyData(for: Review(
+                    periodStart: date,
+                    periodEnd: date.addingTimeInterval(86_400),
+                    facts: [],
+                    patterns: [],
+                    decisions: [],
+                    projectRecommendations: [:],
+                    nextSteps: [:],
+                    aiSourceSummary: []
+                )),
+                { data in
+                    let value = try JSONDecoder.journal.decode(Review.self, from: data)
+                    return (value.deletedAt, value.schemaVersion)
+                }
+            ),
+            (
+                try legacyData(for: TrailEvent(
+                    projectId: projectId,
+                    type: .session,
+                    sourceId: sourceId,
+                    occurredAt: date,
+                    title: "Study session",
+                    detail: "Read chapter one"
+                )),
+                { data in
+                    let value = try JSONDecoder.journal.decode(TrailEvent.self, from: data)
+                    return (value.deletedAt, value.schemaVersion)
+                }
+            )
+        ]
+
+        for (data, decodeMetadata) in entities {
+            let (deletedAt, schemaVersion) = try decodeMetadata(data)
+            XCTAssertNil(deletedAt)
+            XCTAssertEqual(schemaVersion, JournalSchema.currentVersion)
+        }
+    }
+
     func testActiveProjectRequiresANextStepForContinue() {
         let project = Project(
             name: "CS336",
@@ -56,5 +129,15 @@ final class DomainTests: XCTestCase {
                 statement: " "
             )
         )
+    }
+
+    private func legacyData<T: Encodable>(for value: T) throws -> Data {
+        let encoded = try JSONEncoder.journal.encode(value)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "deletedAt")
+        object.removeValue(forKey: "schemaVersion")
+        return try JSONSerialization.data(withJSONObject: object)
     }
 }

@@ -9,15 +9,25 @@ final class ExportServiceTests: XCTestCase {
             goal: "Finish",
             currentNextStep: "Lecture 1"
         )
+        let proof = try Proof(
+            projectId: project.id,
+            type: .file,
+            title: "Local notes",
+            statement: "Shows the notes were captured",
+            localPath: "/private/user/Documents/notes.md"
+        )
 
         let data = try ExportService().exportJSON(
-            snapshot: JournalSnapshot(projects: [project])
+            snapshot: JournalSnapshot(projects: [project], proofs: [proof])
         )
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let export = try JSONDecoder.journal.decode(JournalExport.self, from: data)
 
         XCTAssertTrue(json.contains("schemaVersion"))
         XCTAssertFalse(json.contains("recordChangeTag"))
         XCTAssertFalse(json.contains("accountRecordName"))
+        XCTAssertFalse(json.contains("/private/user/Documents/notes.md"))
+        XCTAssertNil(export.proofs.first?.localPath)
     }
 
     func testExportJSONContainsVersionAndJournalData() throws {
