@@ -67,7 +67,7 @@ public protocol CloudSyncCoordinating: AnyObject, Sendable {
 
 @MainActor
 public final class CloudSyncCoordinator: CloudSyncCoordinating {
-    public static let zoneName = "LearningJournalZone"
+    public nonisolated static let zoneName = "LearningJournalZone"
 
     private let repository: any JournalRepository
     private let client: any CloudDatabaseClient

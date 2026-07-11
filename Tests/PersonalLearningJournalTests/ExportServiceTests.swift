@@ -26,6 +26,12 @@ final class ExportServiceTests: XCTestCase {
         XCTAssertTrue(json.contains("schemaVersion"))
         XCTAssertFalse(json.contains("recordChangeTag"))
         XCTAssertFalse(json.contains("accountRecordName"))
+        XCTAssertFalse(json.contains("accountHash"))
+        XCTAssertFalse(json.contains("PendingMutation"))
+        XCTAssertFalse(json.contains("lastError"))
+        XCTAssertFalse(json.contains("SyncConflict"))
+        XCTAssertFalse(json.contains("CalendarBinding"))
+        XCTAssertFalse(json.contains("eventIdentifier"))
         XCTAssertFalse(json.contains("/private/user/Documents/notes.md"))
         XCTAssertNil(export.proofs.first?.localPath)
     }

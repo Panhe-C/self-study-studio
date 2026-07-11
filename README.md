@@ -30,6 +30,7 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 - Normalized SwiftData runtime store for Projects, Sessions, Proofs, Reviews, Trail events, and onboarding state; one-time import from legacy `journal.json`
 - JSON export plus attachment directory export from Library
 - SwiftUI screens for onboarding, Today, Projects, Library, Quick Log, Timer, Review, Proof detail, and AI Review settings
+- Private personal iCloud sync foundation with an account-scoped journal store, encrypted-independent local attachment handling, retryable outbox, conflict review, and a visible iCloud status surface
 
 ## Current Shape
 
@@ -69,13 +70,17 @@ Current verification status:
 - 2026-07-10: `xcodebuild -project SelfStudyStudio.xcodeproj -scheme SelfStudyStudio -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build` completed successfully.
 - 2026-07-10: the app installed and launched on an iPhone 16 Pro Simulator. Existing `journal.json` data appeared in Today after startup, while `journal.store` and its SQLite sidecars were created alongside the untouched legacy JSON file.
 
+## iCloud Device Acceptance
+
+Before testing on devices, select an Apple Developer Team for `SelfStudyStudio`, create and associate the `iCloud.com.local.selfstudystudio` container, then enable iCloud/CloudKit and Push Notifications for the app identifier. Promote the development CloudKit schema before distributing a release build.
+
+For a two-device test, sign both devices into the same Apple Account, install signed development builds, and create a learning record on each device. Verify that records made while airplane mode is enabled remain queued, upload once connectivity returns, and become visible on the other device. Attach one image, audio file, and document, then verify every downloaded attachment opens after synchronization. Finally, sign out of iCloud or switch accounts on one device and confirm the app keeps the accounts in separate local stores; exports must continue to omit account identifiers, CloudKit metadata, queued mutations, conflicts, and Calendar bindings.
+
 ## Not In v0.1
 
 Per the PRD, these are intentionally not implemented yet:
 
 - AI course planning
-- CloudKit/iCloud sync
-- Accounts
 - Social features
 - Rankings or streak pressure
 - Course marketplace
