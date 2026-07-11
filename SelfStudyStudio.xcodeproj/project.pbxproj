@@ -33,6 +33,7 @@
 		100000000000000000000118 /* JournalEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000218 /* JournalEntity.swift */; };
 		100000000000000000000119 /* JournalRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* JournalRepository.swift */; };
 		10000000000000000000011A /* SyncDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021A /* SyncDomain.swift */; };
+		10000000000000000000011B /* SwiftDataJournalRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021B /* SwiftDataJournalRepository.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +63,7 @@
 		100000000000000000000218 /* JournalEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Persistence/JournalEntity.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000219 /* JournalRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Persistence/JournalRepository.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000021A /* SyncDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/SyncDomain.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000021B /* SwiftDataJournalRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Persistence/SwiftDataJournalRepository.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -105,6 +107,7 @@
 				100000000000000000000218 /* JournalEntity.swift */,
 				100000000000000000000219 /* JournalRepository.swift */,
 				10000000000000000000021A /* SyncDomain.swift */,
+				10000000000000000000021B /* SwiftDataJournalRepository.swift */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -219,6 +222,7 @@
 				100000000000000000000118 /* JournalEntity.swift in Sources */,
 				100000000000000000000119 /* JournalRepository.swift in Sources */,
 				10000000000000000000011A /* SyncDomain.swift in Sources */,
+				10000000000000000000011B /* SwiftDataJournalRepository.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
