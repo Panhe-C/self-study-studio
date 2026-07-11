@@ -103,6 +103,17 @@ public struct TodayView: View {
             }
         }
         .navigationTitle("Today")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    SyncSettingsView(viewModel: viewModel)
+                } label: {
+                    Image(systemName: syncIcon)
+                }
+                .accessibilityLabel("iCloud Sync")
+            }
+        }
+        .task { await viewModel.refreshSyncSummary() }
         .sheet(item: $quickLogProject) { project in
             QuickLogView(viewModel: viewModel, project: project)
         }
@@ -138,5 +149,14 @@ public struct TodayView: View {
 
     private func latestProof(for project: Project) -> Proof? {
         viewModel.proofsForProject(project.id).max { $0.createdAt < $1.createdAt }
+    }
+
+    private var syncIcon: String {
+        switch viewModel.syncSummary.title {
+        case "Synced": "checkmark.icloud"
+        case "Syncing": "arrow.triangle.2.circlepath.icloud"
+        case "Needs Attention": "exclamationmark.icloud"
+        default: "icloud"
+        }
     }
 }

@@ -4,23 +4,98 @@ import Foundation
 @MainActor
 public final class JournalViewModel: ObservableObject {
     @Published public private(set) var snapshot: JournalSnapshot
+    @Published public private(set) var syncSummary: SyncSummary
+    @Published public private(set) var syncConflicts: [SyncConflict]
+    @Published public private(set) var syncAccountState: CloudAccountState
+    @Published public private(set) var syncPendingMutationCount: Int
+    @Published public private(set) var syncLastSuccess: Date?
+    @Published public private(set) var bootstrapEntityCount: Int
 
     private let journalService: JournalService
     private let reviewService: ReviewService
     private let exportService: ExportService
     private let attachmentStore: AttachmentStore
+    private let syncCoordinator: (any CloudSyncCoordinating)?
+    private let syncRepository: (any JournalRepository)?
+    private let accountCoordinator: CloudAccountCoordinator?
 
     public init(
         journalService: JournalService,
         reviewService: ReviewService,
         exportService: ExportService,
-        attachmentStore: AttachmentStore = .defaultStore()
+        attachmentStore: AttachmentStore = .defaultStore(),
+        syncCoordinator: (any CloudSyncCoordinating)? = nil,
+        syncRepository: (any JournalRepository)? = nil,
+        accountCoordinator: CloudAccountCoordinator? = nil
     ) {
         self.journalService = journalService
         self.reviewService = reviewService
         self.exportService = exportService
         self.attachmentStore = attachmentStore
+        self.syncCoordinator = syncCoordinator
+        self.syncRepository = syncRepository
+        self.accountCoordinator = accountCoordinator
         self.snapshot = journalService.snapshot()
+        self.syncSummary = .localOnly
+        self.syncConflicts = []
+        self.syncAccountState = accountCoordinator?.state ?? CloudAccountState(mode: .localOnly)
+        self.syncPendingMutationCount = 0
+        self.syncLastSuccess = nil
+        self.bootstrapEntityCount = 0
+    }
+
+    public func refreshSyncSummary() async {
+        refreshSyncRepositoryDetails()
+        if let accountCoordinator {
+            syncAccountState = accountCoordinator.state
+            bootstrapEntityCount = (try? accountCoordinator.prepareExistingLocalDataForCloud()) ?? 0
+        }
+        guard let syncCoordinator else {
+            syncSummary = .localOnly
+            return
+        }
+        let status = await syncCoordinator.status
+        if case let .synced(lastSuccess) = status {
+            syncLastSuccess = lastSuccess
+        }
+        syncSummary = SyncSummary(
+            status: status,
+            conflictCount: syncRepository == nil ? nil : syncConflicts.count
+        )
+    }
+
+    public func syncNow() async throws {
+        guard let syncCoordinator else {
+            await refreshSyncSummary()
+            return
+        }
+
+        do {
+            try await syncCoordinator.syncNow()
+        } catch {
+            await refreshSyncSummary()
+            throw error
+        }
+        refresh()
+        await refreshSyncSummary()
+    }
+
+    public func confirmExistingLocalDataUpload() throws {
+        try accountCoordinator?.confirmExistingLocalDataUpload()
+        refreshSyncRepositoryDetails()
+        bootstrapEntityCount = 0
+    }
+
+    public func resolveSyncConflict(id: UUID, using payload: Data) throws {
+        guard let syncRepository else { return }
+        guard let conflict = syncConflicts.first(where: { $0.id == id }) else { return }
+        let entity = try decodedConflictEntity(payload, kind: conflict.entity.kind)
+        guard entity.reference == conflict.entity else {
+            throw SyncConflictResolutionError.mismatchedEntity
+        }
+        try syncRepository.resolveConflict(id: id, with: entity)
+        refresh()
+        refreshSyncRepositoryDetails()
     }
 
     public var hasCompletedOnboarding: Bool {
@@ -363,11 +438,42 @@ public final class JournalViewModel: ObservableObject {
     }
 
     public func refresh() {
+        journalService.refreshFromRepository()
         snapshot = journalService.snapshot()
+    }
+
+    private func refreshSyncRepositoryDetails() {
+        syncConflicts = (try? syncRepository?.conflicts()) ?? []
+        syncPendingMutationCount = (try? syncRepository?.pendingMutations(limit: 1_000).count) ?? 0
+    }
+
+    private func decodedConflictEntity(
+        _ payload: Data,
+        kind: JournalEntityKind
+    ) throws -> JournalEntity {
+        if let wrapped = try? JSONDecoder.journal.decode(JournalEntity.self, from: payload) {
+            return wrapped
+        }
+        switch kind {
+        case .project:
+            return .project(try JSONDecoder.journal.decode(Project.self, from: payload))
+        case .session:
+            return .session(try JSONDecoder.journal.decode(LearningSession.self, from: payload))
+        case .proof:
+            return .proof(try JSONDecoder.journal.decode(Proof.self, from: payload))
+        case .review:
+            return .review(try JSONDecoder.journal.decode(Review.self, from: payload))
+        case .trailEvent:
+            return .trailEvent(try JSONDecoder.journal.decode(TrailEvent.self, from: payload))
+        }
     }
 
     private func tryCompleteOnboarding(afterRecording projectId: UUID) {
         guard snapshot.pendingFirstRecordProjectId == projectId else { return }
         try? journalService.completeOnboarding()
     }
+}
+
+public enum SyncConflictResolutionError: Error, Equatable, Sendable {
+    case mismatchedEntity
 }

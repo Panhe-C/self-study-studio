@@ -26,6 +26,10 @@ public final class JournalService {
         state
     }
 
+    public func refreshFromRepository() {
+        state = (try? repository.snapshot()) ?? state
+    }
+
     public func project(id: UUID) -> Project? {
         state.projects.first { $0.id == id }
     }

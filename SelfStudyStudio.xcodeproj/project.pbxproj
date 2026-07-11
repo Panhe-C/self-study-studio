@@ -39,6 +39,8 @@
 		10000000000000000000011E /* SyncMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021E /* SyncMergeService.swift */; };
 		10000000000000000000011F /* CloudSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021F /* CloudSyncCoordinator.swift */; };
 		100000000000000000000120 /* CloudAccountCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000220 /* CloudAccountCoordinator.swift */; };
+		100000000000000000000121 /* SyncSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000221 /* SyncSummary.swift */; };
+		100000000000000000000122 /* SyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000222 /* SyncSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -74,6 +76,9 @@
 		10000000000000000000021E /* SyncMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/SyncMergeService.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000021F /* CloudSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/CloudSyncCoordinator.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000220 /* CloudAccountCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/CloudAccountCoordinator.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000221 /* SyncSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/SyncSummary.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000222 /* SyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/SyncSettingsView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000223 /* SelfStudyStudio.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SelfStudyStudio/SelfStudyStudio.entitlements; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -123,6 +128,9 @@
 				10000000000000000000021E /* SyncMergeService.swift */,
 				10000000000000000000021F /* CloudSyncCoordinator.swift */,
 				100000000000000000000220 /* CloudAccountCoordinator.swift */,
+				100000000000000000000221 /* SyncSummary.swift */,
+				100000000000000000000222 /* SyncSettingsView.swift */,
+				100000000000000000000223 /* SelfStudyStudio.entitlements */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -243,6 +251,8 @@
 				10000000000000000000011E /* SyncMergeService.swift in Sources */,
 				10000000000000000000011F /* CloudSyncCoordinator.swift in Sources */,
 				100000000000000000000120 /* CloudAccountCoordinator.swift in Sources */,
+				100000000000000000000121 /* SyncSummary.swift in Sources */,
+				100000000000000000000122 /* SyncSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -366,6 +376,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				APS_ENVIRONMENT = development;
+				CODE_SIGN_ENTITLEMENTS = SelfStudyStudio/SelfStudyStudio.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
@@ -380,6 +392,8 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
+				ICLOUD_CONTAINER_IDENTIFIER = iCloud.com.local.selfstudystudio;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -400,6 +414,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				APS_ENVIRONMENT = production;
+				CODE_SIGN_ENTITLEMENTS = SelfStudyStudio/SelfStudyStudio.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
@@ -414,6 +430,8 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
+				ICLOUD_CONTAINER_IDENTIFIER = iCloud.com.local.selfstudystudio;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

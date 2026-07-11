@@ -3,6 +3,26 @@ import XCTest
 
 @MainActor
 final class JournalViewModelTests: XCTestCase {
+    @MainActor
+    func testSyncSummaryShowsQueuedChangesAndConflictCount() async throws {
+        let journalService = JournalService(store: InMemoryJournalStore())
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(
+                journalService: journalService,
+                provider: RuleBasedReviewProvider()
+            ),
+            exportService: ExportService(),
+            syncCoordinator: StaticSyncStatusProvider(
+                status: .failed(pending: 2, conflicts: 1, message: "Offline")
+            )
+        )
+
+        await viewModel.refreshSyncSummary()
+
+        XCTAssertEqual(viewModel.syncSummary.title, "Needs Attention")
+        XCTAssertEqual(viewModel.syncSummary.detail, "2 changes waiting, 1 conflict")
+    }
     func testOnboardingCompletesAfterFirstQuickLogAndShowsTodayContinueCard() throws {
         let viewModel = makeViewModel()
 
@@ -254,6 +274,50 @@ final class JournalViewModelTests: XCTestCase {
         XCTAssertEqual(proof.mimeType, "image/png")
     }
 
+    func testResolvingCloudConflictQueuesChosenEntityForSync() async throws {
+        let original = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Finish lecture notes",
+            currentNextStep: "Read lecture 1"
+        )
+        var local = original
+        local.currentNextStep = "Write local notes"
+        var cloud = original
+        cloud.currentNextStep = "Review cloud notes"
+
+        let conflict = SyncConflict(
+            entity: .init(.project, original.id),
+            basePayload: try JSONEncoder.journal.encode(JournalEntity.project(original)),
+            localPayload: try JSONEncoder.journal.encode(JournalEntity.project(local)),
+            serverPayload: try JSONEncoder.journal.encode(JournalEntity.project(cloud)),
+            proposedPayload: try JSONEncoder.journal.encode(local),
+            conflictingFields: ["currentNextStep"]
+        )
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [local]))
+        try repository.applyRemote(
+            JournalTransaction(origin: .remote),
+            conflicts: [conflict]
+        )
+        let journalService = JournalService(repository: repository)
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            syncRepository: repository
+        )
+
+        await viewModel.refreshSyncSummary()
+        try viewModel.resolveSyncConflict(id: conflict.id, using: conflict.serverPayload)
+
+        XCTAssertTrue(viewModel.syncConflicts.isEmpty)
+        XCTAssertEqual(viewModel.projects.first?.currentNextStep, "Review cloud notes")
+        XCTAssertEqual(
+            try repository.pendingMutations(limit: 10).map(\.entity),
+            [.init(.project, original.id)]
+        )
+    }
+
     private func makeViewModel(
         attachmentRoot: URL? = nil,
         now: @escaping () -> Date = Date.init
@@ -267,4 +331,18 @@ final class JournalViewModelTests: XCTestCase {
             attachmentStore: attachmentStore ?? .defaultStore()
         )
     }
+}
+
+private actor StaticSyncStatusProvider: CloudSyncCoordinating {
+    let fixedStatus: SyncStatus
+
+    init(status: SyncStatus) {
+        self.fixedStatus = status
+    }
+
+    var status: SyncStatus { fixedStatus }
+
+    func start() async {}
+
+    func syncNow() async throws {}
 }
