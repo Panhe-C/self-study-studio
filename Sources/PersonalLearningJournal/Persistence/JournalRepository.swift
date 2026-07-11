@@ -8,6 +8,19 @@ public protocol JournalRepository: AnyObject {
     func conflicts() throws -> [SyncConflict]
     func resolveConflict(id: UUID, with entity: JournalEntity) throws
     func hasCompletedMigration(identifier: String) throws -> Bool
+    func entity(for reference: JournalEntityReference) throws -> JournalEntity?
+    func metadata(for reference: JournalEntityReference) throws -> SyncRecordMetadata?
+    func reference(recordName: String) throws -> JournalEntityReference?
+    func recordSyncFailures(
+        retryable: [UUID: String],
+        terminal: [UUID: String]
+    ) throws
+    func syncChangeToken() throws -> Data?
+    func storeSyncChangeToken(_ token: Data?) throws
+    func applyRemote(
+        _ transaction: JournalTransaction,
+        conflicts: [SyncConflict]
+    ) throws
 }
 
 public final class InMemoryJournalRepository: JournalRepository {
@@ -20,6 +33,7 @@ public final class InMemoryJournalRepository: JournalRepository {
     private var storedConflicts: [SyncConflict]
     private var stateMetadata: JournalStateMetadata
     private var completedMigrations: Set<String>
+    private var changeToken: Data?
 
     public init(
         snapshot: JournalSnapshot = JournalSnapshot(),
@@ -41,6 +55,7 @@ public final class InMemoryJournalRepository: JournalRepository {
         self.storedConflicts = []
         self.stateMetadata = JournalStateMetadata(snapshot: snapshot)
         self.completedMigrations = []
+        self.changeToken = nil
     }
 
     public func snapshot() throws -> JournalSnapshot {
@@ -138,6 +153,52 @@ public final class InMemoryJournalRepository: JournalRepository {
 
     public func hasCompletedMigration(identifier: String) throws -> Bool {
         withLock { completedMigrations.contains(identifier) }
+    }
+
+    public func entity(for reference: JournalEntityReference) throws -> JournalEntity? {
+        withLock { entities[reference] }
+    }
+
+    public func metadata(for reference: JournalEntityReference) throws -> SyncRecordMetadata? {
+        withLock { recordMetadata[reference] }
+    }
+
+    public func reference(recordName: String) throws -> JournalEntityReference? {
+        withLock {
+            recordMetadata.values.first { $0.recordName == recordName }?.entity
+        }
+    }
+
+    public func recordSyncFailures(
+        retryable: [UUID: String],
+        terminal: [UUID: String]
+    ) throws {
+        withLock {
+            for index in outbox.indices {
+                if let message = retryable[outbox[index].id] {
+                    outbox[index].retryCount += 1
+                    outbox[index].lastError = message
+                } else if let message = terminal[outbox[index].id] {
+                    outbox[index].lastError = message
+                }
+            }
+        }
+    }
+
+    public func syncChangeToken() throws -> Data? {
+        withLock { changeToken }
+    }
+
+    public func storeSyncChangeToken(_ token: Data?) throws {
+        withLock { changeToken = token }
+    }
+
+    public func applyRemote(
+        _ transaction: JournalTransaction,
+        conflicts: [SyncConflict]
+    ) throws {
+        try commit(transaction)
+        withLock { storedConflicts.append(contentsOf: conflicts) }
     }
 
     private func enqueueIfNeeded(

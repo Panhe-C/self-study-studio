@@ -423,4 +423,24 @@ private final class TransactionSpyRepository: JournalRepository {
     func resolveConflict(id: UUID, with entity: JournalEntity) throws {}
 
     func hasCompletedMigration(identifier: String) throws -> Bool { false }
+
+    func entity(for reference: JournalEntityReference) throws -> JournalEntity? { nil }
+
+    func metadata(for reference: JournalEntityReference) throws -> SyncRecordMetadata? { nil }
+
+    func reference(recordName: String) throws -> JournalEntityReference? { nil }
+
+    func recordSyncFailures(
+        retryable: [UUID: String],
+        terminal: [UUID: String]
+    ) throws {}
+
+    func syncChangeToken() throws -> Data? { nil }
+
+    func storeSyncChangeToken(_ token: Data?) throws {}
+
+    func applyRemote(
+        _ transaction: JournalTransaction,
+        conflicts: [SyncConflict]
+    ) throws {}
 }

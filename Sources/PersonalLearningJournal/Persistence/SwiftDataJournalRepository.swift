@@ -141,6 +141,97 @@ public final class SwiftDataJournalRepository: JournalRepository {
             .contains { $0.key == key }
     }
 
+    public func entity(for reference: JournalEntityReference) throws -> JournalEntity? {
+        switch reference.kind {
+        case .project: return try entity(reference.id, in: StoredProjectV2.self, as: Project.self).map(JournalEntity.project)
+        case .session: return try entity(reference.id, in: StoredSessionV2.self, as: LearningSession.self).map(JournalEntity.session)
+        case .proof: return try entity(reference.id, in: StoredProofV2.self, as: Proof.self).map(JournalEntity.proof)
+        case .review: return try entity(reference.id, in: StoredReviewV2.self, as: Review.self).map(JournalEntity.review)
+        case .trailEvent: return try entity(reference.id, in: StoredTrailEventV2.self, as: TrailEvent.self).map(JournalEntity.trailEvent)
+        }
+    }
+
+    public func metadata(for reference: JournalEntityReference) throws -> SyncRecordMetadata? {
+        let key = Self.key(for: reference)
+        guard let record = try context.fetch(FetchDescriptor<StoredSyncMetadataV2>())
+            .first(where: { $0.key == key }) else {
+            return nil
+        }
+        return try JSONDecoder.journal.decode(SyncRecordMetadata.self, from: record.payload)
+    }
+
+    public func reference(recordName: String) throws -> JournalEntityReference? {
+        for record in try context.fetch(FetchDescriptor<StoredSyncMetadataV2>()) {
+            let metadata = try JSONDecoder.journal.decode(SyncRecordMetadata.self, from: record.payload)
+            if metadata.recordName == recordName { return metadata.entity }
+        }
+        return nil
+    }
+
+    public func recordSyncFailures(
+        retryable: [UUID: String],
+        terminal: [UUID: String]
+    ) throws {
+        do {
+            let records = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+            for record in records {
+                if let message = retryable[record.id] {
+                    record.retryCount += 1
+                    record.lastError = message
+                } else if let message = terminal[record.id] {
+                    record.lastError = message
+                }
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
+    public func syncChangeToken() throws -> Data? {
+        try context.fetch(FetchDescriptor<StoredRepositoryMetadataV2>())
+            .first(where: { $0.key == Self.syncTokenKey })?.value
+    }
+
+    public func storeSyncChangeToken(_ token: Data?) throws {
+        do {
+            if let token {
+                try storeRepositoryMetadata(key: Self.syncTokenKey, value: token)
+            } else if let existing = try context.fetch(FetchDescriptor<StoredRepositoryMetadataV2>())
+                .first(where: { $0.key == Self.syncTokenKey }) {
+                context.delete(existing)
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
+    public func applyRemote(
+        _ transaction: JournalTransaction,
+        conflicts: [SyncConflict]
+    ) throws {
+        do {
+            for entity in transaction.upserts { try upsert(entity) }
+            for reference in transaction.deletions { try markDeleted(reference) }
+            for conflict in conflicts {
+                context.insert(
+                    StoredSyncConflictV2(
+                        id: conflict.id,
+                        payload: try JSONEncoder.journal.encode(conflict),
+                        resolvedAt: conflict.resolvedAt
+                    )
+                )
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
     private func upsert(_ entity: JournalEntity) throws {
         switch entity {
         case let .project(value):
@@ -154,6 +245,18 @@ public final class SwiftDataJournalRepository: JournalRepository {
         case let .trailEvent(value):
             try upsert(value, in: StoredTrailEventV2.self)
         }
+    }
+
+    private func entity<Value: Codable, Record: StoredEntityV2>(
+        _ id: UUID,
+        in recordType: Record.Type,
+        as valueType: Value.Type
+    ) throws -> Value? {
+        guard let record = try context.fetch(FetchDescriptor<Record>())
+            .first(where: { $0.id == id }) else {
+            return nil
+        }
+        return try JSONDecoder.journal.decode(Value.self, from: record.payload)
     }
 
     private func markDeleted(_ reference: JournalEntityReference) throws {
@@ -273,6 +376,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
     }
 
     private static let stateMetadataKey = "journal-state"
+    private static let syncTokenKey = "cloud-sync-token"
 
     private static func migrationKey(_ identifier: String) -> String {
         "migration:\(identifier)"
