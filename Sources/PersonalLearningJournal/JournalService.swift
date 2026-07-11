@@ -258,6 +258,7 @@ public final class JournalService {
         durationMinutes: Int,
         note: String,
         nextStep: String? = nil,
+        plannedSessionId: UUID? = nil,
         endedAt: Date? = nil
     ) throws -> LearningSession {
         let finishedAt = endedAt ?? now()
@@ -268,6 +269,7 @@ public final class JournalService {
             durationMinutes: durationMinutes,
             note: note,
             nextStep: nextStep,
+            plannedSessionId: plannedSessionId,
             startedAt: finishedAt.addingTimeInterval(TimeInterval(-durationMinutes * 60)),
             endedAt: finishedAt
         )
@@ -280,7 +282,8 @@ public final class JournalService {
         startedAt: Date,
         endedAt: Date,
         note: String,
-        nextStep: String? = nil
+        nextStep: String? = nil,
+        plannedSessionId: UUID? = nil
     ) throws -> LearningSession {
         let durationMinutes = Int(endedAt.timeIntervalSince(startedAt) / 60)
         guard durationMinutes > 0 else { throw JournalValidationError.invalidDuration }
@@ -291,6 +294,7 @@ public final class JournalService {
             durationMinutes: durationMinutes,
             note: note,
             nextStep: nextStep,
+            plannedSessionId: plannedSessionId,
             startedAt: startedAt,
             endedAt: endedAt
         )
@@ -304,11 +308,19 @@ public final class JournalService {
         durationMinutes: Int,
         note: String,
         nextStep: String?,
+        plannedSessionId: UUID?,
         startedAt: Date,
         endedAt: Date
     ) throws -> LearningSession {
         guard let projectIndex = state.projects.firstIndex(where: { $0.id == projectId }) else {
             throw JournalValidationError.missingProject
+        }
+        let plannedSessionIndex = try plannedSessionId.map { id -> Int in
+            guard let index = state.plannedSessions.firstIndex(where: { $0.id == id }),
+                  state.plannedSessions[index].projectId == projectId else {
+                throw JournalValidationError.missingPlannedSession
+            }
+            return index
         }
 
         let project = state.projects[projectIndex]
@@ -354,12 +366,25 @@ public final class JournalService {
             occurredAt: endedAt
         )
 
-        try persist(
-            upserts: [
-                .project(state.projects[projectIndex]),
-                .session(session)
-            ] + state.trailEvents[trailStartIndex...].map(JournalEntity.trailEvent)
-        )
+        var plannedSession: PlannedSession?
+        if let plannedSessionIndex {
+            var value = state.plannedSessions[plannedSessionIndex]
+            value.status = .completed
+            value.completedSessionId = session.id
+            value.updatedAt = endedAt
+            state.plannedSessions[plannedSessionIndex] = value
+            plannedSession = value
+        }
+
+        var upserts: [JournalEntity] = [
+            .project(state.projects[projectIndex]),
+            .session(session)
+        ]
+        upserts.append(contentsOf: state.trailEvents[trailStartIndex...].map(JournalEntity.trailEvent))
+        if let plannedSession {
+            upserts.append(.plannedSession(plannedSession))
+        }
+        try persist(upserts: upserts)
         return session
     }
 

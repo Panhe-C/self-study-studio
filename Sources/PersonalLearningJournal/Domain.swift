@@ -55,6 +55,7 @@ public enum JournalValidationError: Error, Equatable, Sendable {
     case missingReview
     case missingFirstRecord
     case missingReviewRecommendation
+    case missingPlannedSession
 }
 
 public struct Project: Codable, Equatable, Identifiable, Sendable {

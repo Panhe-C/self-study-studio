@@ -44,6 +44,8 @@
 		100000000000000000000123 /* CKSyncEngineDatabaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000224 /* CKSyncEngineDatabaseClient.swift */; };
 		100000000000000000000124 /* JournalApplicationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000225 /* JournalApplicationSession.swift */; };
 		100000000000000000000125 /* CoursePlanningDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000226 /* CoursePlanningDomain.swift */; };
+		100000000000000000000126 /* CoursePlanValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000227 /* CoursePlanValidator.swift */; };
+		100000000000000000000127 /* CoursePlanningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000228 /* CoursePlanningService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -85,6 +87,8 @@
 		100000000000000000000224 /* CKSyncEngineDatabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/CKSyncEngineDatabaseClient.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000225 /* JournalApplicationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/JournalApplicationSession.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000226 /* CoursePlanningDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CoursePlanningDomain.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000227 /* CoursePlanValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CoursePlanValidator.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000228 /* CoursePlanningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CoursePlanningService.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -140,6 +144,8 @@
 				100000000000000000000224 /* CKSyncEngineDatabaseClient.swift */,
 				100000000000000000000225 /* JournalApplicationSession.swift */,
 				100000000000000000000226 /* CoursePlanningDomain.swift */,
+				100000000000000000000227 /* CoursePlanValidator.swift */,
+				100000000000000000000228 /* CoursePlanningService.swift */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -265,6 +271,8 @@
 				100000000000000000000123 /* CKSyncEngineDatabaseClient.swift in Sources */,
 				100000000000000000000124 /* JournalApplicationSession.swift in Sources */,
 				100000000000000000000125 /* CoursePlanningDomain.swift in Sources */,
+				100000000000000000000126 /* CoursePlanValidator.swift in Sources */,
+				100000000000000000000127 /* CoursePlanningService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

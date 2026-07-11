@@ -199,6 +199,76 @@ final class JournalServiceTests: XCTestCase {
         XCTAssertEqual(updatedProject.currentNextStep, "修正肤色偏红")
     }
 
+    func testQuickLogCompletesLinkedPlannedSessionInSameJournal() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Build a model",
+            currentNextStep: "Read lecture 1",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let plan = try CoursePlan(
+            projectId: project.id,
+            revision: 1,
+            status: .active,
+            courseURL: nil,
+            courseTitle: "CS336",
+            courseOutline: "Language models",
+            goal: project.goal,
+            expectedOutcome: "Notebook",
+            startsOn: timestamp,
+            deadline: nil,
+            weeklyBudgetMinutes: 180,
+            summary: "Build a model",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let phase = try PlanPhase(
+            planId: plan.id,
+            title: "Foundations",
+            objective: "Understand tokenization",
+            expectedProof: "Tokenizer notebook",
+            ordinal: 0,
+            targetStart: timestamp,
+            targetEnd: timestamp,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let planned = try PlannedSession(
+            planId: plan.id,
+            phaseId: phase.id,
+            projectId: project.id,
+            title: "Implement tokenizer",
+            actionType: .course,
+            durationMinutes: 30,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(
+                projects: [project],
+                coursePlans: [plan],
+                planPhases: [phase],
+                plannedSessions: [planned]
+            )
+        )
+        let service = JournalService(repository: repository, now: { timestamp })
+
+        let session = try service.quickLog(
+            projectId: project.id,
+            durationMinutes: planned.durationMinutes,
+            note: "Completed tokenizer exercise",
+            plannedSessionId: planned.id,
+            endedAt: timestamp.addingTimeInterval(30 * 60)
+        )
+
+        let updated = try XCTUnwrap(repository.snapshot().plannedSessions.first)
+        XCTAssertEqual(updated.status, .completed)
+        XCTAssertEqual(updated.completedSessionId, session.id)
+    }
+
     func testListsSessionsAndProofsByProjectAndSession() throws {
         let service = JournalService(store: InMemoryJournalStore())
         let project = try service.createProject(
