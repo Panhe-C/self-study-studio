@@ -46,6 +46,40 @@ final class CloudAccountCoordinatorTests: XCTestCase {
         XCTAssertEqual(try repository.pendingMutations(limit: 10).map(\.entity), [.init(.project, project.id)])
     }
 
+    func testBootstrapCopiesLocalDataToCloudStoreOnlyAfterConfirmation() async throws {
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Finish",
+            currentNextStep: "Lecture 1"
+        )
+        let root = temporaryDirectory()
+        let localRepository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project])
+        )
+        let cloudRepository = InMemoryJournalRepository()
+        let coordinator = CloudAccountCoordinator(
+            rootDirectory: root,
+            repositoryFactory: { url in
+                url.path.contains("/local/") ? localRepository : cloudRepository
+            }
+        )
+
+        await coordinator.refresh(using: FakeAccountProvider(status: .available))
+
+        XCTAssertEqual(try coordinator.prepareExistingLocalDataForCloud(), 1)
+        XCTAssertTrue(try cloudRepository.pendingMutations(limit: 10).isEmpty)
+        XCTAssertTrue(try localRepository.pendingMutations(limit: 10).isEmpty)
+
+        try coordinator.confirmExistingLocalDataUpload()
+
+        XCTAssertEqual(
+            try cloudRepository.pendingMutations(limit: 10).map(\.entity),
+            [.init(.project, project.id)]
+        )
+        XCTAssertTrue(try localRepository.pendingMutations(limit: 10).isEmpty)
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

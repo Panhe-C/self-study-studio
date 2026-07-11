@@ -7,6 +7,22 @@ public protocol CloudAccountProviding: Sendable {
     func currentUserRecordName() async throws -> String?
 }
 
+public final class SystemCloudAccountProvider: CloudAccountProviding, @unchecked Sendable {
+    private let container: CKContainer
+
+    public init(containerIdentifier: String = CKSyncEngineDatabaseClient.defaultContainerIdentifier) {
+        self.container = CKContainer(identifier: containerIdentifier)
+    }
+
+    public func accountStatus() async throws -> CKAccountStatus {
+        try await container.accountStatus()
+    }
+
+    public func currentUserRecordName() async throws -> String? {
+        try await container.userRecordID().recordName
+    }
+}
+
 public enum CloudAccountMode: Equatable, Sendable {
     case checking
     case localOnly
@@ -36,6 +52,7 @@ public final class CloudAccountCoordinator {
 
     private let rootDirectory: URL
     private let repositoryFactory: RepositoryFactoryClosure
+    private var localRepository: (any JournalRepository)?
 
     public init(
         rootDirectory: URL,
@@ -46,10 +63,11 @@ public final class CloudAccountCoordinator {
         self.rootDirectory = rootDirectory
         self.repositoryFactory = repositoryFactory
         self.state = CloudAccountState(mode: .checking)
-        self.activeRepository = try? repositoryFactory(Self.storeURL(rootDirectory: rootDirectory, scope: "local"))
-        if self.activeRepository == nil {
-            self.activeRepository = InMemoryJournalRepository()
-        }
+        let localRepository = try? repositoryFactory(
+            Self.storeURL(rootDirectory: rootDirectory, scope: "local")
+        )
+        self.localRepository = localRepository ?? InMemoryJournalRepository()
+        self.activeRepository = self.localRepository
     }
 
     public func refresh(using provider: any CloudAccountProviding) async {
@@ -83,13 +101,13 @@ public final class CloudAccountCoordinator {
     }
 
     public func prepareExistingLocalDataForCloud() throws -> Int {
-        entities(from: try activeRepository?.snapshot() ?? JournalSnapshot()).count
+        entities(from: try localRepository?.snapshot() ?? JournalSnapshot()).count
     }
 
     public func confirmExistingLocalDataUpload() throws {
-        guard let repository = activeRepository else { return }
-        let snapshot = try repository.snapshot()
-        try repository.commit(JournalTransaction(
+        guard let activeRepository else { return }
+        let snapshot = try localRepository?.snapshot() ?? JournalSnapshot()
+        try activeRepository.commit(JournalTransaction(
             upserts: entities(from: snapshot),
             origin: .user,
             stateMetadata: JournalStateMetadata(snapshot: snapshot)
@@ -106,6 +124,10 @@ public final class CloudAccountCoordinator {
     }
 
     private func activate(scope: String) throws {
+        if scope == "local" {
+            activeRepository = localRepository
+            return
+        }
         activeRepository = nil
         activeRepository = try repositoryFactory(Self.storeURL(rootDirectory: rootDirectory, scope: scope))
     }
