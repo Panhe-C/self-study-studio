@@ -30,6 +30,9 @@ public struct CloudRecordMapper {
         case let .proof(value): try encode(value, into: record)
         case let .review(value): encode(value, into: record)
         case let .trailEvent(value): encode(value, into: record)
+        case let .coursePlan(value): encode(value, into: record)
+        case let .planPhase(value): encode(value, into: record)
+        case let .plannedSession(value): encode(value, into: record)
         }
         return record
     }
@@ -44,6 +47,9 @@ public struct CloudRecordMapper {
         case "Proof": return .proof(try decodeProof(record, id: id))
         case "Review": return .review(try decodeReview(record, id: id))
         case "TrailEvent": return .trailEvent(try decodeTrailEvent(record, id: id))
+        case "CoursePlan": return .coursePlan(try decodeCoursePlan(record, id: id))
+        case "PlanPhase": return .planPhase(try decodePlanPhase(record, id: id))
+        case "PlannedSession": return .plannedSession(try decodePlannedSession(record, id: id))
         default: throw CloudRecordMapperError.unsupportedRecordType(record.recordType)
         }
     }
@@ -63,6 +69,9 @@ public struct CloudRecordMapper {
         case .proof: "Proof"
         case .review: "Review"
         case .trailEvent: "TrailEvent"
+        case .coursePlan: "CoursePlan"
+        case .planPhase: "PlanPhase"
+        case .plannedSession: "PlannedSession"
         }
     }
 
@@ -74,6 +83,7 @@ public struct CloudRecordMapper {
         record["currentNextStep"] = value.currentNextStep
         record["lastActionType"] = value.lastActionType.rawValue
         record["defaultDurationMinutes"] = value.defaultDurationMinutes
+        record["activeCoursePlanId"] = value.activeCoursePlanId?.uuidString
         encodeDates(value.createdAt, value.updatedAt, value.archivedAt, value.deletedAt, value.schemaVersion, into: record)
     }
 
@@ -139,6 +149,57 @@ public struct CloudRecordMapper {
         record["schemaVersion"] = value.schemaVersion
     }
 
+    private func encode(_ value: CoursePlan, into record: CKRecord) {
+        record["projectId"] = value.projectId.uuidString
+        record["revision"] = value.revision
+        record["status"] = value.status.rawValue
+        record["courseURL"] = value.courseURL?.absoluteString
+        record["courseTitle"] = value.courseTitle
+        record["courseOutline"] = value.courseOutline
+        record["goal"] = value.goal
+        record["expectedOutcome"] = value.expectedOutcome
+        record["startsOn"] = value.startsOn
+        record["deadline"] = value.deadline
+        record["weeklyBudgetMinutes"] = value.weeklyBudgetMinutes
+        record["summary"] = value.summary
+        record["createdAt"] = value.createdAt
+        record["updatedAt"] = value.updatedAt
+        record["activatedAt"] = value.activatedAt
+        record["deletedAt"] = value.deletedAt
+        record["schemaVersion"] = value.schemaVersion
+    }
+
+    private func encode(_ value: PlanPhase, into record: CKRecord) {
+        record["planId"] = value.planId.uuidString
+        record["title"] = value.title
+        record["objective"] = value.objective
+        record["expectedProof"] = value.expectedProof
+        record["ordinal"] = value.ordinal
+        record["targetStart"] = value.targetStart
+        record["targetEnd"] = value.targetEnd
+        record["createdAt"] = value.createdAt
+        record["updatedAt"] = value.updatedAt
+        record["deletedAt"] = value.deletedAt
+        record["schemaVersion"] = value.schemaVersion
+    }
+
+    private func encode(_ value: PlannedSession, into record: CKRecord) {
+        record["planId"] = value.planId.uuidString
+        record["phaseId"] = value.phaseId.uuidString
+        record["projectId"] = value.projectId.uuidString
+        record["title"] = value.title
+        record["actionType"] = value.actionType.rawValue
+        record["expectedProof"] = value.expectedProof
+        record["durationMinutes"] = value.durationMinutes
+        record["deadline"] = value.deadline
+        record["status"] = value.status.rawValue
+        record["completedSessionId"] = value.completedSessionId?.uuidString
+        record["createdAt"] = value.createdAt
+        record["updatedAt"] = value.updatedAt
+        record["deletedAt"] = value.deletedAt
+        record["schemaVersion"] = value.schemaVersion
+    }
+
     private func encodeDates(
         _ createdAt: Date,
         _ updatedAt: Date,
@@ -172,7 +233,8 @@ public struct CloudRecordMapper {
             updatedAt: try date("updatedAt", from: record),
             archivedAt: optionalDate("archivedAt", from: record),
             deletedAt: optionalDate("deletedAt", from: record),
-            schemaVersion: try integer("schemaVersion", from: record)
+            schemaVersion: try integer("schemaVersion", from: record),
+            activeCoursePlanId: try optionalUUID("activeCoursePlanId", from: record)
         )
     }
 
@@ -251,6 +313,73 @@ public struct CloudRecordMapper {
             occurredAt: try date("occurredAt", from: record),
             title: try string("title", from: record),
             detail: try string("detail", from: record),
+            deletedAt: optionalDate("deletedAt", from: record),
+            schemaVersion: try integer("schemaVersion", from: record)
+        )
+    }
+
+    private func decodeCoursePlan(_ record: CKRecord, id: UUID) throws -> CoursePlan {
+        guard let status = CoursePlanStatus(rawValue: try string("status", from: record)) else {
+            throw CloudRecordMapperError.invalidField("course plan status")
+        }
+        return try CoursePlan(
+            id: id,
+            projectId: try uuid("projectId", from: record),
+            revision: try integer("revision", from: record),
+            status: status,
+            courseURL: optionalString("courseURL", from: record).flatMap(URL.init(string:)),
+            courseTitle: try string("courseTitle", from: record),
+            courseOutline: optionalString("courseOutline", from: record) ?? "",
+            goal: try string("goal", from: record),
+            expectedOutcome: optionalString("expectedOutcome", from: record) ?? "",
+            startsOn: try date("startsOn", from: record),
+            deadline: optionalDate("deadline", from: record),
+            weeklyBudgetMinutes: try integer("weeklyBudgetMinutes", from: record),
+            summary: optionalString("summary", from: record) ?? "",
+            createdAt: try date("createdAt", from: record),
+            updatedAt: try date("updatedAt", from: record),
+            activatedAt: optionalDate("activatedAt", from: record),
+            deletedAt: optionalDate("deletedAt", from: record),
+            schemaVersion: try integer("schemaVersion", from: record)
+        )
+    }
+
+    private func decodePlanPhase(_ record: CKRecord, id: UUID) throws -> PlanPhase {
+        try PlanPhase(
+            id: id,
+            planId: try uuid("planId", from: record),
+            title: try string("title", from: record),
+            objective: try string("objective", from: record),
+            expectedProof: optionalString("expectedProof", from: record) ?? "",
+            ordinal: try integer("ordinal", from: record),
+            targetStart: try date("targetStart", from: record),
+            targetEnd: try date("targetEnd", from: record),
+            createdAt: try date("createdAt", from: record),
+            updatedAt: try date("updatedAt", from: record),
+            deletedAt: optionalDate("deletedAt", from: record),
+            schemaVersion: try integer("schemaVersion", from: record)
+        )
+    }
+
+    private func decodePlannedSession(_ record: CKRecord, id: UUID) throws -> PlannedSession {
+        guard let actionType = ActionType(rawValue: try string("actionType", from: record)),
+              let status = PlannedSessionStatus(rawValue: try string("status", from: record)) else {
+            throw CloudRecordMapperError.invalidField("planned session enum")
+        }
+        return try PlannedSession(
+            id: id,
+            planId: try uuid("planId", from: record),
+            phaseId: try uuid("phaseId", from: record),
+            projectId: try uuid("projectId", from: record),
+            title: try string("title", from: record),
+            actionType: actionType,
+            expectedProof: optionalString("expectedProof", from: record),
+            durationMinutes: try integer("durationMinutes", from: record),
+            deadline: optionalDate("deadline", from: record),
+            status: status,
+            completedSessionId: try optionalUUID("completedSessionId", from: record),
+            createdAt: try date("createdAt", from: record),
+            updatedAt: try date("updatedAt", from: record),
             deletedAt: optionalDate("deletedAt", from: record),
             schemaVersion: try integer("schemaVersion", from: record)
         )

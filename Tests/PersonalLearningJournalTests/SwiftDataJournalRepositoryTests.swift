@@ -81,6 +81,74 @@ final class SwiftDataJournalRepositoryTests: XCTestCase {
         )
     }
 
+    func testRepositoryRoundTripsPlanningGraph() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Implement a language model",
+            currentNextStep: "Read lecture 1",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let plan = try CoursePlan(
+            projectId: project.id,
+            revision: 1,
+            status: .draft,
+            courseURL: nil,
+            courseTitle: "CS336",
+            courseOutline: "Lecture 1",
+            goal: project.goal,
+            expectedOutcome: "Working notebook",
+            startsOn: timestamp,
+            deadline: nil,
+            weeklyBudgetMinutes: 240,
+            summary: "Build the first language model.",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let phase = try PlanPhase(
+            planId: plan.id,
+            title: "Foundations",
+            objective: "Understand tokenization",
+            expectedProof: "Tokenizer notebook",
+            ordinal: 0,
+            targetStart: timestamp,
+            targetEnd: timestamp,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let plannedSession = try PlannedSession(
+            planId: plan.id,
+            phaseId: phase.id,
+            projectId: project.id,
+            title: "Implement tokenizer",
+            actionType: .course,
+            expectedProof: "Tokenizer notebook",
+            durationMinutes: 45,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = try SwiftDataJournalRepository(
+            url: root.appendingPathComponent("journal-v2.store")
+        )
+
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.coursePlan(plan), .planPhase(phase), .plannedSession(plannedSession)],
+                origin: .user
+            )
+        )
+
+        let snapshot = try repository.snapshot()
+        XCTAssertEqual(snapshot.coursePlans, [plan])
+        XCTAssertEqual(snapshot.planPhases, [phase])
+        XCTAssertEqual(snapshot.plannedSessions, [plannedSession])
+        XCTAssertEqual(try repository.pendingMutations(limit: 10).count, 3)
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

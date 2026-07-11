@@ -6,6 +6,9 @@ public enum JournalEntityKind: String, Codable, CaseIterable, Sendable {
     case proof
     case review
     case trailEvent
+    case coursePlan
+    case planPhase
+    case plannedSession
 }
 
 public struct JournalEntityReference: Codable, Equatable, Hashable, Sendable {
@@ -24,6 +27,9 @@ public enum JournalEntity: Codable, Equatable, Sendable {
     case proof(Proof)
     case review(Review)
     case trailEvent(TrailEvent)
+    case coursePlan(CoursePlan)
+    case planPhase(PlanPhase)
+    case plannedSession(PlannedSession)
 
     public var reference: JournalEntityReference {
         switch self {
@@ -32,6 +38,9 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .proof(value): .init(.proof, value.id)
         case let .review(value): .init(.review, value.id)
         case let .trailEvent(value): .init(.trailEvent, value.id)
+        case let .coursePlan(value): .init(.coursePlan, value.id)
+        case let .planPhase(value): .init(.planPhase, value.id)
+        case let .plannedSession(value): .init(.plannedSession, value.id)
         }
     }
 
@@ -42,6 +51,9 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .proof(value): value.deletedAt != nil
         case let .review(value): value.deletedAt != nil
         case let .trailEvent(value): value.deletedAt != nil
+        case let .coursePlan(value): value.deletedAt != nil
+        case let .planPhase(value): value.deletedAt != nil
+        case let .plannedSession(value): value.deletedAt != nil
         }
     }
 
@@ -66,6 +78,18 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case var .trailEvent(value):
             value.deletedAt = date
             return .trailEvent(value)
+        case var .coursePlan(value):
+            value.deletedAt = date
+            value.updatedAt = date
+            return .coursePlan(value)
+        case var .planPhase(value):
+            value.deletedAt = date
+            value.updatedAt = date
+            return .planPhase(value)
+        case var .plannedSession(value):
+            value.deletedAt = date
+            value.updatedAt = date
+            return .plannedSession(value)
         }
     }
 }

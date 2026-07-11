@@ -35,6 +35,12 @@ public struct SyncMergeService {
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.review, now: now)
         case let (.trailEvent(base), .trailEvent(local), .trailEvent(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.trailEvent, now: now)
+        case let (.coursePlan(base), .coursePlan(local), .coursePlan(server)):
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.coursePlan, now: now)
+        case let (.planPhase(base), .planPhase(local), .planPhase(server)):
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.planPhase, now: now)
+        case let (.plannedSession(base), .plannedSession(local), .plannedSession(server)):
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.plannedSession, now: now)
         default:
             throw SyncMergeError.mismatchedEntityReferences
         }

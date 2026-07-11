@@ -113,6 +113,57 @@ final class CloudRecordMapperTests: XCTestCase {
         XCTAssertEqual(try mapper.entity(from: record), .review(review))
     }
 
+    func testPlanningEntitiesRoundTripInPrivateZone() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let projectID = UUID()
+        let plan = try CoursePlan(
+            id: fixedID,
+            projectId: projectID,
+            revision: 1,
+            status: .active,
+            courseURL: URL(string: "https://cs336.stanford.edu"),
+            courseTitle: "CS336",
+            courseOutline: "Language models",
+            goal: "Build a model",
+            expectedOutcome: "Notebook",
+            startsOn: timestamp,
+            deadline: timestamp.addingTimeInterval(7 * 24 * 60 * 60),
+            weeklyBudgetMinutes: 240,
+            summary: "Build foundations.",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let phase = try PlanPhase(
+            planId: plan.id,
+            title: "Tokenizer",
+            objective: "Understand tokenization",
+            expectedProof: "Tokenizer notebook",
+            ordinal: 0,
+            targetStart: timestamp,
+            targetEnd: timestamp.addingTimeInterval(24 * 60 * 60),
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let session = try PlannedSession(
+            planId: plan.id,
+            phaseId: phase.id,
+            projectId: projectID,
+            title: "Implement tokenizer",
+            actionType: .course,
+            expectedProof: "Tokenizer notebook",
+            durationMinutes: 45,
+            deadline: timestamp.addingTimeInterval(24 * 60 * 60),
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let mapper = CloudRecordMapper()
+
+        for entity in [JournalEntity.coursePlan(plan), .planPhase(phase), .plannedSession(session)] {
+            let record = try mapper.record(for: entity, zoneID: zoneID)
+            XCTAssertEqual(try mapper.entity(from: record), entity)
+        }
+    }
+
     func testMapperRejectsInvalidDurationAndRecordIdentifier() throws {
         let invalidIDRecord = CKRecord(
             recordType: "Project",

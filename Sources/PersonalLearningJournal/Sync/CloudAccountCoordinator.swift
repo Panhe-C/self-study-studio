@@ -138,6 +138,9 @@ public final class CloudAccountCoordinator {
             + snapshot.proofs.map(JournalEntity.proof)
             + snapshot.reviews.map(JournalEntity.review)
             + snapshot.trailEvents.map(JournalEntity.trailEvent)
+            + snapshot.coursePlans.map(JournalEntity.coursePlan)
+            + snapshot.planPhases.map(JournalEntity.planPhase)
+            + snapshot.plannedSessions.map(JournalEntity.plannedSession)
     }
 
     private static func storeURL(rootDirectory: URL, scope: String) -> URL {

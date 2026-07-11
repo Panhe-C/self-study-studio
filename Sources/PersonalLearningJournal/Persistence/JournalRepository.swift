@@ -46,6 +46,9 @@ public final class InMemoryJournalRepository: JournalRepository {
             + snapshot.proofs.map(JournalEntity.proof)
             + snapshot.reviews.map(JournalEntity.review)
             + snapshot.trailEvents.map(JournalEntity.trailEvent)
+            + snapshot.coursePlans.map(JournalEntity.coursePlan)
+            + snapshot.planPhases.map(JournalEntity.planPhase)
+            + snapshot.plannedSessions.map(JournalEntity.plannedSession)
         self.entities = Dictionary(
             uniqueKeysWithValues: initialEntities.map { ($0.reference, $0) }
         )
@@ -82,6 +85,18 @@ public final class InMemoryJournalRepository: JournalRepository {
                 },
                 trailEvents: visibleEntities.compactMap {
                     guard case let .trailEvent(value) = $0 else { return nil }
+                    return value
+                },
+                coursePlans: visibleEntities.compactMap {
+                    guard case let .coursePlan(value) = $0 else { return nil }
+                    return value
+                },
+                planPhases: visibleEntities.compactMap {
+                    guard case let .planPhase(value) = $0 else { return nil }
+                    return value
+                },
+                plannedSessions: visibleEntities.compactMap {
+                    guard case let .plannedSession(value) = $0 else { return nil }
                     return value
                 },
                 hasCompletedOnboarding: stateMetadata.hasCompletedOnboarding,

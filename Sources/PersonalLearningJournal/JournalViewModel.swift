@@ -465,6 +465,12 @@ public final class JournalViewModel: ObservableObject {
             return .review(try JSONDecoder.journal.decode(Review.self, from: payload))
         case .trailEvent:
             return .trailEvent(try JSONDecoder.journal.decode(TrailEvent.self, from: payload))
+        case .coursePlan:
+            return .coursePlan(try JSONDecoder.journal.decode(CoursePlan.self, from: payload))
+        case .planPhase:
+            return .planPhase(try JSONDecoder.journal.decode(PlanPhase.self, from: payload))
+        case .plannedSession:
+            return .plannedSession(try JSONDecoder.journal.decode(PlannedSession.self, from: payload))
         }
     }
 

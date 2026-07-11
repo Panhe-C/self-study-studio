@@ -119,4 +119,37 @@ final class SyncMergeServiceTests: XCTestCase {
         XCTAssertEqual(project.archivedAt, local.archivedAt)
         XCTAssertEqual(project.currentNextStep, server.currentNextStep)
     }
+
+    func testSameFieldPlanPhaseEditsCreateConflict() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_000)
+        let base = try PlanPhase(
+            planId: UUID(),
+            title: "Tokenizer",
+            objective: "Understand tokenization",
+            expectedProof: "Notebook",
+            ordinal: 0,
+            targetStart: timestamp,
+            targetEnd: timestamp.addingTimeInterval(60),
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        var local = base
+        local.objective = "Implement byte pair encoding"
+        local.updatedAt = timestamp.addingTimeInterval(60)
+        var server = base
+        server.objective = "Compare tokenizers"
+        server.updatedAt = timestamp.addingTimeInterval(120)
+
+        let result = try SyncMergeService().merge(
+            base: .planPhase(base),
+            local: .planPhase(local),
+            server: .planPhase(server)
+        )
+
+        guard case let .conflict(conflict) = result else {
+            return XCTFail("Expected conflict")
+        }
+        XCTAssertEqual(conflict.entity, .init(.planPhase, base.id))
+        XCTAssertEqual(conflict.conflictingFields, ["objective"])
+    }
 }
