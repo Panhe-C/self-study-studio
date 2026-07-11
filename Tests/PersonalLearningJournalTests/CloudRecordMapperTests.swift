@@ -140,6 +140,34 @@ final class CloudRecordMapperTests: XCTestCase {
         XCTAssertThrowsError(try CloudRecordMapper().entity(from: record))
     }
 
+    func testMapperRejectsMalformedOptionalRelationshipsAndReferences() throws {
+        let proofRecord = CKRecord(
+            recordType: "Proof",
+            recordID: CKRecord.ID(recordName: fixedID.uuidString, zoneID: zoneID)
+        )
+        proofRecord["projectId"] = UUID().uuidString
+        proofRecord["sessionId"] = "not-a-uuid"
+        proofRecord["type"] = "link"
+        proofRecord["title"] = "Notes"
+        proofRecord["statement"] = "Shows the notes"
+        proofRecord["createdAt"] = Date()
+        proofRecord["updatedAt"] = Date()
+        proofRecord["schemaVersion"] = 2
+        XCTAssertThrowsError(try CloudRecordMapper().entity(from: proofRecord))
+
+        let reviewRecord = CKRecord(
+            recordType: "Review",
+            recordID: CKRecord.ID(recordName: fixedID.uuidString, zoneID: zoneID)
+        )
+        reviewRecord["periodStart"] = Date()
+        reviewRecord["periodEnd"] = Date()
+        reviewRecord["sourceReferences"] = ["not-base64"] as NSArray
+        reviewRecord["createdAt"] = Date()
+        reviewRecord["updatedAt"] = Date()
+        reviewRecord["schemaVersion"] = 2
+        XCTAssertThrowsError(try CloudRecordMapper().entity(from: reviewRecord))
+    }
+
     private func temporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

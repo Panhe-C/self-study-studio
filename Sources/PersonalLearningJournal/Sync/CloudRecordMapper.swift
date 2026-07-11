@@ -206,7 +206,7 @@ public struct CloudRecordMapper {
         return try Proof(
             id: id,
             projectId: try uuid("projectId", from: record),
-            sessionId: optionalUUID("sessionId", from: record),
+            sessionId: try optionalUUID("sessionId", from: record),
             type: type,
             title: try string("title", from: record),
             statement: try string("statement", from: record),
@@ -231,7 +231,7 @@ public struct CloudRecordMapper {
             projectRecommendations: try statusDictionary(strings("projectRecommendations", from: record)),
             nextSteps: try stringDictionary(strings("nextSteps", from: record)),
             aiSourceSummary: strings("aiSourceSummary", from: record),
-            sourceReferences: sourceReferences(strings("sourceReferences", from: record)),
+            sourceReferences: try sourceReferences(strings("sourceReferences", from: record)),
             createdAt: try date("createdAt", from: record),
             updatedAt: try date("updatedAt", from: record),
             deletedAt: optionalDate("deletedAt", from: record),
@@ -295,8 +295,12 @@ public struct CloudRecordMapper {
         return value
     }
 
-    private func optionalUUID(_ key: String, from record: CKRecord) -> UUID? {
-        optionalString(key, from: record).flatMap(UUID.init(uuidString:))
+    private func optionalUUID(_ key: String, from record: CKRecord) throws -> UUID? {
+        guard let string = optionalString(key, from: record) else { return nil }
+        guard let value = UUID(uuidString: string) else {
+            throw CloudRecordMapperError.invalidField(key)
+        }
+        return value
     }
 
     private func strings(_ key: String, from record: CKRecord) -> [String] {
@@ -323,8 +327,9 @@ public struct CloudRecordMapper {
         })
     }
 
-    private func sourceReferences(_ values: [String]) -> [String: [String]] {
-        Dictionary(grouping: values.compactMap { try? decodePair($0) }, by: \.0)
+    private func sourceReferences(_ values: [String]) throws -> [String: [String]] {
+        let pairs = try values.map(decodePair)
+        return Dictionary(grouping: pairs, by: \.0)
             .mapValues { $0.map(\.1) }
     }
 
