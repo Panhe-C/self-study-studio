@@ -61,7 +61,7 @@ final class ExportServiceTests: XCTestCase {
         let exportedData = try ExportService().exportJSON(snapshot: service.snapshot())
         let export = try JSONDecoder.journal.decode(JournalExport.self, from: exportedData)
 
-        XCTAssertEqual(export.version, "v0.1")
+        XCTAssertEqual(export.version, "v0.2")
         XCTAssertEqual(export.projects.map(\.id), [project.id])
         XCTAssertEqual(export.sessions.map(\.id), [session.id])
         XCTAssertEqual(export.proofs.map(\.id), [proof.id])

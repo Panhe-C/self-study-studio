@@ -7,6 +7,9 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
     public var proofs: [Proof]
     public var reviews: [Review]
     public var trailEvents: [TrailEvent]
+    public var coursePlans: [CoursePlan]
+    public var planPhases: [PlanPhase]
+    public var plannedSessions: [PlannedSession]
     public var hasCompletedOnboarding: Bool
     public var pendingFirstRecordProjectId: UUID?
 
@@ -16,6 +19,9 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         proofs: [Proof] = [],
         reviews: [Review] = [],
         trailEvents: [TrailEvent] = [],
+        coursePlans: [CoursePlan] = [],
+        planPhases: [PlanPhase] = [],
+        plannedSessions: [PlannedSession] = [],
         hasCompletedOnboarding: Bool? = nil,
         pendingFirstRecordProjectId: UUID? = nil
     ) {
@@ -24,6 +30,9 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         self.proofs = proofs
         self.reviews = reviews
         self.trailEvents = trailEvents
+        self.coursePlans = coursePlans
+        self.planPhases = planPhases
+        self.plannedSessions = plannedSessions
         self.hasCompletedOnboarding = hasCompletedOnboarding ?? !projects.isEmpty
         self.pendingFirstRecordProjectId = pendingFirstRecordProjectId
     }
@@ -34,6 +43,9 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         case proofs
         case reviews
         case trailEvents
+        case coursePlans
+        case planPhases
+        case plannedSessions
         case hasCompletedOnboarding
         case pendingFirstRecordProjectId
     }
@@ -45,6 +57,9 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         proofs = try container.decodeIfPresent([Proof].self, forKey: .proofs) ?? []
         reviews = try container.decodeIfPresent([Review].self, forKey: .reviews) ?? []
         trailEvents = try container.decodeIfPresent([TrailEvent].self, forKey: .trailEvents) ?? []
+        coursePlans = try container.decodeIfPresent([CoursePlan].self, forKey: .coursePlans) ?? []
+        planPhases = try container.decodeIfPresent([PlanPhase].self, forKey: .planPhases) ?? []
+        plannedSessions = try container.decodeIfPresent([PlannedSession].self, forKey: .plannedSessions) ?? []
         hasCompletedOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding)
             ?? !projects.isEmpty
         pendingFirstRecordProjectId = try container.decodeIfPresent(UUID.self, forKey: .pendingFirstRecordProjectId)

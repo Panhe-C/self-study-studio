@@ -71,6 +71,7 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
     public var archivedAt: Date?
     public var deletedAt: Date?
     public var schemaVersion: Int
+    public var activeCoursePlanId: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -85,7 +86,8 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
         updatedAt: Date = Date(),
         archivedAt: Date? = nil,
         deletedAt: Date? = nil,
-        schemaVersion: Int = JournalSchema.currentVersion
+        schemaVersion: Int = JournalSchema.currentVersion,
+        activeCoursePlanId: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -100,12 +102,13 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
         self.archivedAt = archivedAt
         self.deletedAt = deletedAt
         self.schemaVersion = schemaVersion
+        self.activeCoursePlanId = activeCoursePlanId
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, area, goal, status, currentNextStep, lastActionType
         case defaultDurationMinutes, createdAt, updatedAt, archivedAt
-        case deletedAt, schemaVersion
+        case deletedAt, schemaVersion, activeCoursePlanId
     }
 
     public init(from decoder: Decoder) throws {
@@ -124,6 +127,7 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
         deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
         schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
             ?? JournalSchema.currentVersion
+        activeCoursePlanId = try container.decodeIfPresent(UUID.self, forKey: .activeCoursePlanId)
     }
 
     public var canContinue: Bool {
