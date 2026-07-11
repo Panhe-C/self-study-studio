@@ -89,4 +89,34 @@ final class SyncMergeServiceTests: XCTestCase {
             )
         )
     }
+
+    func testOptionalProjectFieldMergesNilToValueWithoutRejectingPayload() throws {
+        let base = Project(
+            id: UUID(),
+            name: "CS336",
+            area: "AI",
+            goal: "Finish",
+            currentNextStep: "Lecture 1",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            updatedAt: Date(timeIntervalSince1970: 1_000)
+        )
+        var local = base
+        local.archivedAt = Date(timeIntervalSince1970: 2_000)
+        local.updatedAt = Date(timeIntervalSince1970: 2_000)
+        var server = base
+        server.currentNextStep = "Lecture 2"
+        server.updatedAt = Date(timeIntervalSince1970: 3_000)
+
+        let result = try SyncMergeService().merge(
+            base: .project(base),
+            local: .project(local),
+            server: .project(server)
+        )
+
+        guard case let .merged(.project(project)) = result else {
+            return XCTFail("Expected merged project")
+        }
+        XCTAssertEqual(project.archivedAt, local.archivedAt)
+        XCTAssertEqual(project.currentNextStep, server.currentNextStep)
+    }
 }

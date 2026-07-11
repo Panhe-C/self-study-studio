@@ -50,17 +50,15 @@ public struct SyncMergeService {
         let baseFields = try fields(for: base)
         let localFields = try fields(for: local)
         let serverFields = try fields(for: server)
-        guard Set(baseFields.keys) == Set(localFields.keys),
-              Set(baseFields.keys) == Set(serverFields.keys) else {
-            throw SyncMergeError.invalidEntityPayload
-        }
-
         var mergedFields: [String: Any] = [:]
         var conflicts: [String] = []
-        for key in baseFields.keys.sorted() {
-            let baseValue = baseFields[key]!
-            let localValue = localFields[key]!
-            let serverValue = serverFields[key]!
+        let allKeys = Set(baseFields.keys)
+            .union(localFields.keys)
+            .union(serverFields.keys)
+        for key in allKeys.sorted() {
+            let baseValue = baseFields[key] ?? NSNull()
+            let localValue = localFields[key] ?? NSNull()
+            let serverValue = serverFields[key] ?? NSNull()
 
             if key == "updatedAt" {
                 mergedFields[key] = latestDateString(localValue, serverValue)
