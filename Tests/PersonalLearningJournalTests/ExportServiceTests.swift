@@ -2,6 +2,24 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class ExportServiceTests: XCTestCase {
+    func testExportContainsDomainSchemaButNoSyncMetadata() throws {
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Finish",
+            currentNextStep: "Lecture 1"
+        )
+
+        let data = try ExportService().exportJSON(
+            snapshot: JournalSnapshot(projects: [project])
+        )
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        XCTAssertTrue(json.contains("schemaVersion"))
+        XCTAssertFalse(json.contains("recordChangeTag"))
+        XCTAssertFalse(json.contains("accountRecordName"))
+    }
+
     func testExportJSONContainsVersionAndJournalData() throws {
         let service = JournalService(store: InMemoryJournalStore())
         let project = try service.createProject(

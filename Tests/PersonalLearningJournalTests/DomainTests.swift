@@ -2,6 +2,17 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class DomainTests: XCTestCase {
+    func testLegacyProjectDecodesWithCurrentSchemaAndNoDeletion() throws {
+        let data = Data(
+            #"{"id":"00000000-0000-0000-0000-000000000001","name":"CS336","area":"AI","goal":"Finish","status":"active","currentNextStep":"Lecture 1","lastActionType":"course","defaultDurationMinutes":30,"createdAt":"2001-01-01T00:00:00Z","updatedAt":"2001-01-01T00:00:00Z"}"#.utf8
+        )
+
+        let project = try JSONDecoder.journal.decode(Project.self, from: data)
+
+        XCTAssertNil(project.deletedAt)
+        XCTAssertEqual(project.schemaVersion, JournalSchema.currentVersion)
+    }
+
     func testActiveProjectRequiresANextStepForContinue() {
         let project = Project(
             name: "CS336",
