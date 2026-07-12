@@ -2,6 +2,13 @@
 
 Personal Learning Journal is a SwiftUI-first app core for the v0.1 PRD in `personal-learning-journal-design.md`.
 
+## Product Documentation
+
+- [产品功能说明图](diagrams/PRODUCT_FUNCTION_DIAGRAMS.md)
+- [产品功能手册设计](docs/superpowers/specs/2026-07-12-product-guide-design.md)
+
+When user-visible behavior changes, update the affected diagram source and regenerate its SVG and PNG exports.
+
 The current implementation focuses on the first product loop:
 
 ```text
