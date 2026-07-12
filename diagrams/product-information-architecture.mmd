@@ -1,0 +1,20 @@
+flowchart TD
+  APP[Self Study Studio] --> O[首次启动 Onboarding]
+  O --> F[完成首条 Session]
+  F --> ROOT[主界面]
+  ROOT --> TODAY[Today]
+  ROOT --> PROJECTS[Projects]
+  ROOT --> LIBRARY[Library]
+  TODAY --> CONTINUE[Continue 卡片]
+  CONTINUE --> QUICK[Quick Log]
+  CONTINUE --> TIMER[Timer]
+  TODAY --> REVIEW[Weekly Review 提醒]
+  PROJECTS --> DETAIL[Project Detail]
+  DETAIL --> QUICK
+  DETAIL --> TIMER
+  DETAIL --> PROOF[Add Proof]
+  DETAIL --> TRAIL[Learning Trail]
+  DETAIL --> HISTORY[历史 Review]
+  LIBRARY --> PROOFDETAIL[Proof Detail]
+  LIBRARY --> EXPORT[Export]
+  ROOT -.工具栏.-> SETTINGS[AI Review Settings]
