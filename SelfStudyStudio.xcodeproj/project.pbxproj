@@ -63,6 +63,8 @@
 		10000000000000000000013C /* ScheduleDraftView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023D /* ScheduleDraftView.swift */; };
 		10000000000000000000013D /* CalendarSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023E /* CalendarSettingsView.swift */; };
 		10000000000000000000013E /* CalendarReconciliationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023F /* CalendarReconciliationView.swift */; };
+		10000000000000000000013F /* StudioPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000240 /* StudioPresentation.swift */; };
+		100000000000000000000140 /* StudioTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000241 /* StudioTheme.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -123,6 +125,8 @@
 		10000000000000000000023D /* ScheduleDraftView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ScheduleDraftView.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000023E /* CalendarSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CalendarSettingsView.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000023F /* CalendarReconciliationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CalendarReconciliationView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000240 /* StudioPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/StudioPresentation.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000241 /* StudioTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/StudioTheme.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -197,6 +201,8 @@
 				10000000000000000000023D /* ScheduleDraftView.swift */,
 				10000000000000000000023E /* CalendarSettingsView.swift */,
 				10000000000000000000023F /* CalendarReconciliationView.swift */,
+				100000000000000000000240 /* StudioPresentation.swift */,
+				100000000000000000000241 /* StudioTheme.swift */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -341,6 +347,8 @@
 				10000000000000000000013C /* ScheduleDraftView.swift in Sources */,
 				10000000000000000000013D /* CalendarSettingsView.swift in Sources */,
 				10000000000000000000013E /* CalendarReconciliationView.swift in Sources */,
+				10000000000000000000013F /* StudioPresentation.swift in Sources */,
+				100000000000000000000140 /* StudioTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
