@@ -15,7 +15,7 @@ public struct CoursePlanValidationResult: Equatable, Sendable {
     public var isValid: Bool { errors.isEmpty }
 }
 
-public struct CoursePlanValidator {
+public struct CoursePlanValidator: Sendable {
     public init() {}
 
     public func validate(

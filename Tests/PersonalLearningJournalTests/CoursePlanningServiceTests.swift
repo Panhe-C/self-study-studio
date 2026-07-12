@@ -30,6 +30,23 @@ final class CoursePlanningServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.trailEvents.filter { $0.type == .planActivated }.count, 2)
     }
 
+    func testGenerationFailureLeavesJournalUnchanged() async throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = CoursePlanningService(
+            repository: repository,
+            provider: UnavailableCoursePlanningProvider(),
+            now: { self.timestamp }
+        )
+
+        do {
+            _ = try await service.generateDraft(input: input, context: .init())
+            XCTFail("Expected AI configuration error")
+        } catch let error as CoursePlanningError {
+            XCTAssertEqual(error, .configurationRequired)
+        }
+        XCTAssertTrue(try repository.snapshot().coursePlans.isEmpty)
+    }
+
     private let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
     private let projectID = UUID()
 
@@ -83,5 +100,14 @@ final class CoursePlanningServiceTests: XCTestCase {
                 )
             ]
         )
+    }
+}
+
+private struct UnavailableCoursePlanningProvider: CoursePlanningProvider {
+    func makeDraft(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext
+    ) async throws -> CoursePlanDraft {
+        throw CoursePlanningError.configurationRequired
     }
 }

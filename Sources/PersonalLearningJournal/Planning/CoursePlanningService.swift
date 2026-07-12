@@ -3,16 +3,28 @@ import Foundation
 public final class CoursePlanningService {
     private let repository: any JournalRepository
     private let validator: CoursePlanValidator
+    private let provider: any CoursePlanningProvider
     private let now: () -> Date
 
     public init(
         repository: any JournalRepository,
         validator: CoursePlanValidator = CoursePlanValidator(),
+        provider: any CoursePlanningProvider = AdaptiveCoursePlanningProvider(),
         now: @escaping () -> Date = Date.init
     ) {
         self.repository = repository
         self.validator = validator
+        self.provider = provider
         self.now = now
+    }
+
+    @discardableResult
+    public func generateDraft(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext
+    ) async throws -> CoursePlan {
+        let draft = try await provider.makeDraft(input: input, context: context)
+        return try saveDraft(input: input, draft: draft)
     }
 
     @discardableResult
