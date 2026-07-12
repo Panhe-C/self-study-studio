@@ -71,6 +71,7 @@ xcodebuild -project SelfStudyStudio.xcodeproj -target SelfStudyStudio -sdk iphon
 
 Current verification status:
 
+- 2026-07-12: `swift test` executed 50 tests; 49 passed and 1 known assertion failed in `testOpenAICompatibleProviderParsesJSONContentFromChatCompletion` because the stub response omits `sourceReferences` while the assertion expects a decision-to-source mapping.
 - 2026-07-10: `swift test` completed 49 tests with 0 failures.
 - 2026-07-10: `swift build` completed successfully.
 - 2026-07-10: `xcodebuild -project SelfStudyStudio.xcodeproj -scheme SelfStudyStudio -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build` completed successfully.

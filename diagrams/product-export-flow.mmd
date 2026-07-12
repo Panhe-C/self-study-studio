@@ -1,12 +1,9 @@
 flowchart TD
-  A[进入 Library Export] --> B{选择导出方式}
-  B -->|仅结构化数据| C[生成带版本号的 journal.json]
-  B -->|仅学习附件| D[按 Project·Session·Proof 复制附件]
-  B -->|完整备份| E[创建 Export Bundle]
-  E --> C
-  E --> D
-  C --> F[写入本地 Exports 目录]
-  D --> F
-  F --> G{导出是否成功}
-  G -->|否| H[显示错误并保留原始数据]
-  G -->|是| I[通过系统分享或文件管理取用]
+  A[在 Library 点击 Export] --> B[创建带时间戳的完整 Export Bundle]
+  B --> C[生成带版本号的 journal.json]
+  B --> D[按 Project·Session·Proof 复制附件]
+  C --> E[写入 Documents／LearningJournal／Exports]
+  D --> E
+  E --> F{导出是否成功}
+  F -->|否| G[显示 Export Failed<br/>保留原始数据]
+  F -->|是| H[显示 Export Ready<br/>告知本地保存路径和附件数量]
