@@ -4,6 +4,20 @@ import XCTest
 
 @MainActor
 final class CloudAccountCoordinatorTests: XCTestCase {
+    func testSystemProviderDoesNotLoadCloudKitWithoutEntitlement() async throws {
+        let provider = SystemCloudAccountProvider(
+            hasCloudKitEntitlement: { false },
+            accountStatusLoader: { throw UnexpectedCloudKitCall() },
+            userRecordNameLoader: { throw UnexpectedCloudKitCall() }
+        )
+
+        let status = try await provider.accountStatus()
+        let recordName = try await provider.currentUserRecordName()
+
+        XCTAssertEqual(status, .noAccount)
+        XCTAssertNil(recordName)
+    }
+
     func testDifferentAccountRecordNamesResolveDifferentStoreURLs() throws {
         let coordinator = CloudAccountCoordinator(rootDirectory: temporaryDirectory())
 
@@ -85,6 +99,8 @@ final class CloudAccountCoordinatorTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
     }
 }
+
+private struct UnexpectedCloudKitCall: Error {}
 
 private actor FakeAccountProvider: CloudAccountProviding {
     let status: CKAccountStatus

@@ -8,18 +8,46 @@ public protocol CloudAccountProviding: Sendable {
 }
 
 public final class SystemCloudAccountProvider: CloudAccountProviding, @unchecked Sendable {
-    private let container: CKContainer
+    private let hasCloudKitEntitlement: @Sendable () -> Bool
+    private let accountStatusLoader: @Sendable () async throws -> CKAccountStatus
+    private let userRecordNameLoader: @Sendable () async throws -> String?
 
     public init(containerIdentifier: String = CKSyncEngineDatabaseClient.defaultContainerIdentifier) {
-        self.container = CKContainer(identifier: containerIdentifier)
+        self.hasCloudKitEntitlement = Self.processHasCloudKitEntitlement
+        self.accountStatusLoader = {
+            try await CKContainer(identifier: containerIdentifier).accountStatus()
+        }
+        self.userRecordNameLoader = {
+            try await CKContainer(identifier: containerIdentifier).userRecordID().recordName
+        }
+    }
+
+    init(
+        hasCloudKitEntitlement: @escaping @Sendable () -> Bool,
+        accountStatusLoader: @escaping @Sendable () async throws -> CKAccountStatus,
+        userRecordNameLoader: @escaping @Sendable () async throws -> String?
+    ) {
+        self.hasCloudKitEntitlement = hasCloudKitEntitlement
+        self.accountStatusLoader = accountStatusLoader
+        self.userRecordNameLoader = userRecordNameLoader
     }
 
     public func accountStatus() async throws -> CKAccountStatus {
-        try await container.accountStatus()
+        guard hasCloudKitEntitlement() else { return .noAccount }
+        return try await accountStatusLoader()
     }
 
     public func currentUserRecordName() async throws -> String? {
-        try await container.userRecordID().recordName
+        guard hasCloudKitEntitlement() else { return nil }
+        return try await userRecordNameLoader()
+    }
+
+    private static func processHasCloudKitEntitlement() -> Bool {
+        #if targetEnvironment(simulator)
+        false
+        #else
+        true
+        #endif
     }
 }
 
