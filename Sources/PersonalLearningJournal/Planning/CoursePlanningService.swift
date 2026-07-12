@@ -19,6 +19,7 @@ public final class CoursePlanningService {
     }
 
     @discardableResult
+    @MainActor
     public func generateDraft(
         input: CoursePlanningInput,
         context: CoursePlanningContext

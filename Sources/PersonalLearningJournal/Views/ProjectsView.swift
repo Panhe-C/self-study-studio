@@ -128,6 +128,7 @@ private struct ProjectDetailView: View {
     @State private var reviewError: String?
     @State private var isCreatingReview = false
     @State private var showingAISettings = false
+    @State private var showingCoursePlanWizard = false
 
     private var currentProject: Project {
         viewModel.projects.first { $0.id == project.id } ?? project
@@ -162,6 +163,34 @@ private struct ProjectDetailView: View {
                     showingProof = true
                 } label: {
                     Label("Add Proof", systemImage: "paperclip.badge.plus")
+                }
+            }
+
+            Section("Study Plan") {
+                if let plan = viewModel.activeCoursePlan(for: currentProject.id) {
+                    NavigationLink {
+                        CoursePlanDetailView(viewModel: viewModel, project: currentProject, plan: plan)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Revision \(plan.revision)")
+                                .font(.headline)
+                            Text("\(viewModel.plannedSessions(for: plan.id).count) planned sessions")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    Button {
+                        showingCoursePlanWizard = true
+                    } label: {
+                        Label("Create Study Plan", systemImage: "list.bullet.rectangle")
+                    }
+                }
+
+                if let draft = viewModel.draftCoursePlan, draft.projectId == currentProject.id {
+                    Text("Draft revision \(draft.revision) is ready to review.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -285,6 +314,9 @@ private struct ProjectDetailView: View {
         }
         .sheet(isPresented: $showingAISettings) {
             AIReviewSettingsView()
+        }
+        .sheet(isPresented: $showingCoursePlanWizard) {
+            CoursePlanWizardView(viewModel: viewModel, project: currentProject)
         }
         .alert("Review failed", isPresented: .constant(reviewError != nil)) {
             Button("OK") { reviewError = nil }

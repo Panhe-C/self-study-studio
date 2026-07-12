@@ -1,6 +1,7 @@
 import XCTest
 @testable import PersonalLearningJournal
 
+@MainActor
 final class CoursePlanningServiceTests: XCTestCase {
     func testSavingDraftPersistsItWithoutActivatingProject() throws {
         let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))

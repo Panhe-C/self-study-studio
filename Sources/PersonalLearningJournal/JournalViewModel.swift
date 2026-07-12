@@ -10,11 +10,16 @@ public final class JournalViewModel: ObservableObject {
     @Published public private(set) var syncPendingMutationCount: Int
     @Published public private(set) var syncLastSuccess: Date?
     @Published public private(set) var bootstrapEntityCount: Int
+    @Published public private(set) var draftCoursePlan: CoursePlan?
+    @Published public private(set) var coursePlanGenerationState: CoursePlanGenerationState
+    @Published public private(set) var coursePlanValidationErrors: [CoursePlanningValidationError]
+    @Published private var rememberedCoursePlanningInputs: [UUID: CoursePlanningInput]
 
     private let journalService: JournalService
     private let reviewService: ReviewService
     private let exportService: ExportService
     private let attachmentStore: AttachmentStore
+    private let coursePlanningService: CoursePlanningService?
     private let syncCoordinator: (any CloudSyncCoordinating)?
     private let syncRepository: (any JournalRepository)?
     private let accountCoordinator: CloudAccountCoordinator?
@@ -24,6 +29,7 @@ public final class JournalViewModel: ObservableObject {
         reviewService: ReviewService,
         exportService: ExportService,
         attachmentStore: AttachmentStore = .defaultStore(),
+        coursePlanningService: CoursePlanningService? = nil,
         syncCoordinator: (any CloudSyncCoordinating)? = nil,
         syncRepository: (any JournalRepository)? = nil,
         accountCoordinator: CloudAccountCoordinator? = nil
@@ -32,6 +38,7 @@ public final class JournalViewModel: ObservableObject {
         self.reviewService = reviewService
         self.exportService = exportService
         self.attachmentStore = attachmentStore
+        self.coursePlanningService = coursePlanningService
         self.syncCoordinator = syncCoordinator
         self.syncRepository = syncRepository
         self.accountCoordinator = accountCoordinator
@@ -42,6 +49,10 @@ public final class JournalViewModel: ObservableObject {
         self.syncPendingMutationCount = 0
         self.syncLastSuccess = nil
         self.bootstrapEntityCount = 0
+        self.draftCoursePlan = nil
+        self.coursePlanGenerationState = .idle
+        self.coursePlanValidationErrors = []
+        self.rememberedCoursePlanningInputs = [:]
     }
 
     public func refreshSyncSummary() async {
@@ -121,6 +132,18 @@ public final class JournalViewModel: ObservableObject {
 
     public var reviews: [Review] {
         snapshot.reviews
+    }
+
+    public var coursePlans: [CoursePlan] {
+        snapshot.coursePlans
+    }
+
+    public var planPhases: [PlanPhase] {
+        snapshot.planPhases
+    }
+
+    public var plannedSessions: [PlannedSession] {
+        snapshot.plannedSessions
     }
 
     public var continueCards: [Project] {
@@ -212,6 +235,92 @@ public final class JournalViewModel: ObservableObject {
     ) throws {
         try journalService.updateProjectStatus(projectId: projectId, status: status)
         refresh()
+    }
+
+    @discardableResult
+    public func generateCoursePlan(_ input: CoursePlanningInput) async throws -> CoursePlan {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        rememberCoursePlanningInput(input)
+        coursePlanGenerationState = .generating
+        coursePlanValidationErrors = []
+        do {
+            let plan = try await coursePlanningService.generateDraft(
+                input: input,
+                context: coursePlanningContext(for: input.projectId)
+            )
+            refresh()
+            draftCoursePlan = plan
+            coursePlanGenerationState = .ready(plan.id)
+            return plan
+        } catch let error as CoursePlanningError {
+            if case let .invalidDraft(errors) = error {
+                coursePlanValidationErrors = errors
+            }
+            coursePlanGenerationState = .failed(error)
+            throw error
+        } catch let error as CoursePlanningValidationError {
+            coursePlanValidationErrors = [error]
+            coursePlanGenerationState = .failed(.invalidDraft([error]))
+            throw error
+        } catch {
+            coursePlanGenerationState = .failed(.providerUnavailable)
+            throw error
+        }
+    }
+
+    @discardableResult
+    public func saveManualDraft(
+        input: CoursePlanningInput,
+        draft: CoursePlanDraft
+    ) throws -> CoursePlan {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        rememberCoursePlanningInput(input)
+        do {
+            let plan = try coursePlanningService.saveDraft(input: input, draft: draft)
+            refresh()
+            draftCoursePlan = plan
+            coursePlanGenerationState = .ready(plan.id)
+            coursePlanValidationErrors = []
+            return plan
+        } catch let error as CoursePlanningValidationError {
+            coursePlanValidationErrors = [error]
+            coursePlanGenerationState = .failed(.invalidDraft([error]))
+            throw error
+        }
+    }
+
+    public func activateCoursePlan(draftPlanID: UUID) throws {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        _ = try coursePlanningService.activate(draftPlanID: draftPlanID)
+        if draftCoursePlan?.id == draftPlanID {
+            draftCoursePlan = nil
+        }
+        coursePlanGenerationState = .idle
+        refresh()
+    }
+
+    @discardableResult
+    public func reviseCoursePlan(
+        planID: UUID,
+        input: CoursePlanningInput,
+        draft: CoursePlanDraft
+    ) throws -> CoursePlan {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        rememberCoursePlanningInput(input)
+        let plan = try coursePlanningService.revise(planID: planID, input: input, draft: draft)
+        refresh()
+        draftCoursePlan = plan
+        coursePlanGenerationState = .ready(plan.id)
+        coursePlanValidationErrors = []
+        return plan
     }
 
     public func applyReviewRecommendation(
@@ -417,6 +526,42 @@ public final class JournalViewModel: ObservableObject {
         }
     }
 
+    public func coursePlans(for projectId: UUID) -> [CoursePlan] {
+        snapshot.coursePlans
+            .filter { $0.projectId == projectId }
+            .sorted { $0.revision > $1.revision }
+    }
+
+    public func activeCoursePlan(for projectId: UUID) -> CoursePlan? {
+        guard let activeID = snapshot.projects.first(where: { $0.id == projectId })?.activeCoursePlanId else {
+            return nil
+        }
+        return snapshot.coursePlans.first { $0.id == activeID }
+    }
+
+    public func phases(for planId: UUID) -> [PlanPhase] {
+        snapshot.planPhases
+            .filter { $0.planId == planId }
+            .sorted { $0.ordinal < $1.ordinal }
+    }
+
+    public func plannedSessions(for planId: UUID) -> [PlannedSession] {
+        let phaseOrdinals = Dictionary(uniqueKeysWithValues: phases(for: planId).map { ($0.id, $0.ordinal) })
+        return snapshot.plannedSessions
+            .filter { $0.planId == planId }
+            .sorted {
+                (phaseOrdinals[$0.phaseId] ?? .max, $0.createdAt) < (phaseOrdinals[$1.phaseId] ?? .max, $1.createdAt)
+            }
+    }
+
+    public func rememberedCoursePlanningInput(for projectId: UUID) -> CoursePlanningInput? {
+        rememberedCoursePlanningInputs[projectId]
+    }
+
+    public func rememberCoursePlanningInput(_ input: CoursePlanningInput) {
+        rememberedCoursePlanningInputs[input.projectId] = input
+    }
+
     public func projectsNeedingReview(referenceDate: Date = Date()) -> [Project] {
         journalService.projectsNeedingReview(referenceDate: referenceDate)
     }
@@ -478,8 +623,31 @@ public final class JournalViewModel: ObservableObject {
         guard snapshot.pendingFirstRecordProjectId == projectId else { return }
         try? journalService.completeOnboarding()
     }
+
+    private func coursePlanningContext(for projectId: UUID) -> CoursePlanningContext {
+        let sessions = sessionsForProject(projectId)
+            .sorted { $0.endedAt > $1.endedAt }
+            .prefix(5)
+            .map { "\($0.durationMinutes) min \($0.actionType.rawValue): \($0.note)" }
+        let proofs = proofsForProject(projectId)
+            .sorted { $0.createdAt > $1.createdAt }
+            .prefix(5)
+            .map { "\($0.title): \($0.statement)" }
+        return CoursePlanningContext(
+            currentNextStep: snapshot.projects.first(where: { $0.id == projectId })?.currentNextStep ?? "",
+            recentSessionSummaries: sessions,
+            recentProofSummaries: proofs
+        )
+    }
 }
 
 public enum SyncConflictResolutionError: Error, Equatable, Sendable {
     case mismatchedEntity
+}
+
+public enum CoursePlanGenerationState: Equatable, Sendable {
+    case idle
+    case generating
+    case ready(UUID)
+    case failed(CoursePlanningError)
 }

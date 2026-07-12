@@ -72,6 +72,7 @@ public final class JournalApplicationSession: ObservableObject {
                 provider: AdaptiveAIReviewProvider()
             ),
             exportService: ExportService(),
+            coursePlanningService: CoursePlanningService(repository: repository),
             syncCoordinator: syncCoordinator,
             syncRepository: repository,
             accountCoordinator: accountCoordinator

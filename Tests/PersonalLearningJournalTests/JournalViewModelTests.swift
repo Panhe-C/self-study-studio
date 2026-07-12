@@ -197,6 +197,45 @@ final class JournalViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.reviewsForProject(project.id).map(\.id), [review.id])
     }
 
+    func testGeneratedPlanRemainsDraftUntilActivateIsCalled() async throws {
+        let repository = InMemoryJournalRepository()
+        let journalService = JournalService(repository: repository)
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            coursePlanningService: CoursePlanningService(
+                repository: repository,
+                provider: StubCoursePlanningProvider()
+            )
+        )
+        let project = try viewModel.createProject(
+            name: "CS336",
+            area: "AI",
+            goal: "Build a tokenizer",
+            nextStep: "Read lecture 1"
+        )
+        let input = CoursePlanningInput(
+            projectId: project.id,
+            courseTitle: "CS336",
+            courseOutline: "Lecture 1: tokenization",
+            goal: project.goal,
+            expectedOutcome: "Tokenizer notebook",
+            startsOn: Date(timeIntervalSince1970: 1_700_000_000),
+            weeklyBudgetMinutes: 180,
+            preferredSessionMinutes: 45
+        )
+
+        let draftPlan = try await viewModel.generateCoursePlan(input)
+
+        XCTAssertEqual(viewModel.draftCoursePlan?.id, draftPlan.id)
+        XCTAssertNil(viewModel.activeCoursePlan(for: project.id))
+
+        try viewModel.activateCoursePlan(draftPlanID: draftPlan.id)
+
+        XCTAssertEqual(viewModel.activeCoursePlan(for: project.id)?.id, draftPlan.id)
+    }
+
     func testProjectsNeedingReviewAreVisibleToViews() throws {
         let referenceDate = Date(timeIntervalSince1970: 10_000_000)
         let viewModel = makeViewModel(now: { referenceDate.addingTimeInterval(-8 * 24 * 60 * 60) })
@@ -345,4 +384,37 @@ private actor StaticSyncStatusProvider: CloudSyncCoordinating {
     func start() async {}
 
     func syncNow() async throws {}
+}
+
+private struct StubCoursePlanningProvider: CoursePlanningProvider {
+    func makeDraft(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext
+    ) async throws -> CoursePlanDraft {
+        CoursePlanDraft(
+            title: "CS336 plan",
+            summary: "Start with tokenization.",
+            phases: [
+                CoursePlanDraftPhase(
+                    id: "foundations",
+                    title: "Foundations",
+                    objective: "Understand tokenization",
+                    expectedProof: "Tokenizer notebook",
+                    ordinal: 0,
+                    targetStart: input.startsOn,
+                    targetEnd: input.startsOn.addingTimeInterval(86_400)
+                )
+            ],
+            sessions: [
+                CoursePlanDraftSession(
+                    id: "tokenizer",
+                    phaseID: "foundations",
+                    title: "Implement a tokenizer",
+                    actionType: .course,
+                    expectedProof: "Tokenizer notebook",
+                    durationMinutes: input.preferredSessionMinutes
+                )
+            ]
+        )
+    }
 }
