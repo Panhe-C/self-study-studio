@@ -66,6 +66,98 @@ final class StudySchedulingEngineTests: XCTestCase {
         XCTAssertTrue(draft.conflicts.contains { $0.reason == .exceedsDailyLimit })
     }
 
+    func testPinnedSessionIsNeverMovedWhenNewDeadlineWorkIsAdded() throws {
+        let pinned = ScheduledPlacement(
+            sessionID: UUID(uuidString: "00000000-0000-0000-0000-000000000010")!,
+            start: mondayAt18,
+            end: mondayAt18.addingTimeInterval(30 * 60),
+            isPinned: true
+        )
+        let urgent = try makeSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000011")!,
+            title: "Urgent"
+        )
+        let draft = try StudySchedulingEngine().makeDraft(
+            SchedulingRequest(
+                sessions: [urgent],
+                availability: [mondayEvening],
+                preferences: preferences,
+                busyIntervals: [],
+                pinnedPlacements: [pinned],
+                range: weekRange,
+                timeZoneIdentifier: "Asia/Shanghai",
+                now: mondayAt17
+            )
+        )
+
+        XCTAssertEqual(draft.placements.first(where: { $0.sessionID == pinned.sessionID })?.start, pinned.start)
+        XCTAssertEqual(draft.placements.first(where: { $0.sessionID == urgent.id })?.start, mondayAt18.addingTimeInterval(30 * 60))
+    }
+
+    func testSpringForwardDayUsesCalendarArithmeticWithoutInvalidLocalTime() throws {
+        let zone = "America/Los_Angeles"
+        let dayStart = date("2024-03-10T08:00:00Z")
+        let session = try PlannedSession(
+            planId: UUID(),
+            phaseId: UUID(),
+            projectId: UUID(),
+            title: "DST session",
+            actionType: .course,
+            durationMinutes: 30,
+            deadline: date("2024-03-10T19:00:00Z")
+        )
+        let availability = try AvailabilityRule(
+            weekday: 1,
+            startMinute: 2 * 60,
+            endMinute: 4 * 60,
+            timeZoneIdentifier: zone,
+            minimumSessionMinutes: 30
+        )
+        let draft = try StudySchedulingEngine().makeDraft(
+            SchedulingRequest(
+                sessions: [session],
+                availability: [availability],
+                preferences: preferences,
+                busyIntervals: [],
+                pinnedPlacements: [],
+                range: DateInterval(start: dayStart, end: dayStart.addingTimeInterval(24 * 60 * 60)),
+                timeZoneIdentifier: zone,
+                now: dayStart
+            )
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: zone)!
+
+        XCTAssertFalse(draft.placements.contains { calendar.component(.hour, from: $0.start) == 2 })
+    }
+
+    func testImpossibleDeadlineReturnsUnscheduledReason() throws {
+        let urgent = try PlannedSession(
+            planId: UUID(),
+            phaseId: UUID(),
+            projectId: UUID(),
+            title: "Impossible",
+            actionType: .course,
+            durationMinutes: 60,
+            deadline: mondayAt18.addingTimeInterval(30 * 60)
+        )
+        let draft = try StudySchedulingEngine().makeDraft(
+            SchedulingRequest(
+                sessions: [urgent],
+                availability: [mondayEvening],
+                preferences: preferences,
+                busyIntervals: [],
+                pinnedPlacements: [],
+                range: weekRange,
+                timeZoneIdentifier: "Asia/Shanghai",
+                now: mondayAt17
+            )
+        )
+
+        XCTAssertEqual(draft.unscheduledSessionIDs, [urgent.id])
+        XCTAssertTrue(draft.conflicts.contains { $0.reason == .insufficientCapacityBeforeDeadline })
+    }
+
     private let mondayAt17 = date("2024-01-01T09:00:00Z")
     private let mondayAt18 = date("2024-01-01T10:00:00Z")
     private let mondayAt19 = date("2024-01-01T11:00:00Z")

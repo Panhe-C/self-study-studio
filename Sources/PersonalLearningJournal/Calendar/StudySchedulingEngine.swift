@@ -79,11 +79,18 @@ public struct StudySchedulingEngine {
             }
         }
 
+        let uniqueConflicts = Dictionary(
+            conflicts.map { ("\($0.sessionID.uuidString):\($0.reason.rawValue)", $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        .values
+        .sorted { ($0.sessionID.uuidString, $0.reason.rawValue) < ($1.sessionID.uuidString, $1.reason.rawValue) }
+
         return ScheduleDraft(
             range: request.range,
             placements: placements,
             unscheduledSessionIDs: unscheduled,
-            conflicts: conflicts,
+            conflicts: uniqueConflicts,
             generatedAt: request.now
         )
     }
