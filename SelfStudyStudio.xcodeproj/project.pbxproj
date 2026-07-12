@@ -52,6 +52,8 @@
 		100000000000000000000131 /* CoursePlanDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000232 /* CoursePlanDetailView.swift */; };
 		100000000000000000000132 /* CalendarDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000233 /* CalendarDomain.swift */; };
 		100000000000000000000133 /* StudySchedulingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* StudySchedulingEngine.swift */; };
+		100000000000000000000134 /* CalendarClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000235 /* CalendarClient.swift */; };
+		100000000000000000000135 /* EventKitCalendarClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000236 /* EventKitCalendarClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -101,6 +103,8 @@
 		100000000000000000000232 /* CoursePlanDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CoursePlanDetailView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000233 /* CalendarDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/CalendarDomain.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000234 /* StudySchedulingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/StudySchedulingEngine.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000235 /* CalendarClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/CalendarClient.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000236 /* EventKitCalendarClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/EventKitCalendarClient.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -164,6 +168,8 @@
 				100000000000000000000232 /* CoursePlanDetailView.swift */,
 				100000000000000000000233 /* CalendarDomain.swift */,
 				100000000000000000000234 /* StudySchedulingEngine.swift */,
+				100000000000000000000235 /* CalendarClient.swift */,
+				100000000000000000000236 /* EventKitCalendarClient.swift */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -297,6 +303,8 @@
 				100000000000000000000131 /* CoursePlanDetailView.swift in Sources */,
 				100000000000000000000132 /* CalendarDomain.swift in Sources */,
 				100000000000000000000133 /* StudySchedulingEngine.swift in Sources */,
+				100000000000000000000134 /* CalendarClient.swift in Sources */,
+				100000000000000000000135 /* EventKitCalendarClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
