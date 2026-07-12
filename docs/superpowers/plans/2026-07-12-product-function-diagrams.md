@@ -118,12 +118,14 @@ flowchart TD
   subgraph CORE[应用协调与规则]
     VM[界面状态协调]
     J[项目·Session·Proof·Trail 规则]
+    STORE[Journal Store]
     RV[复盘生成与显式应用]
     A[附件管理]
     E[完整 Bundle 导出]
   end
   subgraph DATA[本地数据与外部边界]
-    DB[(SwiftData 本地库)]
+    DB[(SwiftData 正常存储)]
+    JSON[(JSON Store 降级)]
     FILES[(本地附件)]
     PREFS[(偏好设置与 Keychain)]
     EXPORTS[(Exports 目录)]
@@ -137,13 +139,14 @@ flowchart TD
   VM --> J
   VM --> RV
   VM --> A
-  VM --> E
-  J --> DB
+  VM -->|传入当前 Snapshot| E
+  J --> STORE
+  STORE --> DB
+  STORE -.初始化失败时.-> JSON
   RV --> J
   RV --> PREFS
   RV -.配置完整时.-> AI
   A --> FILES
-  E --> DB
   E --> FILES
   E --> EXPORTS
 ```
@@ -199,10 +202,10 @@ git commit -m "docs: add product overview diagram sources"
 flowchart TD
   A[首次打开 App] --> B[填写 1–3 个当前学习项目]
   B --> C{每个项目是否完整}
-  C -->|否| D[提示补充名称·领域·目标·Next Step]
+  C -->|否| D[提示补充名称·目标·Next Step]
   D --> B
   C -->|是| E[一次性创建全部项目]
-  E --> F[选择第一个项目]
+  E --> F[自动使用第一个项目]
   F --> G[记录第一条 Quick Log Session]
   G --> H{Session 保存成功}
   H -->|否| G
@@ -293,17 +296,22 @@ git commit -m "docs: add onboarding session and proof flows"
 flowchart TD
   A[活跃项目 7 天无记录\n或近期证据足够] --> B[Today 显示 Review 提醒]
   B --> C[聚合本周期 Session 与 Proof]
-  C --> D[生成 Facts·Patterns·Decisions·Next Steps]
-  D --> E[显示来源引用]
-  E --> F[用户编辑复盘内容]
-  F --> G[保存 Review]
-  G --> H{是否应用项目建议}
-  H -->|应用状态| I[明确修改 active·low-frequency·paused]
-  H -->|应用 Next Step| J[明确更新唯一下一步]
-  H -->|暂不应用| K[只保留 Review 记录]
-  I --> L[写入 Project Trail]
-  J --> L
+  C --> D[生成并保存 Review\nFacts·Patterns·Decisions·Next Steps]
+  D --> E{是否包含具体项目建议}
+  E -->|是| F[写入关联 Project Trail]
+  E -->|否| G[只保存 Review]
+  F --> H[显示内容与来源引用]
+  G --> H
+  H --> I{是否编辑复盘内容}
+  I -->|是| J[编辑并再次保存]
+  I -->|否| K[保留生成内容]
+  J --> L{是否应用项目建议}
   K --> L
+  L -->|应用状态| M[明确修改 active·low-frequency·paused]
+  L -->|应用 Next Step| N[明确更新唯一下一步]
+  L -->|暂不应用| O[只保留 Review 记录]
+  M --> P[状态变化写入 Trail]
+  N --> Q[Next Step 变化写入 Trail]
 ```
 
 - [ ] **Step 2: Create the AI fallback flow**
@@ -326,17 +334,14 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A[进入 Library Export] --> B{选择导出方式}
-  B -->|仅结构化数据| C[生成带版本号的 journal.json]
-  B -->|仅学习附件| D[按 Project·Session·Proof 复制附件]
-  B -->|完整备份| E[创建 Export Bundle]
-  E --> C
-  E --> D
-  C --> F[写入本地 Exports 目录]
-  D --> F
-  F --> G{导出是否成功}
-  G -->|否| H[显示错误并保留原始数据]
-  G -->|是| I[通过系统分享或文件管理取用]
+  A[在 Library 点击 Export] --> B[创建带时间戳的完整 Export Bundle]
+  B --> C[生成带版本号的 journal.json]
+  B --> D[按 Project·Session·Proof 复制附件]
+  C --> E[写入 Documents／LearningJournal／Exports]
+  D --> E
+  E --> F{导出是否成功}
+  F -->|否| G[显示 Export Failed\n保留原始数据]
+  F -->|是| H[显示 Export Ready\n告知本地保存路径和附件数量]
 ```
 
 - [ ] **Step 4: Validate explicit user control and fallback coverage**
@@ -346,7 +351,7 @@ Run:
 ```bash
 rg -n "用户|明确|暂不应用" diagrams/product-review-flow.mmd
 rg -n "本地规则复盘|请求与 JSON 解析是否成功" diagrams/product-ai-fallback-flow.mmd
-rg -n "journal.json|附件|完整备份|错误" diagrams/product-export-flow.mmd
+rg -n "journal.json|附件|完整 Export Bundle|Export Failed|Export Ready" diagrams/product-export-flow.mmd
 ```
 
 Expected: every command finds all listed terms.
@@ -388,13 +393,17 @@ if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ] && \
   export PUPPETEER_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 fi
 
+render_dir="$(mktemp -d "$ROOT/diagrams/.product-render.XXXXXX")"
+trap 'rm -rf "$render_dir"' EXIT HUP INT TERM
+
 render_format() {
   format="$1"
   for source in "$ROOT"/diagrams/product-*.mmd; do
     base="${source%.mmd}"
+    name="$(basename "$base")"
     "$PNPM_BIN" dlx "$MERMAID_CLI_PACKAGE" \
       --input "$source" \
-      --output "${base}.${format}" \
+      --output "$render_dir/${name}.${format}" \
       --theme neutral \
       --backgroundColor white \
       --width 1800
@@ -405,8 +414,24 @@ render_format svg &
 svg_pid=$!
 render_format png &
 png_pid=$!
-wait "$svg_pid"
-wait "$png_pid"
+if wait "$svg_pid"; then svg_status=0; else svg_status=$?; fi
+if wait "$png_pid"; then png_status=0; else png_status=$?; fi
+if [ "$svg_status" -ne 0 ] || [ "$png_status" -ne 0 ]; then exit 1; fi
+
+source_count=0
+for source in "$ROOT"/diagrams/product-*.mmd; do
+  name="$(basename "${source%.mmd}")"
+  source_count=$((source_count + 1))
+  test -s "$render_dir/${name}.svg"
+  test -s "$render_dir/${name}.png"
+  file "$render_dir/${name}.svg" | grep -q "SVG"
+  file "$render_dir/${name}.png" | grep -q "PNG"
+done
+test "$source_count" -eq 10
+
+for output in "$render_dir"/product-*.svg "$render_dir"/product-*.png; do
+  mv -f "$output" "$ROOT/diagrams/$(basename "$output")"
+done
 ```
 
 - [ ] **Step 2: Make the script executable and run it**

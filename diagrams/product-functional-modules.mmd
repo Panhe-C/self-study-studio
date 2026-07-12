@@ -10,13 +10,15 @@ flowchart TD
   subgraph CORE[应用协调与规则]
     VM[界面状态协调]
     J[项目·Session·Proof·Trail 规则]
+    STORE[Journal Store]
     RV[复盘生成与显式应用]
     A[附件管理]
     E[完整 Bundle 导出]
   end
 
   subgraph DATA[本地数据与外部边界]
-    DB[(SwiftData 本地库)]
+    DB[(SwiftData 正常存储)]
+    JSON[(JSON Store 降级)]
     FILES[(本地附件)]
     PREFS[(偏好设置与 Keychain)]
     EXPORTS[(Exports 目录)]
@@ -31,12 +33,13 @@ flowchart TD
   VM --> J
   VM --> RV
   VM --> A
-  VM --> E
-  J --> DB
+  VM -->|传入当前 Snapshot| E
+  J --> STORE
+  STORE --> DB
+  STORE -.初始化失败时.-> JSON
   RV --> J
   RV --> PREFS
   RV -.配置完整时.-> AI
   A --> FILES
-  E --> DB
   E --> FILES
   E --> EXPORTS
