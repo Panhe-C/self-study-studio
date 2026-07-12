@@ -1,0 +1,12 @@
+flowchart TD
+  A[进入 Library Export] --> B{选择导出方式}
+  B -->|仅结构化数据| C[生成带版本号的 journal.json]
+  B -->|仅学习附件| D[按 Project·Session·Proof 复制附件]
+  B -->|完整备份| E[创建 Export Bundle]
+  E --> C
+  E --> D
+  C --> F[写入本地 Exports 目录]
+  D --> F
+  F --> G{导出是否成功}
+  G -->|否| H[显示错误并保留原始数据]
+  G -->|是| I[通过系统分享或文件管理取用]
