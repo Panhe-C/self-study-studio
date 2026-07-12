@@ -4,6 +4,8 @@ public struct TodayView: View {
     @ObservedObject private var viewModel: JournalViewModel
     @State private var quickLogProject: Project?
     @State private var timerProject: Project?
+    @State private var quickLogPlan: PlannedSessionContext?
+    @State private var timerPlan: PlannedSessionContext?
     @State private var reviewError: String?
     @State private var isCreatingReview = false
     @State private var showingAISettings = false
@@ -20,8 +22,52 @@ public struct TodayView: View {
         viewModel.shouldShowReviewPrompt()
     }
 
+    private var todaysPlan: [PlannedSessionContext] {
+        viewModel.todayPlannedSessions()
+    }
+
+    private var overduePlan: [PlannedSessionContext] {
+        viewModel.overduePlannedSessions()
+    }
+
     public var body: some View {
         List {
+            if !todaysPlan.isEmpty {
+                Section("Planned Today") {
+                    ForEach(todaysPlan) { context in
+                        plannedSessionRow(context)
+                    }
+                }
+            }
+
+            if !overduePlan.isEmpty {
+                Section("Overdue") {
+                    ForEach(overduePlan) { context in
+                        plannedSessionRow(context)
+                    }
+                }
+            }
+
+            let plansWithUnscheduledWork = viewModel.coursePlans.filter {
+                $0.status == .active && viewModel.unscheduledPlannedSessionCount(for: $0.id) > 0
+            }
+            if !plansWithUnscheduledWork.isEmpty {
+                Section("Unscheduled") {
+                    ForEach(plansWithUnscheduledWork) { plan in
+                        if let project = viewModel.projects.first(where: { $0.id == plan.projectId }) {
+                            NavigationLink {
+                                CoursePlanDetailView(viewModel: viewModel, project: project, plan: plan)
+                            } label: {
+                                LabeledContent(
+                                    project.name,
+                                    value: "\(viewModel.unscheduledPlannedSessionCount(for: plan.id)) sessions"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             Section("Continue") {
                 if viewModel.continueCards.isEmpty {
                     ContentUnavailableView(
@@ -120,6 +166,12 @@ public struct TodayView: View {
         .sheet(item: $timerProject) { project in
             TimerSessionView(viewModel: viewModel, project: project)
         }
+        .sheet(item: $quickLogPlan) { context in
+            QuickLogView(viewModel: viewModel, project: context.project, plannedSession: context.session)
+        }
+        .sheet(item: $timerPlan) { context in
+            TimerSessionView(viewModel: viewModel, project: context.project, plannedSession: context.session)
+        }
         .sheet(isPresented: $showingAISettings) {
             AIReviewSettingsView()
         }
@@ -145,6 +197,56 @@ public struct TodayView: View {
 
     private func latestSession(for project: Project) -> LearningSession? {
         viewModel.sessionsForProject(project.id).max { $0.endedAt < $1.endedAt }
+    }
+
+    @ViewBuilder
+    private func plannedSessionRow(_ context: PlannedSessionContext) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(context.session.title)
+                .font(.headline)
+            Text("\(context.project.name) · \(context.phase?.title ?? "Plan") · \(context.session.durationMinutes) min")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let expectedProof = context.session.expectedProof, !expectedProof.isEmpty {
+                Label(expectedProof, systemImage: "paperclip")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Button {
+                    timerPlan = context
+                } label: {
+                    Label("Start", systemImage: "timer")
+                }
+                .buttonStyle(.borderless)
+
+                Button {
+                    quickLogPlan = context
+                } label: {
+                    Label("Quick Log", systemImage: "square.and.pencil")
+                }
+                .buttonStyle(.borderless)
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    try? viewModel.skipPlannedSession(context.session.id)
+                } label: {
+                    Image(systemName: "forward.end")
+                }
+                .accessibilityLabel("Skip planned session")
+
+                if context.session.status == .scheduled {
+                    Button {
+                        try? viewModel.unschedulePlannedSession(context.session.id)
+                    } label: {
+                        Image(systemName: "calendar.badge.minus")
+                    }
+                    .accessibilityLabel("Make unscheduled")
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private func latestProof(for project: Project) -> Proof? {

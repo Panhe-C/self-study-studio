@@ -196,14 +196,16 @@ public final class JournalViewModel: ObservableObject {
         actionType: ActionType? = nil,
         durationMinutes: Int,
         note: String,
-        nextStep: String? = nil
+        nextStep: String? = nil,
+        plannedSessionId: UUID? = nil
     ) throws -> LearningSession {
         let session = try journalService.quickLog(
             projectId: projectId,
             actionType: actionType,
             durationMinutes: durationMinutes,
             note: note,
-            nextStep: nextStep
+            nextStep: nextStep,
+            plannedSessionId: plannedSessionId
         )
         tryCompleteOnboarding(afterRecording: projectId)
         refresh()
@@ -362,7 +364,8 @@ public final class JournalViewModel: ObservableObject {
         startedAt: Date,
         endedAt: Date,
         note: String,
-        nextStep: String? = nil
+        nextStep: String? = nil,
+        plannedSessionId: UUID? = nil
     ) throws -> LearningSession {
         let session = try journalService.saveTimerSession(
             projectId: projectId,
@@ -370,7 +373,8 @@ public final class JournalViewModel: ObservableObject {
             startedAt: startedAt,
             endedAt: endedAt,
             note: note,
-            nextStep: nextStep
+            nextStep: nextStep,
+            plannedSessionId: plannedSessionId
         )
         tryCompleteOnboarding(afterRecording: projectId)
         refresh()
@@ -554,6 +558,48 @@ public final class JournalViewModel: ObservableObject {
             }
     }
 
+    public func todayPlannedSessions(referenceDate: Date = Date()) -> [PlannedSessionContext] {
+        let interval = Calendar.current.dateInterval(of: .day, for: referenceDate)
+        return activePlannedSessionContexts.filter { context in
+            guard let deadline = context.session.deadline,
+                  context.session.status == .unscheduled || context.session.status == .scheduled
+            else { return false }
+            return interval?.contains(deadline) == true
+        }
+        .sorted { ($0.session.deadline ?? .distantFuture) < ($1.session.deadline ?? .distantFuture) }
+    }
+
+    public func overduePlannedSessions(referenceDate: Date = Date()) -> [PlannedSessionContext] {
+        let startOfDay = Calendar.current.startOfDay(for: referenceDate)
+        return activePlannedSessionContexts.filter { context in
+            guard let deadline = context.session.deadline,
+                  context.session.status == .unscheduled || context.session.status == .scheduled
+            else { return false }
+            return deadline < startOfDay
+        }
+        .sorted { ($0.session.deadline ?? .distantPast) < ($1.session.deadline ?? .distantPast) }
+    }
+
+    public func unscheduledPlannedSessionCount(for planID: UUID) -> Int {
+        snapshot.plannedSessions.count { $0.planId == planID && $0.status == .unscheduled }
+    }
+
+    public func unschedulePlannedSession(_ id: UUID) throws {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        try coursePlanningService.unschedule(plannedSessionID: id)
+        refresh()
+    }
+
+    public func skipPlannedSession(_ id: UUID) throws {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        try coursePlanningService.skip(plannedSessionID: id)
+        refresh()
+    }
+
     public func rememberedCoursePlanningInput(for projectId: UUID) -> CoursePlanningInput? {
         rememberedCoursePlanningInputs[projectId]
     }
@@ -639,6 +685,18 @@ public final class JournalViewModel: ObservableObject {
             recentProofSummaries: proofs
         )
     }
+
+    private var activePlannedSessionContexts: [PlannedSessionContext] {
+        let activePlanIDs = Set(snapshot.projects.compactMap(\.activeCoursePlanId))
+        let phaseByID = Dictionary(uniqueKeysWithValues: snapshot.planPhases.map { ($0.id, $0) })
+        let projectByID = Dictionary(uniqueKeysWithValues: snapshot.projects.map { ($0.id, $0) })
+        return snapshot.plannedSessions.compactMap { session in
+            guard activePlanIDs.contains(session.planId),
+                  let project = projectByID[session.projectId]
+            else { return nil }
+            return PlannedSessionContext(session: session, project: project, phase: phaseByID[session.phaseId])
+        }
+    }
 }
 
 public enum SyncConflictResolutionError: Error, Equatable, Sendable {
@@ -650,4 +708,17 @@ public enum CoursePlanGenerationState: Equatable, Sendable {
     case generating
     case ready(UUID)
     case failed(CoursePlanningError)
+}
+
+public struct PlannedSessionContext: Identifiable, Equatable, Sendable {
+    public var id: UUID { session.id }
+    public var session: PlannedSession
+    public var project: Project
+    public var phase: PlanPhase?
+
+    public init(session: PlannedSession, project: Project, phase: PlanPhase?) {
+        self.session = session
+        self.project = project
+        self.phase = phase
+    }
 }

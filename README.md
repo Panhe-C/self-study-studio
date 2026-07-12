@@ -27,6 +27,11 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 - OpenAI-compatible Chat Completions provider configurable in the app; endpoint/model live in preferences and API keys live in Keychain
 - Rule-based review fallback that outputs Facts, Patterns, Decisions, and Next Steps when no provider is configured or available
 - Editable Review results with source references under generated insights and explicit actions to apply suggested project status or Next Step
+- Manual and AI-assisted course planning from a Project, with course outline, goal, expected outcome, dates, weekly budget, phases, expected Proof, and concrete study sessions
+- An editable four-step plan draft flow: AI output is validated locally and stays a draft until the user explicitly activates it; revisions preserve prior plans as history
+- Active-plan sessions appear in Today when due or overdue; Start and Quick Log carry planned-session context so the resulting learning record atomically completes the planned session, while Proof stays linked to the actual record
+- Weekly Review includes active-plan revision, phase, completion, missed-deadline, and expected-Proof summaries with plan/phase/session source references
+- AI course planning uses the existing endpoint/model/key configuration; it sends only the course input and summarized learning context, never Calendar event content, contacts, or location data
 - Normalized SwiftData runtime store for Projects, Sessions, Proofs, Reviews, Trail events, and onboarding state; one-time import from legacy `journal.json`
 - JSON export plus attachment directory export from Library
 - SwiftUI screens for onboarding, Today, Projects, Library, Quick Log, Timer, Review, Proof detail, and AI Review settings
@@ -69,6 +74,7 @@ Current verification status:
 - 2026-07-10: `swift build` completed successfully.
 - 2026-07-10: `xcodebuild -project SelfStudyStudio.xcodeproj -scheme SelfStudyStudio -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build` completed successfully.
 - 2026-07-10: the app installed and launched on an iPhone 16 Pro Simulator. Existing `journal.json` data appeared in Today after startup, while `journal.store` and its SQLite sidecars were created alongside the untouched legacy JSON file.
+- 2026-07-12: `swift test` completed 105 tests with 0 failures, and the iOS Simulator build completed successfully after adding course planning.
 
 ## iCloud Device Acceptance
 
@@ -80,11 +86,10 @@ For a two-device test, sign both devices into the same Apple Account, install si
 
 Per the PRD, these are intentionally not implemented yet:
 
-- AI course planning
 - Social features
 - Rankings or streak pressure
 - Course marketplace
-- Complex calendar scheduling
+- Complex calendar scheduling (Calendar availability, timed placement, and EventKit write-back are the next implementation stage)
 - Complete Pomodoro system
 - Full autonomous learning agent
 - Search

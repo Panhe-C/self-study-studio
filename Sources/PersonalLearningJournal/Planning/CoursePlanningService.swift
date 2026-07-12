@@ -186,6 +186,31 @@ public final class CoursePlanningService {
         try repository.commit(JournalTransaction(upserts: [.plannedSession(session)], origin: .user))
     }
 
+    public func skip(plannedSessionID: UUID) throws {
+        let snapshot = try repository.snapshot()
+        guard let index = snapshot.plannedSessions.firstIndex(where: { $0.id == plannedSessionID }) else {
+            throw JournalValidationError.missingPlannedSession
+        }
+        var session = snapshot.plannedSessions[index]
+        guard session.status != .completed else { return }
+        session.status = .skipped
+        session.updatedAt = now()
+        let trailEvent = TrailEvent(
+            projectId: session.projectId,
+            type: .scheduleChanged,
+            sourceId: session.id,
+            occurredAt: session.updatedAt,
+            title: "Planned session skipped",
+            detail: session.title
+        )
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.plannedSession(session), .trailEvent(trailEvent)],
+                origin: .user
+            )
+        )
+    }
+
     public func complete(plannedSessionID: UUID, with sessionID: UUID) throws {
         let snapshot = try repository.snapshot()
         guard let index = snapshot.plannedSessions.firstIndex(where: { $0.id == plannedSessionID }) else {

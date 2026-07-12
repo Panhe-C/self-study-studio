@@ -4,6 +4,7 @@ public struct TimerSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var viewModel: JournalViewModel
     private let project: Project
+    private let plannedSession: PlannedSession?
     @State private var runStartedAt = Date()
     @State private var activeElapsedSeconds: TimeInterval = 0
     @State private var isRunning = true
@@ -13,9 +14,14 @@ public struct TimerSessionView: View {
     @State private var proofSession: LearningSession?
     @State private var errorMessage: String?
 
-    public init(viewModel: JournalViewModel, project: Project) {
+    public init(
+        viewModel: JournalViewModel,
+        project: Project,
+        plannedSession: PlannedSession? = nil
+    ) {
         self.viewModel = viewModel
         self.project = project
+        self.plannedSession = plannedSession
         _nextStep = State(initialValue: project.currentNextStep)
     }
 
@@ -23,6 +29,15 @@ public struct TimerSessionView: View {
         NavigationStack {
             Form {
                 Section(project.name) {
+                    if let plannedSession {
+                        Text(plannedSession.title)
+                            .font(.headline)
+                        if let expectedProof = plannedSession.expectedProof, !expectedProof.isEmpty {
+                            Label(expectedProof, systemImage: "paperclip")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     Text(statusText)
                         .font(.headline)
 
@@ -133,11 +148,12 @@ public struct TimerSessionView: View {
             let startedAt = endedAt.addingTimeInterval(-TimeInterval(activeDurationMinutes * 60))
             let session = try viewModel.saveTimerSession(
                 projectId: project.id,
-                actionType: project.lastActionType,
+                actionType: plannedSession?.actionType ?? project.lastActionType,
                 startedAt: startedAt,
                 endedAt: endedAt,
                 note: note,
-                nextStep: nextStep
+                nextStep: nextStep,
+                plannedSessionId: plannedSession?.id
             )
             if addProof {
                 proofSession = session

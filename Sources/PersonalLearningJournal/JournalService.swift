@@ -312,6 +312,7 @@ public final class JournalService {
         startedAt: Date,
         endedAt: Date
     ) throws -> LearningSession {
+        refreshFromRepository()
         guard let projectIndex = state.projects.firstIndex(where: { $0.id == projectId }) else {
             throw JournalValidationError.missingProject
         }

@@ -194,7 +194,8 @@ public struct OpenAICompatibleReviewProvider: AIReviewProvider {
             periodEnd: periodEnd,
             projects: snapshot.projects,
             sessions: snapshot.sessions,
-            proofs: snapshot.proofs
+            proofs: snapshot.proofs,
+            planProgress: CoursePlanReviewContext.make(snapshot: snapshot, referenceDate: periodEnd)
         )
         return String(decoding: try JSONEncoder.journal.encode(input), as: UTF8.self)
     }
@@ -312,6 +313,7 @@ private struct OpenAICompatibleReviewInput: Codable {
     var projects: [Project]
     var sessions: [LearningSession]
     var proofs: [Proof]
+    var planProgress: [CoursePlanReviewProgress]
 }
 
 private struct OpenAICompatibleReviewResponse: Decodable {
