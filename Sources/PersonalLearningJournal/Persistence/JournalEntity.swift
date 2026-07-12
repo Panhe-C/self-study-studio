@@ -9,6 +9,8 @@ public enum JournalEntityKind: String, Codable, CaseIterable, Sendable {
     case coursePlan
     case planPhase
     case plannedSession
+    case availabilityRule
+    case schedulingPreferences
 }
 
 public struct JournalEntityReference: Codable, Equatable, Hashable, Sendable {
@@ -30,6 +32,8 @@ public enum JournalEntity: Codable, Equatable, Sendable {
     case coursePlan(CoursePlan)
     case planPhase(PlanPhase)
     case plannedSession(PlannedSession)
+    case availabilityRule(AvailabilityRule)
+    case schedulingPreferences(SchedulingPreferences)
 
     public var reference: JournalEntityReference {
         switch self {
@@ -41,6 +45,8 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .coursePlan(value): .init(.coursePlan, value.id)
         case let .planPhase(value): .init(.planPhase, value.id)
         case let .plannedSession(value): .init(.plannedSession, value.id)
+        case let .availabilityRule(value): .init(.availabilityRule, value.id)
+        case let .schedulingPreferences(value): .init(.schedulingPreferences, value.id)
         }
     }
 
@@ -54,6 +60,8 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .coursePlan(value): value.deletedAt != nil
         case let .planPhase(value): value.deletedAt != nil
         case let .plannedSession(value): value.deletedAt != nil
+        case let .availabilityRule(value): value.deletedAt != nil
+        case let .schedulingPreferences(value): value.deletedAt != nil
         }
     }
 
@@ -90,6 +98,14 @@ public enum JournalEntity: Codable, Equatable, Sendable {
             value.deletedAt = date
             value.updatedAt = date
             return .plannedSession(value)
+        case var .availabilityRule(value):
+            value.deletedAt = date
+            value.updatedAt = date
+            return .availabilityRule(value)
+        case var .schedulingPreferences(value):
+            value.deletedAt = date
+            value.updatedAt = date
+            return .schedulingPreferences(value)
         }
     }
 }

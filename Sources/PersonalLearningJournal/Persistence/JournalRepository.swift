@@ -21,6 +21,21 @@ public protocol JournalRepository: AnyObject {
         _ transaction: JournalTransaction,
         conflicts: [SyncConflict]
     ) throws
+    func saveCalendarBinding(_ binding: CalendarBinding) throws
+    func calendarBinding(for plannedSessionID: UUID) throws -> CalendarBinding?
+    func calendarBindings() throws -> [CalendarBinding]
+    func removeCalendarBinding(for plannedSessionID: UUID) throws
+    func targetCalendarIdentifier() throws -> String?
+    func saveTargetCalendarIdentifier(_ identifier: String?) throws
+}
+
+public extension JournalRepository {
+    func saveCalendarBinding(_ binding: CalendarBinding) throws {}
+    func calendarBinding(for plannedSessionID: UUID) throws -> CalendarBinding? { nil }
+    func calendarBindings() throws -> [CalendarBinding] { [] }
+    func removeCalendarBinding(for plannedSessionID: UUID) throws {}
+    func targetCalendarIdentifier() throws -> String? { nil }
+    func saveTargetCalendarIdentifier(_ identifier: String?) throws {}
 }
 
 public final class InMemoryJournalRepository: JournalRepository {
@@ -34,6 +49,8 @@ public final class InMemoryJournalRepository: JournalRepository {
     private var stateMetadata: JournalStateMetadata
     private var completedMigrations: Set<String>
     private var changeToken: Data?
+    private var storedCalendarBindings: [UUID: CalendarBinding]
+    private var storedTargetCalendarIdentifier: String?
 
     public init(
         snapshot: JournalSnapshot = JournalSnapshot(),
@@ -49,6 +66,8 @@ public final class InMemoryJournalRepository: JournalRepository {
             + snapshot.coursePlans.map(JournalEntity.coursePlan)
             + snapshot.planPhases.map(JournalEntity.planPhase)
             + snapshot.plannedSessions.map(JournalEntity.plannedSession)
+            + snapshot.availabilityRules.map(JournalEntity.availabilityRule)
+            + snapshot.schedulingPreferences.map(JournalEntity.schedulingPreferences)
         self.entities = Dictionary(
             uniqueKeysWithValues: initialEntities.map { ($0.reference, $0) }
         )
@@ -59,6 +78,8 @@ public final class InMemoryJournalRepository: JournalRepository {
         self.stateMetadata = JournalStateMetadata(snapshot: snapshot)
         self.completedMigrations = []
         self.changeToken = nil
+        self.storedCalendarBindings = [:]
+        self.storedTargetCalendarIdentifier = nil
     }
 
     public func snapshot() throws -> JournalSnapshot {
@@ -97,6 +118,14 @@ public final class InMemoryJournalRepository: JournalRepository {
                 },
                 plannedSessions: visibleEntities.compactMap {
                     guard case let .plannedSession(value) = $0 else { return nil }
+                    return value
+                },
+                availabilityRules: visibleEntities.compactMap {
+                    guard case let .availabilityRule(value) = $0 else { return nil }
+                    return value
+                },
+                schedulingPreferences: visibleEntities.compactMap {
+                    guard case let .schedulingPreferences(value) = $0 else { return nil }
                     return value
                 },
                 hasCompletedOnboarding: stateMetadata.hasCompletedOnboarding,
@@ -214,6 +243,30 @@ public final class InMemoryJournalRepository: JournalRepository {
     ) throws {
         try commit(transaction)
         withLock { storedConflicts.append(contentsOf: conflicts) }
+    }
+
+    public func saveCalendarBinding(_ binding: CalendarBinding) throws {
+        withLock { storedCalendarBindings[binding.plannedSessionId] = binding }
+    }
+
+    public func calendarBinding(for plannedSessionID: UUID) throws -> CalendarBinding? {
+        withLock { storedCalendarBindings[plannedSessionID] }
+    }
+
+    public func calendarBindings() throws -> [CalendarBinding] {
+        withLock { storedCalendarBindings.values.sorted { $0.plannedSessionId.uuidString < $1.plannedSessionId.uuidString } }
+    }
+
+    public func removeCalendarBinding(for plannedSessionID: UUID) throws {
+        _ = withLock { storedCalendarBindings.removeValue(forKey: plannedSessionID) }
+    }
+
+    public func targetCalendarIdentifier() throws -> String? {
+        withLock { storedTargetCalendarIdentifier }
+    }
+
+    public func saveTargetCalendarIdentifier(_ identifier: String?) throws {
+        withLock { storedTargetCalendarIdentifier = identifier }
     }
 
     private func enqueueIfNeeded(

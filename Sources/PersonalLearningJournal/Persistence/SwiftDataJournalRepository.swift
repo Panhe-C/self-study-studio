@@ -44,6 +44,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
             coursePlans: try decodedRecords(StoredCoursePlanV2.self, as: CoursePlan.self),
             planPhases: try decodedRecords(StoredPlanPhaseV2.self, as: PlanPhase.self),
             plannedSessions: try decodedRecords(StoredPlannedSessionV2.self, as: PlannedSession.self),
+            availabilityRules: try decodedRecords(StoredAvailabilityRuleV2.self, as: AvailabilityRule.self),
+            schedulingPreferences: try decodedRecords(StoredSchedulingPreferencesV2.self, as: SchedulingPreferences.self),
             hasCompletedOnboarding: metadata?.hasCompletedOnboarding,
             pendingFirstRecordProjectId: metadata?.pendingFirstRecordProjectId
         )
@@ -154,6 +156,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
         case .coursePlan: return try entity(reference.id, in: StoredCoursePlanV2.self, as: CoursePlan.self).map(JournalEntity.coursePlan)
         case .planPhase: return try entity(reference.id, in: StoredPlanPhaseV2.self, as: PlanPhase.self).map(JournalEntity.planPhase)
         case .plannedSession: return try entity(reference.id, in: StoredPlannedSessionV2.self, as: PlannedSession.self).map(JournalEntity.plannedSession)
+        case .availabilityRule: return try entity(reference.id, in: StoredAvailabilityRuleV2.self, as: AvailabilityRule.self).map(JournalEntity.availabilityRule)
+        case .schedulingPreferences: return try entity(reference.id, in: StoredSchedulingPreferencesV2.self, as: SchedulingPreferences.self).map(JournalEntity.schedulingPreferences)
         }
     }
 
@@ -238,6 +242,73 @@ public final class SwiftDataJournalRepository: JournalRepository {
         }
     }
 
+    public func saveCalendarBinding(_ binding: CalendarBinding) throws {
+        do {
+            let records = try context.fetch(FetchDescriptor<StoredCalendarBindingV2>())
+            let payload = try JSONEncoder.journal.encode(binding)
+            if let existing = records.first(where: { $0.plannedSessionID == binding.plannedSessionId }) {
+                existing.payload = payload
+            } else {
+                context.insert(StoredCalendarBindingV2(plannedSessionID: binding.plannedSessionId, payload: payload))
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
+    public func calendarBinding(for plannedSessionID: UUID) throws -> CalendarBinding? {
+        guard let record = try context.fetch(FetchDescriptor<StoredCalendarBindingV2>())
+            .first(where: { $0.plannedSessionID == plannedSessionID }) else {
+            return nil
+        }
+        return try JSONDecoder.journal.decode(CalendarBinding.self, from: record.payload)
+    }
+
+    public func calendarBindings() throws -> [CalendarBinding] {
+        try context.fetch(FetchDescriptor<StoredCalendarBindingV2>())
+            .map { try JSONDecoder.journal.decode(CalendarBinding.self, from: $0.payload) }
+            .sorted { $0.plannedSessionId.uuidString < $1.plannedSessionId.uuidString }
+    }
+
+    public func removeCalendarBinding(for plannedSessionID: UUID) throws {
+        do {
+            for record in try context.fetch(FetchDescriptor<StoredCalendarBindingV2>())
+            where record.plannedSessionID == plannedSessionID {
+                context.delete(record)
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
+    public func targetCalendarIdentifier() throws -> String? {
+        try context.fetch(FetchDescriptor<StoredCalendarSettingV2>())
+            .first(where: { $0.key == Self.targetCalendarKey })?.value
+    }
+
+    public func saveTargetCalendarIdentifier(_ identifier: String?) throws {
+        do {
+            let records = try context.fetch(FetchDescriptor<StoredCalendarSettingV2>())
+            if let existing = records.first(where: { $0.key == Self.targetCalendarKey }) {
+                if let identifier {
+                    existing.value = identifier
+                } else {
+                    context.delete(existing)
+                }
+            } else if let identifier {
+                context.insert(StoredCalendarSettingV2(key: Self.targetCalendarKey, value: identifier))
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
     private func upsert(_ entity: JournalEntity) throws {
         switch entity {
         case let .project(value):
@@ -256,6 +327,10 @@ public final class SwiftDataJournalRepository: JournalRepository {
             try upsert(value, in: StoredPlanPhaseV2.self)
         case let .plannedSession(value):
             try upsert(value, in: StoredPlannedSessionV2.self)
+        case let .availabilityRule(value):
+            try upsert(value, in: StoredAvailabilityRuleV2.self)
+        case let .schedulingPreferences(value):
+            try upsert(value, in: StoredSchedulingPreferencesV2.self)
         }
     }
 
@@ -323,6 +398,20 @@ public final class SwiftDataJournalRepository: JournalRepository {
             }
         case .plannedSession:
             try markDeleted(reference.id, in: StoredPlannedSessionV2.self, as: PlannedSession.self) {
+                var value = $0
+                value.deletedAt = now()
+                value.updatedAt = value.deletedAt!
+                return value
+            }
+        case .availabilityRule:
+            try markDeleted(reference.id, in: StoredAvailabilityRuleV2.self, as: AvailabilityRule.self) {
+                var value = $0
+                value.deletedAt = now()
+                value.updatedAt = value.deletedAt!
+                return value
+            }
+        case .schedulingPreferences:
+            try markDeleted(reference.id, in: StoredSchedulingPreferencesV2.self, as: SchedulingPreferences.self) {
                 var value = $0
                 value.deletedAt = now()
                 value.updatedAt = value.deletedAt!
@@ -410,6 +499,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
 
     private static let stateMetadataKey = "journal-state"
     private static let syncTokenKey = "cloud-sync-token"
+    private static let targetCalendarKey = "target-calendar"
 
     private static func migrationKey(_ identifier: String) -> String {
         "migration:\(identifier)"
@@ -425,10 +515,14 @@ public final class SwiftDataJournalRepository: JournalRepository {
             StoredCoursePlanV2.self,
             StoredPlanPhaseV2.self,
             StoredPlannedSessionV2.self,
+            StoredAvailabilityRuleV2.self,
+            StoredSchedulingPreferencesV2.self,
             StoredPendingMutationV2.self,
             StoredSyncMetadataV2.self,
             StoredSyncConflictV2.self,
             StoredRepositoryMetadataV2.self,
+            StoredCalendarBindingV2.self,
+            StoredCalendarSettingV2.self,
             configurations: configuration
         )
     }
@@ -452,6 +546,8 @@ extension TrailEvent: DeletionDated { fileprivate var journalDeletedAt: Date? { 
 extension CoursePlan: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension PlanPhase: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension PlannedSession: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension AvailabilityRule: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension SchedulingPreferences: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 
 private protocol StoredEntityV2: PersistentModel {
     var id: UUID { get set }
@@ -565,6 +661,32 @@ private protocol StoredEntityV2: PersistentModel {
     }
 }
 
+@Model private final class StoredAvailabilityRuleV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id
+        self.ordinal = ordinal
+        self.payload = payload
+        self.deletedAt = deletedAt
+    }
+}
+
+@Model private final class StoredSchedulingPreferencesV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id
+        self.ordinal = ordinal
+        self.payload = payload
+        self.deletedAt = deletedAt
+    }
+}
+
 @Model private final class StoredPendingMutationV2 {
     @Attribute(.unique) var id: UUID
     var entityKindRaw: String
@@ -632,6 +754,24 @@ private protocol StoredEntityV2: PersistentModel {
     @Attribute(.unique) var key: String
     var value: Data
     init(key: String, value: Data) {
+        self.key = key
+        self.value = value
+    }
+}
+
+@Model private final class StoredCalendarBindingV2 {
+    @Attribute(.unique) var plannedSessionID: UUID
+    var payload: Data
+    init(plannedSessionID: UUID, payload: Data) {
+        self.plannedSessionID = plannedSessionID
+        self.payload = payload
+    }
+}
+
+@Model private final class StoredCalendarSettingV2 {
+    @Attribute(.unique) var key: String
+    var value: String
+    init(key: String, value: String) {
         self.key = key
         self.value = value
     }

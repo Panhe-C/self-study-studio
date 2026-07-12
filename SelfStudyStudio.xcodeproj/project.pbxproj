@@ -50,6 +50,7 @@
 		100000000000000000000129 /* CoursePlanningProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000230 /* CoursePlanningProvider.swift */; };
 		100000000000000000000130 /* CoursePlanWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000231 /* CoursePlanWizardView.swift */; };
 		100000000000000000000131 /* CoursePlanDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000232 /* CoursePlanDetailView.swift */; };
+		100000000000000000000132 /* CalendarDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000233 /* CalendarDomain.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -97,6 +98,7 @@
 		100000000000000000000230 /* CoursePlanningProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CoursePlanningProvider.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000231 /* CoursePlanWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CoursePlanWizardView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000232 /* CoursePlanDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CoursePlanDetailView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000233 /* CalendarDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/CalendarDomain.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -158,6 +160,7 @@
 				100000000000000000000230 /* CoursePlanningProvider.swift */,
 				100000000000000000000231 /* CoursePlanWizardView.swift */,
 				100000000000000000000232 /* CoursePlanDetailView.swift */,
+				100000000000000000000233 /* CalendarDomain.swift */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -289,6 +292,7 @@
 				100000000000000000000129 /* CoursePlanningProvider.swift in Sources */,
 				100000000000000000000130 /* CoursePlanWizardView.swift in Sources */,
 				100000000000000000000131 /* CoursePlanDetailView.swift in Sources */,
+				100000000000000000000132 /* CalendarDomain.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

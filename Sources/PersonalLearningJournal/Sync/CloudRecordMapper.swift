@@ -33,6 +33,8 @@ public struct CloudRecordMapper {
         case let .coursePlan(value): encode(value, into: record)
         case let .planPhase(value): encode(value, into: record)
         case let .plannedSession(value): encode(value, into: record)
+        case let .availabilityRule(value): encode(value, into: record)
+        case let .schedulingPreferences(value): encode(value, into: record)
         }
         return record
     }
@@ -50,6 +52,8 @@ public struct CloudRecordMapper {
         case "CoursePlan": return .coursePlan(try decodeCoursePlan(record, id: id))
         case "PlanPhase": return .planPhase(try decodePlanPhase(record, id: id))
         case "PlannedSession": return .plannedSession(try decodePlannedSession(record, id: id))
+        case "AvailabilityRule": return .availabilityRule(try decodeAvailabilityRule(record, id: id))
+        case "SchedulingPreferences": return .schedulingPreferences(try decodeSchedulingPreferences(record, id: id))
         default: throw CloudRecordMapperError.unsupportedRecordType(record.recordType)
         }
     }
@@ -72,6 +76,8 @@ public struct CloudRecordMapper {
         case .coursePlan: "CoursePlan"
         case .planPhase: "PlanPhase"
         case .plannedSession: "PlannedSession"
+        case .availabilityRule: "AvailabilityRule"
+        case .schedulingPreferences: "SchedulingPreferences"
         }
     }
 
@@ -195,6 +201,32 @@ public struct CloudRecordMapper {
         record["status"] = value.status.rawValue
         record["completedSessionId"] = value.completedSessionId?.uuidString
         record["createdAt"] = value.createdAt
+        record["updatedAt"] = value.updatedAt
+        record["deletedAt"] = value.deletedAt
+        record["schemaVersion"] = value.schemaVersion
+    }
+
+    private func encode(_ value: AvailabilityRule, into record: CKRecord) {
+        record["weekday"] = value.weekday
+        record["startMinute"] = value.startMinute
+        record["endMinute"] = value.endMinute
+        record["timeZoneIdentifier"] = value.timeZoneIdentifier
+        record["validFrom"] = value.validFrom
+        record["validThrough"] = value.validThrough
+        record["minimumSessionMinutes"] = value.minimumSessionMinutes
+        record["enabled"] = value.enabled
+        record["createdAt"] = value.createdAt
+        record["updatedAt"] = value.updatedAt
+        record["deletedAt"] = value.deletedAt
+        record["schemaVersion"] = value.schemaVersion
+    }
+
+    private func encode(_ value: SchedulingPreferences, into record: CKRecord) {
+        record["preferredSessionMinutes"] = value.preferredSessionMinutes
+        record["maximumDailyMinutes"] = value.maximumDailyMinutes
+        record["minimumGapMinutes"] = value.minimumGapMinutes
+        record["allowWeekends"] = value.allowWeekends
+        record["eventTitleStyle"] = value.eventTitleStyle.rawValue
         record["updatedAt"] = value.updatedAt
         record["deletedAt"] = value.deletedAt
         record["schemaVersion"] = value.schemaVersion
@@ -385,6 +417,41 @@ public struct CloudRecordMapper {
         )
     }
 
+    private func decodeAvailabilityRule(_ record: CKRecord, id: UUID) throws -> AvailabilityRule {
+        try AvailabilityRule(
+            id: id,
+            weekday: try integer("weekday", from: record),
+            startMinute: try integer("startMinute", from: record),
+            endMinute: try integer("endMinute", from: record),
+            timeZoneIdentifier: try string("timeZoneIdentifier", from: record),
+            validFrom: optionalDate("validFrom", from: record),
+            validThrough: optionalDate("validThrough", from: record),
+            minimumSessionMinutes: try integer("minimumSessionMinutes", from: record),
+            enabled: try boolean("enabled", from: record),
+            createdAt: try date("createdAt", from: record),
+            updatedAt: try date("updatedAt", from: record),
+            deletedAt: optionalDate("deletedAt", from: record),
+            schemaVersion: try integer("schemaVersion", from: record)
+        )
+    }
+
+    private func decodeSchedulingPreferences(_ record: CKRecord, id: UUID) throws -> SchedulingPreferences {
+        guard let titleStyle = CalendarEventTitleStyle(rawValue: try string("eventTitleStyle", from: record)) else {
+            throw CloudRecordMapperError.invalidField("eventTitleStyle")
+        }
+        return try SchedulingPreferences(
+            id: id,
+            preferredSessionMinutes: try integer("preferredSessionMinutes", from: record),
+            maximumDailyMinutes: try integer("maximumDailyMinutes", from: record),
+            minimumGapMinutes: try integer("minimumGapMinutes", from: record),
+            allowWeekends: try boolean("allowWeekends", from: record),
+            eventTitleStyle: titleStyle,
+            updatedAt: try date("updatedAt", from: record),
+            deletedAt: optionalDate("deletedAt", from: record),
+            schemaVersion: try integer("schemaVersion", from: record)
+        )
+    }
+
     private func contentHash(of url: URL) throws -> String {
         let digest = SHA256.hash(data: try Data(contentsOf: url))
         return digest.map { String(format: "%02x", $0) }.joined()
@@ -406,6 +473,11 @@ public struct CloudRecordMapper {
 
     private func optionalInteger(_ key: String, from record: CKRecord) -> Int? {
         (record[key] as? NSNumber)?.intValue
+    }
+
+    private func boolean(_ key: String, from record: CKRecord) throws -> Bool {
+        guard let value = record[key] as? NSNumber else { throw CloudRecordMapperError.missingField(key) }
+        return value.boolValue
     }
 
     private func date(_ key: String, from record: CKRecord) throws -> Date {

@@ -41,6 +41,10 @@ public struct SyncMergeService {
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.planPhase, now: now)
         case let (.plannedSession(base), .plannedSession(local), .plannedSession(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.plannedSession, now: now)
+        case let (.availabilityRule(base), .availabilityRule(local), .availabilityRule(server)):
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.availabilityRule, now: now)
+        case let (.schedulingPreferences(base), .schedulingPreferences(local), .schedulingPreferences(server)):
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.schedulingPreferences, now: now)
         default:
             throw SyncMergeError.mismatchedEntityReferences
         }

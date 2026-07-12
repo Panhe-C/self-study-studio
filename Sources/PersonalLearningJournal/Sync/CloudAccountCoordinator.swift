@@ -141,6 +141,8 @@ public final class CloudAccountCoordinator {
             + snapshot.coursePlans.map(JournalEntity.coursePlan)
             + snapshot.planPhases.map(JournalEntity.planPhase)
             + snapshot.plannedSessions.map(JournalEntity.plannedSession)
+            + snapshot.availabilityRules.map(JournalEntity.availabilityRule)
+            + snapshot.schedulingPreferences.map(JournalEntity.schedulingPreferences)
     }
 
     private static func storeURL(rootDirectory: URL, scope: String) -> URL {

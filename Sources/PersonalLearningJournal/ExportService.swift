@@ -10,6 +10,8 @@ public struct JournalExport: Codable, Equatable, Sendable {
     public var coursePlans: [CoursePlan]
     public var planPhases: [PlanPhase]
     public var plannedSessions: [PlannedSession]
+    public var availabilityRules: [AvailabilityRule]
+    public var schedulingPreferences: [SchedulingPreferences]
 
     public init(
         version: String = "v0.2",
@@ -20,7 +22,9 @@ public struct JournalExport: Codable, Equatable, Sendable {
         reviews: [Review],
         coursePlans: [CoursePlan] = [],
         planPhases: [PlanPhase] = [],
-        plannedSessions: [PlannedSession] = []
+        plannedSessions: [PlannedSession] = [],
+        availabilityRules: [AvailabilityRule] = [],
+        schedulingPreferences: [SchedulingPreferences] = []
     ) {
         self.version = version
         self.exportedAt = exportedAt
@@ -31,6 +35,8 @@ public struct JournalExport: Codable, Equatable, Sendable {
         self.coursePlans = coursePlans
         self.planPhases = planPhases
         self.plannedSessions = plannedSessions
+        self.availabilityRules = availabilityRules
+        self.schedulingPreferences = schedulingPreferences
     }
 }
 
@@ -65,7 +71,9 @@ public struct ExportService {
             reviews: snapshot.reviews,
             coursePlans: snapshot.coursePlans,
             planPhases: snapshot.planPhases,
-            plannedSessions: snapshot.plannedSessions
+            plannedSessions: snapshot.plannedSessions,
+            availabilityRules: snapshot.availabilityRules,
+            schedulingPreferences: snapshot.schedulingPreferences
         )
         return try JSONEncoder.journal.encode(export)
     }

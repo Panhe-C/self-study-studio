@@ -164,6 +164,37 @@ final class CloudRecordMapperTests: XCTestCase {
         }
     }
 
+    func testAvailabilityAndPreferencesRoundTripWithoutCalendarBindings() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let availability = try AvailabilityRule(
+            id: fixedID,
+            weekday: 2,
+            startMinute: 18 * 60,
+            endMinute: 21 * 60,
+            timeZoneIdentifier: "Asia/Shanghai",
+            minimumSessionMinutes: 30,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let preferences = try SchedulingPreferences(
+            preferredSessionMinutes: 45,
+            maximumDailyMinutes: 120,
+            minimumGapMinutes: 15,
+            updatedAt: timestamp
+        )
+        let mapper = CloudRecordMapper()
+
+        let availabilityRecord = try mapper.record(for: .availabilityRule(availability), zoneID: zoneID)
+        let preferencesRecord = try mapper.record(for: .schedulingPreferences(preferences), zoneID: zoneID)
+
+        XCTAssertEqual(availabilityRecord.recordType, "AvailabilityRule")
+        XCTAssertEqual(preferencesRecord.recordType, "SchedulingPreferences")
+        XCTAssertEqual(try mapper.entity(from: availabilityRecord), .availabilityRule(availability))
+        XCTAssertEqual(try mapper.entity(from: preferencesRecord), .schedulingPreferences(preferences))
+        XCTAssertNil(availabilityRecord["eventIdentifier"])
+        XCTAssertNil(preferencesRecord["calendarIdentifier"])
+    }
+
     func testMapperRejectsInvalidDurationAndRecordIdentifier() throws {
         let invalidIDRecord = CKRecord(
             recordType: "Project",
