@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct TodayView: View {
     @ObservedObject private var viewModel: JournalViewModel
+    @EnvironmentObject private var calendarViewModel: CalendarViewModel
     @State private var quickLogProject: Project?
     @State private var timerProject: Project?
     @State private var quickLogPlan: PlannedSessionContext?
@@ -32,6 +33,35 @@ public struct TodayView: View {
 
     public var body: some View {
         List {
+            if let conflicts = calendarViewModel.scheduleDraft?.conflicts, !conflicts.isEmpty {
+                Section("Schedule Conflicts") {
+                    ForEach(conflicts) { conflict in
+                        Label(conflict.detail, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+
+            if !calendarViewModel.reconciliationItems.isEmpty {
+                Section("Calendar Changes") {
+                    NavigationLink {
+                        CalendarReconciliationView(viewModel: calendarViewModel)
+                    } label: {
+                        Label("Review \(calendarViewModel.reconciliationItems.count) changes", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+            }
+
+            if let result = calendarViewModel.lastApplyResult, !result.failed.isEmpty {
+                Section("Calendar Writes") {
+                    Label("\(result.failed.count) changes failed", systemImage: "exclamationmark.icloud")
+                        .foregroundStyle(.red)
+                    Button("Retry Failed Changes") {
+                        Task { _ = await calendarViewModel.retryFailedChanges() }
+                    }
+                }
+            }
+
             if !todaysPlan.isEmpty {
                 Section("Planned Today") {
                     ForEach(todaysPlan) { context in
@@ -159,7 +189,10 @@ public struct TodayView: View {
                 .accessibilityLabel("iCloud Sync")
             }
         }
-        .task { await viewModel.refreshSyncSummary() }
+        .task {
+            await viewModel.refreshSyncSummary()
+            await calendarViewModel.refresh()
+        }
         .sheet(item: $quickLogProject) { project in
             QuickLogView(viewModel: viewModel, project: project)
         }

@@ -102,6 +102,101 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.workloadMinutes(on: start), 30)
     }
 
+    func testPreviewCalendarChangesDoesNotWriteBeforeConfirmation() async throws {
+        let plannedSession = try makePlannedSession()
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(plannedSessions: [plannedSession])
+        )
+        try repository.saveTargetCalendarIdentifier("study-calendar")
+        let client = CalendarViewModelClient(authorization: .fullAccess)
+        let viewModel = CalendarViewModel(repository: repository, calendarClient: client)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        viewModel.replaceScheduleDraft(
+            ScheduleDraft(
+                range: DateInterval(start: start, duration: 86_400),
+                placements: [
+                    ScheduledPlacement(
+                        sessionID: plannedSession.id,
+                        start: start,
+                        end: start.addingTimeInterval(30 * 60)
+                    )
+                ],
+                unscheduledSessionIDs: [],
+                conflicts: []
+            )
+        )
+
+        _ = try await viewModel.previewCalendarChanges()
+
+        let writeCount = await client.writeCount()
+        XCTAssertEqual(writeCount, 0)
+    }
+
+    func testTimeZoneChangeCreatesDraftWithoutMovingConfirmedEvent() async throws {
+        let plannedSession = try makePlannedSession()
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(plannedSessions: [plannedSession])
+        )
+        let originalStart = Date(timeIntervalSince1970: 1_700_000_000)
+        let originalEnd = originalStart.addingTimeInterval(30 * 60)
+        try repository.saveCalendarBinding(
+            CalendarBinding(
+                plannedSessionId: plannedSession.id,
+                eventIdentifier: "event-1",
+                calendarIdentifier: "study-calendar",
+                lastWrittenTitle: "Study",
+                lastWrittenStart: originalStart,
+                lastWrittenEnd: originalEnd,
+                lastObservedAt: originalStart,
+                state: .linked
+            )
+        )
+        let client = CalendarViewModelClient(authorization: .denied)
+        let viewModel = CalendarViewModel(
+            repository: repository,
+            calendarClient: client,
+            focusedDate: originalStart
+        )
+
+        await viewModel.changeTimeZone(to: "America/Los_Angeles", now: originalStart)
+
+        let writeCount = await client.writeCount()
+        XCTAssertNotNil(viewModel.scheduleDraft)
+        XCTAssertEqual(writeCount, 0)
+        XCTAssertEqual(
+            try repository.calendarBinding(for: plannedSession.id)?.lastWrittenStart,
+            originalStart
+        )
+    }
+
+    func testExplicitlyDisabledAvailabilityDoesNotFallBackToDefaults() throws {
+        let repository = InMemoryJournalRepository()
+        let client = CalendarViewModelClient(authorization: .denied)
+        let viewModel = CalendarViewModel(repository: repository, calendarClient: client)
+        let preferences = try SchedulingPreferences(
+            preferredSessionMinutes: 30,
+            maximumDailyMinutes: 120,
+            minimumGapMinutes: 15
+        )
+        let disabledRule = try AvailabilityRule(
+            weekday: 2,
+            startMinute: 18 * 60,
+            endMinute: 22 * 60,
+            timeZoneIdentifier: "Asia/Shanghai",
+            minimumSessionMinutes: 15,
+            enabled: false
+        )
+
+        try viewModel.saveSchedulingConfiguration(
+            preferences: preferences,
+            availabilityRules: [disabledRule],
+            targetCalendarIdentifier: nil
+        )
+        let configuration = try viewModel.schedulingConfiguration()
+
+        XCTAssertEqual(configuration.availabilityRules, [disabledRule])
+    }
+
     private func makePlannedSession() throws -> PlannedSession {
         try PlannedSession(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,

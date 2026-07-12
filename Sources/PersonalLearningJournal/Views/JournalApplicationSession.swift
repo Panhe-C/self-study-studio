@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 public final class JournalApplicationSession: ObservableObject {
     @Published public private(set) var viewModel: JournalViewModel
+    @Published public private(set) var calendarViewModel: CalendarViewModel
 
     private let documentsDirectory: URL
     private let accountCoordinator: CloudAccountCoordinator
@@ -22,8 +23,13 @@ public final class JournalApplicationSession: ObservableObject {
                 into: localRepository
             )
         }
+        let repository = accountCoordinator.activeRepository ?? InMemoryJournalRepository()
+        self.calendarViewModel = CalendarViewModel(
+            repository: repository,
+            calendarClient: EventKitCalendarClient()
+        )
         self.viewModel = Self.makeViewModel(
-            repository: accountCoordinator.activeRepository ?? InMemoryJournalRepository(),
+            repository: repository,
             accountCoordinator: accountCoordinator
         )
 
@@ -35,6 +41,10 @@ public final class JournalApplicationSession: ObservableObject {
     public func refreshAccount() async {
         await accountCoordinator.refresh(using: accountProvider)
         guard let repository = accountCoordinator.activeRepository else { return }
+        calendarViewModel = CalendarViewModel(
+            repository: repository,
+            calendarClient: EventKitCalendarClient()
+        )
         viewModel = Self.makeViewModel(
             repository: repository,
             accountCoordinator: accountCoordinator

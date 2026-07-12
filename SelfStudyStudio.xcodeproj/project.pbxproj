@@ -61,6 +61,8 @@
 		10000000000000000000013A /* WeekCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023B /* WeekCalendarView.swift */; };
 		10000000000000000000013B /* MonthCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023C /* MonthCalendarView.swift */; };
 		10000000000000000000013C /* ScheduleDraftView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023D /* ScheduleDraftView.swift */; };
+		10000000000000000000013D /* CalendarSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023E /* CalendarSettingsView.swift */; };
+		10000000000000000000013E /* CalendarReconciliationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023F /* CalendarReconciliationView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -119,6 +121,8 @@
 		10000000000000000000023B /* WeekCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/WeekCalendarView.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000023C /* MonthCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/MonthCalendarView.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000023D /* ScheduleDraftView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ScheduleDraftView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000023E /* CalendarSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CalendarSettingsView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000023F /* CalendarReconciliationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CalendarReconciliationView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -191,6 +195,8 @@
 				10000000000000000000023B /* WeekCalendarView.swift */,
 				10000000000000000000023C /* MonthCalendarView.swift */,
 				10000000000000000000023D /* ScheduleDraftView.swift */,
+				10000000000000000000023E /* CalendarSettingsView.swift */,
+				10000000000000000000023F /* CalendarReconciliationView.swift */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -333,6 +339,8 @@
 				10000000000000000000013A /* WeekCalendarView.swift in Sources */,
 				10000000000000000000013B /* MonthCalendarView.swift in Sources */,
 				10000000000000000000013C /* ScheduleDraftView.swift in Sources */,
+				10000000000000000000013D /* CalendarSettingsView.swift in Sources */,
+				10000000000000000000013E /* CalendarReconciliationView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -464,6 +472,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Learning Journal";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Learning Journal reads your busy times and writes only the study sessions you confirm.";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Learning Journal lets you capture photo Proof for learning sessions.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Learning Journal records optional audio Proof for practice sessions.";
@@ -502,6 +511,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Learning Journal";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Learning Journal reads your busy times and writes only the study sessions you confirm.";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Learning Journal lets you capture photo Proof for learning sessions.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Learning Journal records optional audio Proof for practice sessions.";

@@ -15,8 +15,11 @@ public struct PersonalLearningJournalApp: App {
 
     public var body: some Scene {
         WindowGroup {
-            RootView(viewModel: session.viewModel)
-                .id(ObjectIdentifier(session.viewModel))
+            RootView(
+                viewModel: session.viewModel,
+                calendarViewModel: session.calendarViewModel
+            )
+            .id(ObjectIdentifier(session.viewModel))
         }
     }
 }

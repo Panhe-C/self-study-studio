@@ -18,6 +18,25 @@ public struct StudyCalendarView: View {
         }
         .navigationTitle(title)
         .toolbar {
+            ToolbarItem(placement: .secondaryAction) {
+                NavigationLink {
+                    CalendarSettingsView(viewModel: viewModel)
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .help("Calendar settings")
+                .accessibilityLabel("Calendar settings")
+            }
+            if !viewModel.reconciliationItems.isEmpty {
+                ToolbarItem(placement: .secondaryAction) {
+                    NavigationLink {
+                        CalendarReconciliationView(viewModel: viewModel)
+                    } label: {
+                        Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                    }
+                    .accessibilityLabel("Review calendar changes")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     generateDraft()

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CoursePlanWizardView: View {
+    @EnvironmentObject private var calendarViewModel: CalendarViewModel
     private enum WizardStep: Int, CaseIterable {
         case course
         case time
@@ -38,6 +39,9 @@ struct CoursePlanWizardView: View {
     @State private var hasEditedDraft = false
     @State private var errorMessage: String?
     @State private var showingAISettings = false
+    @State private var activationComplete = false
+    @State private var showingScheduleDraft = false
+    @State private var isScheduling = false
 
     init(
         viewModel: JournalViewModel,
@@ -143,6 +147,9 @@ struct CoursePlanWizardView: View {
             }
             .sheet(isPresented: $showingAISettings) {
                 AIReviewSettingsView()
+            }
+            .sheet(isPresented: $showingScheduleDraft) {
+                ScheduleDraftView(viewModel: calendarViewModel)
             }
             .alert("Course plan unavailable", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") { errorMessage = nil }
@@ -262,12 +269,22 @@ struct CoursePlanWizardView: View {
                 }
             }
             Section {
-                Button {
-                    activateDraft()
-                } label: {
-                    Label("Activate Plan", systemImage: "checkmark.circle.fill")
+                if activationComplete {
+                    Button {
+                        schedulePlan()
+                    } label: {
+                        Label(isScheduling ? "Scheduling" : "Schedule Plan", systemImage: "calendar.badge.clock")
+                    }
+                    .disabled(isScheduling)
+                    Button("Done") { dismiss() }
+                } else {
+                    Button {
+                        activateDraft()
+                    } label: {
+                        Label("Activate Plan", systemImage: "checkmark.circle.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
             }
         } else {
             Section {
@@ -317,9 +334,22 @@ struct CoursePlanWizardView: View {
                 plan = try viewModel.saveManualDraft(input: input, draft: draft)
             }
             try viewModel.activateCoursePlan(draftPlanID: plan.id)
-            dismiss()
+            activationComplete = true
         } catch {
             errorMessage = errorText(error)
+        }
+    }
+
+    private func schedulePlan() {
+        isScheduling = true
+        Task {
+            defer { isScheduling = false }
+            do {
+                _ = try await calendarViewModel.generateSchedule()
+                showingScheduleDraft = true
+            } catch {
+                errorMessage = String(describing: error)
+            }
         }
     }
 

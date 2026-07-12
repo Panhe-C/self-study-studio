@@ -45,6 +45,22 @@ public struct CalendarStudyItem: Equatable, Identifiable, Sendable {
     }
 }
 
+public struct CalendarSchedulingConfiguration: Sendable {
+    public var preferences: SchedulingPreferences
+    public var availabilityRules: [AvailabilityRule]
+    public var targetCalendarIdentifier: String?
+
+    public init(
+        preferences: SchedulingPreferences,
+        availabilityRules: [AvailabilityRule],
+        targetCalendarIdentifier: String?
+    ) {
+        self.preferences = preferences
+        self.availabilityRules = availabilityRules
+        self.targetCalendarIdentifier = targetCalendarIdentifier
+    }
+}
+
 @MainActor
 public final class CalendarViewModel: ObservableObject {
     @Published public private(set) var mode: StudyCalendarMode
@@ -124,6 +140,10 @@ public final class CalendarViewModel: ObservableObject {
         authorization == .fullAccess
     }
 
+    public var currentTimeZoneIdentifier: String {
+        timeZoneIdentifier
+    }
+
     public var unscheduledItems: [CalendarStudyItem] {
         items.filter { $0.start == nil }
     }
@@ -145,6 +165,21 @@ public final class CalendarViewModel: ObservableObject {
 
     public func goToToday(_ date: Date = Date()) {
         focusedDate = date
+    }
+
+    public func changeTimeZone(to identifier: String, now: Date = Date()) async {
+        guard let timeZone = TimeZone(identifier: identifier) else {
+            lastErrorMessage = String(describing: CalendarValidationError.invalidTimeZone)
+            return
+        }
+        timeZoneIdentifier = identifier
+        calendar.timeZone = timeZone
+        do {
+            _ = try await generateSchedule(now: now)
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = String(describing: error)
+        }
     }
 
     public func refresh() async {
@@ -183,6 +218,43 @@ public final class CalendarViewModel: ObservableObject {
 
     public func targetCalendarIdentifier() -> String? {
         try? repository.targetCalendarIdentifier()
+    }
+
+    public func schedulingConfiguration() throws -> CalendarSchedulingConfiguration {
+        let snapshot = try repository.snapshot()
+        let savedAvailability = configuredAvailability(from: snapshot)
+        return CalendarSchedulingConfiguration(
+            preferences: try currentPreferences(from: snapshot),
+            availabilityRules: savedAvailability.isEmpty
+                ? try currentAvailability(from: snapshot)
+                : savedAvailability,
+            targetCalendarIdentifier: try repository.targetCalendarIdentifier()
+        )
+    }
+
+    public func saveSchedulingConfiguration(
+        preferences: SchedulingPreferences,
+        availabilityRules: [AvailabilityRule],
+        targetCalendarIdentifier: String?
+    ) throws {
+        let snapshot = try repository.snapshot()
+        let retainedPreferenceIDs = Set([preferences.id])
+        let retainedRuleIDs = Set(availabilityRules.map(\.id))
+        let deletions = snapshot.schedulingPreferences
+            .filter { !retainedPreferenceIDs.contains($0.id) }
+            .map { JournalEntityReference(.schedulingPreferences, $0.id) }
+            + snapshot.availabilityRules
+            .filter { !retainedRuleIDs.contains($0.id) }
+            .map { JournalEntityReference(.availabilityRule, $0.id) }
+        try repository.commit(
+            JournalTransaction(
+                upserts: availabilityRules.map(JournalEntity.availabilityRule)
+                    + [.schedulingPreferences(preferences)],
+                deletions: deletions,
+                origin: .user
+            )
+        )
+        try repository.saveTargetCalendarIdentifier(targetCalendarIdentifier)
     }
 
     @discardableResult
@@ -405,8 +477,10 @@ public final class CalendarViewModel: ObservableObject {
     }
 
     private func currentAvailability(from snapshot: JournalSnapshot) throws -> [AvailabilityRule] {
-        let saved = snapshot.availabilityRules.filter { $0.enabled && $0.deletedAt == nil }
-        if !saved.isEmpty { return saved }
+        let configured = configuredAvailability(from: snapshot)
+        if !configured.isEmpty {
+            return configured.filter(\.enabled)
+        }
         return try (1...7).map { weekday in
             try AvailabilityRule(
                 weekday: weekday,
@@ -416,6 +490,14 @@ public final class CalendarViewModel: ObservableObject {
                 minimumSessionMinutes: 15
             )
         }
+    }
+
+    private func configuredAvailability(from snapshot: JournalSnapshot) -> [AvailabilityRule] {
+        let saved = snapshot.availabilityRules.filter { $0.deletedAt == nil }
+        return Dictionary(grouping: saved, by: \.weekday)
+            .values
+            .compactMap { $0.max(by: { $0.updatedAt < $1.updatedAt }) }
+            .sorted { $0.weekday < $1.weekday }
     }
 
     private nonisolated static func sortItems(
