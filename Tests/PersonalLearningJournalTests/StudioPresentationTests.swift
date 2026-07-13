@@ -51,6 +51,43 @@ final class StudioPresentationTests: XCTestCase {
         )
     }
 
+    func testFocusPrefersPlannedSessionThenFallsBackToActiveProject() throws {
+        let plannedProject = Project(
+            name: "Planned",
+            area: "AI",
+            goal: "Learn",
+            currentNextStep: "Read"
+        )
+        let fallbackProject = Project(
+            name: "Fallback",
+            area: "Music",
+            goal: "Practice",
+            currentNextStep: "Play"
+        )
+        let plannedSession = try PlannedSession(
+            planId: UUID(),
+            phaseId: UUID(),
+            projectId: plannedProject.id,
+            title: "Attention lecture",
+            actionType: .course,
+            durationMinutes: 45
+        )
+        let context = PlannedSessionContext(
+            session: plannedSession,
+            project: plannedProject,
+            phase: nil
+        )
+
+        XCTAssertEqual(
+            StudioPresentation.focus(projects: [fallbackProject], planned: [context])?.project.id,
+            plannedProject.id
+        )
+        XCTAssertEqual(
+            StudioPresentation.focus(projects: [fallbackProject], planned: [])?.project.id,
+            fallbackProject.id
+        )
+    }
+
     private func makeSession(startedAt: Date, durationMinutes: Int) throws -> LearningSession {
         try LearningSession(
             projectId: UUID(),

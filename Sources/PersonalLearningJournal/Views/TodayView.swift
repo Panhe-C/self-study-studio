@@ -31,8 +31,21 @@ public struct TodayView: View {
         viewModel.overduePlannedSessions()
     }
 
+    private var focus: StudioFocus? {
+        StudioPresentation.focus(projects: viewModel.continueCards, planned: todaysPlan)
+    }
+
+    private var weekRhythm: [StudioWeekDay] {
+        StudioPresentation.weekRhythm(sessions: viewModel.sessions, weekContaining: Date())
+    }
+
     public var body: some View {
-        List {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: StudioTheme.sectionSpacing) {
+                todayHeader
+                rhythmSection
+                focusSection
+
             if let conflicts = calendarViewModel.scheduleDraft?.conflicts, !conflicts.isEmpty {
                 Section("Schedule Conflicts") {
                     ForEach(conflicts) { conflict in
@@ -177,7 +190,11 @@ public struct TodayView: View {
                     }
                 }
             }
+            }
+            .padding(.horizontal, StudioTheme.pageInset)
+            .padding(.bottom, 28)
         }
+        .background(StudioTheme.pageBackground.ignoresSafeArea())
         .navigationTitle("Today")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -212,6 +229,83 @@ public struct TodayView: View {
             Button("OK") { reviewError = nil }
         } message: {
             Text(reviewError ?? "")
+        }
+    }
+
+    private var todayHeader: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                .font(.title3)
+                .foregroundStyle(.secondary)
+            Text("Your learning rhythm")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(StudioTheme.accent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var rhythmSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            StudioSectionHeader(title: "This week")
+            HStack(spacing: 0) {
+                ForEach(weekRhythm) { day in
+                    VStack(spacing: 8) {
+                        Text(day.date.formatted(.dateTime.weekday(.narrow)))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ZStack {
+                            Circle().fill(day.minutes > 0 ? StudioTheme.completed.opacity(0.16) : StudioTheme.mutedSurface)
+                            if day.minutes > 0 {
+                                Image(systemName: "checkmark")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(StudioTheme.completed)
+                            }
+                        }
+                        .frame(width: 34, height: 34)
+                        Text(day.minutes > 0 ? "\(day.minutes)m" : "-")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var focusSection: some View {
+        if let focus {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("CURRENT FOCUS")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(focus.project.name)
+                    .font(.title2.bold())
+                Text(focus.planned?.session.title ?? focus.project.currentNextStep)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 14) {
+                    Button {
+                        if let planned = focus.planned { timerPlan = planned } else { timerProject = focus.project }
+                    } label: {
+                        Label("Start \(focus.planned?.session.durationMinutes ?? focus.project.defaultDurationMinutes) min", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(StudioTheme.accent)
+
+                    Button {
+                        if let planned = focus.planned { quickLogPlan = planned } else { quickLogProject = focus.project }
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Quick Log")
+                }
+            }
+            .padding(16)
+            .background(.background, in: RoundedRectangle(cornerRadius: 8))
         }
     }
 

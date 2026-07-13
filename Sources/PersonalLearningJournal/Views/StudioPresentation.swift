@@ -57,7 +57,23 @@ public enum StudioLibraryFilter: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+public struct StudioFocus: Equatable, Sendable {
+    public let project: Project
+    public let planned: PlannedSessionContext?
+}
+
 public enum StudioPresentation {
+    public static func focus(
+        projects: [Project],
+        planned: [PlannedSessionContext]
+    ) -> StudioFocus? {
+        if let context = planned.first {
+            return StudioFocus(project: context.project, planned: context)
+        }
+        guard let project = projects.first(where: \.canContinue) else { return nil }
+        return StudioFocus(project: project, planned: nil)
+    }
+
     public static func weekRhythm(
         sessions: [LearningSession],
         weekContaining date: Date,
