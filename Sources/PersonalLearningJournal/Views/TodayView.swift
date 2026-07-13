@@ -39,6 +39,10 @@ public struct TodayView: View {
         StudioPresentation.weekRhythm(sessions: viewModel.sessions, weekContaining: Date())
     }
 
+    private var otherContinueProjects: [Project] {
+        viewModel.continueCards.filter { $0.id != focus?.project.id }
+    }
+
     public var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: StudioTheme.sectionSpacing) {
@@ -111,15 +115,16 @@ public struct TodayView: View {
                 }
             }
 
-            Section("Continue") {
-                if viewModel.continueCards.isEmpty {
+            if focus == nil || !otherContinueProjects.isEmpty {
+                Section("Continue") {
+                if focus == nil && otherContinueProjects.isEmpty {
                     ContentUnavailableView(
                         "No Active Next Step",
                         systemImage: "figure.walk",
                         description: Text("Add a Next Step to an active project.")
                     )
                 } else {
-                    ForEach(viewModel.continueCards) { project in
+                    ForEach(otherContinueProjects) { project in
                         VStack(alignment: .leading, spacing: 10) {
                             Text(project.name)
                                 .font(.headline)
@@ -153,6 +158,7 @@ public struct TodayView: View {
                         }
                         .padding(.vertical, 6)
                     }
+                }
                 }
             }
 

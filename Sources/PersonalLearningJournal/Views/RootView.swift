@@ -34,6 +34,7 @@ public struct RootView: View {
                     .tabItem { Label("Library", systemImage: "paperclip") }
                 }
                 .environmentObject(calendarViewModel)
+                .tint(StudioTheme.accent)
             } else {
                 OnboardingView(viewModel: viewModel)
             }
