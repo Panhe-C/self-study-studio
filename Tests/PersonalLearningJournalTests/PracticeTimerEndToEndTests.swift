@@ -358,13 +358,24 @@ final class PracticeTimerEndToEndTests: XCTestCase {
         XCTAssertTrue(fixture.viewModel.practiceRoutines.isEmpty)
         XCTAssertEqual(try fixture.repository.pendingMutations(limit: 10), outboxBeforeRemoteChanges)
 
-        _ = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
+        let completion = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
         XCTAssertEqual(fixture.viewModel.practiceTimer.pendingCompletion?.routinePresentation?.name, "Guitar")
-        XCTAssertTrue(fixture.viewModel.practiceTimer.clearPendingCompletion())
+        let saved = try fixture.viewModel.savePracticeCompletion(
+            completion,
+            linkedProjectId: nil,
+            note: "Saved after remote deletion"
+        )
+        XCTAssertEqual(saved.session.routineId, routine.id)
+        XCTAssertEqual(fixture.viewModel.practiceSessions.count, 1)
+        XCTAssertEqual(fixture.viewModel.practiceRoutines.count, 1)
+        XCTAssertTrue(fixture.viewModel.practiceRoutines[0].isArchived)
+        XCTAssertNil(fixture.viewModel.practiceTimer.pendingCompletion)
         XCTAssertTrue(
             fixture.viewModel.practiceCards(now: fixture.clock.now(), calendar: fixture.calendar).isEmpty
         )
-        XCTAssertEqual(try fixture.repository.pendingMutations(limit: 10), outboxBeforeRemoteChanges)
+        let recoveryMutations = try fixture.repository.pendingMutations(limit: 10)
+        XCTAssertEqual(recoveryMutations.count, 2)
+        XCTAssertEqual(Set(recoveryMutations.map(\.entity.kind)), [.practiceRoutine, .practiceSession])
     }
 
     private func assertActiveCardUsesLocalTimerPresentation(

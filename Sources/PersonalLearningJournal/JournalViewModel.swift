@@ -694,6 +694,8 @@ public final class JournalViewModel: ObservableObject {
         let result = try practiceService.saveSession(
             sessionId: pendingMatchesCompletion ? pending!.id : UUID(),
             routineId: completion.routineId,
+            recoverDeletedRoutine: pendingMatchesCompletion
+                && pending?.routinePresentation?.routineId == completion.routineId,
             linkedProjectId: linkedProjectId,
             startedAt: completion.startedAt,
             endedAt: completion.endedAt,

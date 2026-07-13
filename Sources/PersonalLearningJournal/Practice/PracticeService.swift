@@ -122,6 +122,7 @@ public final class PracticeService {
     public func saveSession(
         sessionId: UUID = UUID(),
         routineId: UUID,
+        recoverDeletedRoutine: Bool = false,
         linkedProjectId: UUID?,
         startedAt: Date,
         endedAt: Date,
@@ -129,7 +130,19 @@ public final class PracticeService {
         note: String?
     ) throws -> PracticeSessionSaveResult {
         let snapshot = try repository.snapshot()
-        guard liveRoutine(id: routineId, in: snapshot) != nil else {
+        let liveRoutine = liveRoutine(id: routineId, in: snapshot)
+        var recoveredRoutine: PracticeRoutine?
+        if liveRoutine == nil,
+           recoverDeletedRoutine,
+           case var .practiceRoutine(tombstone)? = try repository.entity(
+               for: .init(.practiceRoutine, routineId)
+           ) {
+            tombstone.deletedAt = nil
+            tombstone.isArchived = true
+            tombstone.updatedAt = now()
+            recoveredRoutine = tombstone
+        }
+        if liveRoutine == nil, recoveredRoutine == nil {
             throw PracticeServiceError.missingRoutine
         }
 
@@ -150,9 +163,12 @@ public final class PracticeService {
             updatedAt: timestamp
         ).validated()
 
-        try repository.commit(
-            JournalTransaction(upserts: [.practiceSession(session)], origin: .user)
-        )
+        var upserts: [JournalEntity] = []
+        if let recoveredRoutine {
+            upserts.append(.practiceRoutine(try recoveredRoutine.validated()))
+        }
+        upserts.append(.practiceSession(session))
+        try repository.commit(JournalTransaction(upserts: upserts, origin: .user))
         return PracticeSessionSaveResult(
             session: session,
             didDropMissingProjectLink: linkedProjectId != nil && !hasLiveProject
