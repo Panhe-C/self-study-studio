@@ -195,6 +195,56 @@ final class CloudRecordMapperTests: XCTestCase {
         XCTAssertNil(preferencesRecord["calendarIdentifier"])
     }
 
+    func testPracticeRoutineRejectsInvalidTargetMinutes() throws {
+        let record = try practiceRoutineRecord()
+        record["targetMinutes"] = 0
+
+        XCTAssertThrowsError(try CloudRecordMapper().entity(from: record))
+    }
+
+    func testPracticeRoutineRejectsEmptyOrOutOfRangeWeekdays() throws {
+        let emptyWeekdaysRecord = try practiceRoutineRecord()
+        emptyWeekdaysRecord["weekdays"] = [] as NSArray
+
+        let invalidWeekdayRecord = try practiceRoutineRecord()
+        invalidWeekdayRecord["weekdays"] = [8] as NSArray
+
+        XCTAssertThrowsError(try CloudRecordMapper().entity(from: emptyWeekdaysRecord))
+        XCTAssertThrowsError(try CloudRecordMapper().entity(from: invalidWeekdayRecord))
+    }
+
+    func testPracticeRoutineRejectsBlankName() throws {
+        let record = try practiceRoutineRecord()
+        record["name"] = "   "
+
+        XCTAssertThrowsError(try CloudRecordMapper().entity(from: record))
+    }
+
+    func testPracticeRoutineRejectsInvalidReminderTime() throws {
+        let record = try practiceRoutineRecord()
+        record["reminderHour"] = 24
+        record["reminderMinute"] = 0
+
+        XCTAssertThrowsError(try CloudRecordMapper().entity(from: record))
+    }
+
+    func testPracticeSessionRejectsImpossibleTiming() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let session = PracticeSession(
+            id: fixedID,
+            routineId: UUID(),
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(60),
+            activeDurationSeconds: 60,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let record = try CloudRecordMapper().record(for: .practiceSession(session), zoneID: zoneID)
+        record["activeDurationSeconds"] = 62
+
+        XCTAssertThrowsError(try CloudRecordMapper().entity(from: record))
+    }
+
     func testMapperRejectsInvalidDurationAndRecordIdentifier() throws {
         let invalidIDRecord = CKRecord(
             recordType: "Project",
@@ -258,5 +308,20 @@ final class CloudRecordMapperTests: XCTestCase {
             withIntermediateDirectories: true
         )
         return directory
+    }
+
+    private func practiceRoutineRecord() throws -> CKRecord {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let routine = PracticeRoutine(
+            id: fixedID,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        return try CloudRecordMapper().record(for: .practiceRoutine(routine), zoneID: zoneID)
     }
 }

@@ -489,7 +489,7 @@ public struct CloudRecordMapper {
         guard (reminderHour == nil) == (reminderMinute == nil) else {
             throw CloudRecordMapperError.invalidField("reminderTime")
         }
-        return PracticeRoutine(
+        return try PracticeRoutine(
             id: id,
             name: try string("name", from: record),
             symbolName: try string("symbolName", from: record),
@@ -502,11 +502,11 @@ public struct CloudRecordMapper {
             updatedAt: try date("updatedAt", from: record),
             deletedAt: optionalDate("deletedAt", from: record),
             schemaVersion: try integer("schemaVersion", from: record)
-        )
+        ).validated()
     }
 
     private func decodePracticeSession(_ record: CKRecord, id: UUID) throws -> PracticeSession {
-        PracticeSession(
+        try PracticeSession(
             id: id,
             routineId: try uuid("routineId", from: record),
             linkedProjectId: try optionalUUID("linkedProjectId", from: record),
@@ -518,7 +518,7 @@ public struct CloudRecordMapper {
             updatedAt: try date("updatedAt", from: record),
             deletedAt: optionalDate("deletedAt", from: record),
             schemaVersion: try integer("schemaVersion", from: record)
-        )
+        ).validated()
     }
 
     private func contentHash(of url: URL) throws -> String {
