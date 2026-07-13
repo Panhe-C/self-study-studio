@@ -82,20 +82,37 @@ public struct PracticeTimerCompletion: Codable, Equatable, Sendable {
     }
 }
 
+public struct PracticeRoutinePresentationSnapshot: Codable, Equatable, Sendable {
+    public let routineId: UUID
+    public let name: String
+    public let symbolName: String
+    public let color: PracticeSemanticColor
+
+    public init(routine: PracticeRoutine) {
+        routineId = routine.id
+        name = routine.name
+        symbolName = routine.symbolName
+        color = routine.color
+    }
+}
+
 public struct PracticePendingCompletionDraft: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let completion: PracticeTimerCompletion
+    public let routinePresentation: PracticeRoutinePresentationSnapshot?
     public var note: String
     public var linkedProjectId: UUID?
 
     public init(
         id: UUID = UUID(),
         completion: PracticeTimerCompletion,
+        routinePresentation: PracticeRoutinePresentationSnapshot? = nil,
         note: String = "",
         linkedProjectId: UUID? = nil
     ) {
         self.id = id
         self.completion = completion
+        self.routinePresentation = routinePresentation
         self.note = note
         self.linkedProjectId = linkedProjectId
     }
@@ -136,6 +153,25 @@ struct PersistedPracticeTimerState: Codable, Equatable {
     var resumedAt: Date?
     let targetSeconds: Int
     var targetFeedbackConsumed: Bool
+    let routinePresentation: PracticeRoutinePresentationSnapshot?
+
+    init(
+        routineId: UUID,
+        startedAt: Date,
+        accumulatedActiveSeconds: Int,
+        resumedAt: Date?,
+        targetSeconds: Int,
+        targetFeedbackConsumed: Bool,
+        routinePresentation: PracticeRoutinePresentationSnapshot? = nil
+    ) {
+        self.routineId = routineId
+        self.startedAt = startedAt
+        self.accumulatedActiveSeconds = accumulatedActiveSeconds
+        self.resumedAt = resumedAt
+        self.targetSeconds = targetSeconds
+        self.targetFeedbackConsumed = targetFeedbackConsumed
+        self.routinePresentation = routinePresentation
+    }
 }
 
 private struct PersistedPracticeTimerLocalState: Codable, Equatable {
@@ -161,6 +197,10 @@ public final class PracticeTimerRuntime: ObservableObject {
     @Published public private(set) var pendingCompletion: PracticePendingCompletionDraft?
     @Published public private(set) var lastRefreshDate: Date
 
+    public var activeRoutinePresentation: PracticeRoutinePresentationSnapshot? {
+        activeState?.routinePresentation
+    }
+
     public init(
         store: any PracticeTimerStateStore,
         now: @escaping @MainActor () -> Date = Date.init
@@ -180,7 +220,11 @@ public final class PracticeTimerRuntime: ObservableObject {
         }
     }
 
-    public func start(routineId: UUID, targetSeconds: Int) throws {
+    public func start(
+        routineId: UUID,
+        targetSeconds: Int,
+        routinePresentation: PracticeRoutinePresentationSnapshot? = nil
+    ) throws {
         guard targetSeconds > 0 else {
             throw PracticeTimerRuntimeError.invalidTargetSeconds
         }
@@ -204,7 +248,8 @@ public final class PracticeTimerRuntime: ObservableObject {
             accumulatedActiveSeconds: 0,
             resumedAt: timestamp,
             targetSeconds: targetSeconds,
-            targetFeedbackConsumed: false
+            targetFeedbackConsumed: false,
+            routinePresentation: routinePresentation
         )
         try save(state)
         activeState = state
@@ -272,7 +317,10 @@ public final class PracticeTimerRuntime: ObservableObject {
             endedAt: timestamp,
             activeDurationSeconds: Self.elapsedSeconds(for: state, at: timestamp)
         )
-        let pending = PracticePendingCompletionDraft(completion: completion)
+        let pending = PracticePendingCompletionDraft(
+            completion: completion,
+            routinePresentation: state.routinePresentation
+        )
         do {
             try saveLocalState(active: nil, pending: pending)
         } catch {
@@ -446,12 +494,14 @@ public final class PracticeTimerRuntime: ObservableObject {
         return wallClockDuration >= 0
             && completion.activeDurationSeconds >= 0
             && Double(completion.activeDurationSeconds) <= wallClockDuration + 1
+            && pending.routinePresentation.map { $0.routineId == completion.routineId } ?? true
     }
 
     private static func isValid(_ state: PersistedPracticeTimerState, at now: Date) -> Bool {
         guard state.startedAt <= now,
               state.accumulatedActiveSeconds >= 0,
-              state.targetSeconds > 0 else {
+              state.targetSeconds > 0,
+              state.routinePresentation.map({ $0.routineId == state.routineId }) ?? true else {
             return false
         }
 

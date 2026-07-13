@@ -547,12 +547,66 @@ public final class JournalViewModel: ObservableObject {
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> [StudioPracticeCard] {
-        StudioPresentation.practiceCards(
-            routines: practiceRoutines,
-            sessions: practiceSessions,
-            activeRoutineId: practiceTimer.snapshot.activeRoutineId,
+        let timerSnapshot = practiceTimer.snapshot
+        var presentedRoutines = practiceRoutines
+        var presentedSessions = practiceSessions
+
+        if let activeRoutine = activePracticePresentationRoutine(
+            timerSnapshot: timerSnapshot,
+            now: now
+        ) {
+            presentedRoutines.removeAll { $0.id == activeRoutine.id }
+            presentedRoutines.append(activeRoutine)
+            if let startedAt = timerSnapshot.startedAt {
+                presentedSessions.append(
+                    PracticeSession(
+                        routineId: activeRoutine.id,
+                        startedAt: startedAt,
+                        endedAt: now,
+                        activeDurationSeconds: timerSnapshot.activeElapsedSeconds
+                    )
+                )
+            }
+        }
+
+        return StudioPresentation.practiceCards(
+            routines: presentedRoutines,
+            sessions: presentedSessions,
+            activeRoutineId: timerSnapshot.activeRoutineId,
             now: now,
             calendar: calendar
+        ).map { card in
+            guard card.isActiveTimer else { return card }
+            return StudioPracticeCard(
+                routine: card.routine,
+                statistics: card.statistics,
+                isActiveTimer: true,
+                targetSeconds: timerSnapshot.targetSeconds
+            )
+        }
+    }
+
+    private func activePracticePresentationRoutine(
+        timerSnapshot: PracticeTimerSnapshot,
+        now: Date
+    ) -> PracticeRoutine? {
+        guard let routineId = timerSnapshot.activeRoutineId else { return nil }
+        let syncedRoutine = practiceRoutines.first { $0.id == routineId }
+        let presentation = practiceTimer.activeRoutinePresentation
+
+        return PracticeRoutine(
+            id: routineId,
+            name: presentation?.name ?? syncedRoutine?.name ?? "Practice",
+            symbolName: presentation?.symbolName ?? syncedRoutine?.symbolName ?? "timer",
+            color: presentation?.color ?? syncedRoutine?.color ?? .teal,
+            targetMinutes: max(1, (timerSnapshot.targetSeconds + 59) / 60),
+            weekdays: Set(1...7),
+            reminderTime: syncedRoutine?.reminderTime,
+            isArchived: false,
+            createdAt: syncedRoutine?.createdAt ?? timerSnapshot.startedAt ?? now,
+            updatedAt: syncedRoutine?.updatedAt ?? now,
+            deletedAt: nil,
+            schemaVersion: syncedRoutine?.schemaVersion ?? 1
         )
     }
 
@@ -624,7 +678,8 @@ public final class JournalViewModel: ObservableObject {
     public func startPractice(_ routine: PracticeRoutine) throws {
         try practiceTimer.start(
             routineId: routine.id,
-            targetSeconds: routine.targetMinutes * 60
+            targetSeconds: routine.targetMinutes * 60,
+            routinePresentation: PracticeRoutinePresentationSnapshot(routine: routine)
         )
     }
 

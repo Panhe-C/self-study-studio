@@ -167,17 +167,38 @@ final class PracticeTimerEndToEndTests: XCTestCase {
         let runtime = PracticeTimerRuntime(store: store, now: clock.now)
         let routineID = UUID()
         let projectID = UUID()
+        let routine = PracticeRoutine(
+            id: routineID,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 1,
+            weekdays: [2]
+        )
+        let presentation = PracticeRoutinePresentationSnapshot(routine: routine)
 
-        try runtime.start(routineId: routineID, targetSeconds: 60)
+        try runtime.start(
+            routineId: routineID,
+            targetSeconds: 60,
+            routinePresentation: presentation
+        )
+        let recoveredActive = PracticeTimerRuntime(store: store, now: clock.now)
+        XCTAssertEqual(recoveredActive.activeRoutinePresentation, presentation)
         clock.advance(by: 30)
-        let completion = try XCTUnwrap(runtime.finish())
-        XCTAssertEqual(runtime.pendingCompletion?.completion, completion)
-        XCTAssertTrue(runtime.updatePendingCompletion(note: "Arpeggios", linkedProjectId: projectID))
+        let completion = try XCTUnwrap(recoveredActive.finish())
+        XCTAssertEqual(recoveredActive.pendingCompletion?.completion, completion)
+        XCTAssertTrue(
+            recoveredActive.updatePendingCompletion(
+                note: "Arpeggios",
+                linkedProjectId: projectID
+            )
+        )
 
         let recreated = PracticeTimerRuntime(store: store, now: clock.now)
         XCTAssertEqual(recreated.pendingCompletion?.completion, completion)
         XCTAssertEqual(recreated.pendingCompletion?.note, "Arpeggios")
         XCTAssertEqual(recreated.pendingCompletion?.linkedProjectId, projectID)
+        XCTAssertEqual(recreated.pendingCompletion?.routinePresentation, presentation)
         XCTAssertThrowsError(try recreated.start(routineId: UUID(), targetSeconds: 60)) { error in
             XCTAssertEqual(error as? PracticeTimerRuntimeError, .pendingCompletionExists)
         }
@@ -266,6 +287,101 @@ final class PracticeTimerEndToEndTests: XCTestCase {
             weekdays: [2]
         )
         XCTAssertEqual(updated.targetMinutes, 45)
+    }
+
+    func testRemoteRoutineChangesPreserveActiveTimerPresentationWithoutOutboxMutation() throws {
+        let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 100))
+        let routine = try fixture.viewModel.createPracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: Set(1...7)
+        )
+        let setupMutations = try fixture.repository.pendingMutations(limit: 10)
+        try fixture.repository.acknowledge(Set(setupMutations.map(\.id)), metadata: [])
+        try fixture.viewModel.startPractice(routine)
+        let outboxBeforeRemoteChanges = try fixture.repository.pendingMutations(limit: 10)
+        XCTAssertTrue(outboxBeforeRemoteChanges.isEmpty)
+
+        var remotelyEdited = routine
+        remotelyEdited.name = "Remote Guitar"
+        remotelyEdited.symbolName = "pianokeys"
+        remotelyEdited.color = .blue
+        remotelyEdited.targetMinutes = 90
+        remotelyEdited.updatedAt = fixture.clock.now().addingTimeInterval(10)
+        try fixture.repository.applyRemote(
+            JournalTransaction(upserts: [.practiceRoutine(remotelyEdited)], origin: .remote),
+            conflicts: []
+        )
+        fixture.viewModel.refresh()
+
+        assertActiveCardUsesLocalTimerPresentation(
+            fixture.viewModel.practiceCards(now: fixture.clock.now(), calendar: fixture.calendar),
+            routine: routine,
+            targetSeconds: 1_800
+        )
+        XCTAssertEqual(fixture.viewModel.practiceRoutines.first?.targetMinutes, 90)
+        XCTAssertEqual(try fixture.repository.pendingMutations(limit: 10), outboxBeforeRemoteChanges)
+
+        var remotelyArchived = remotelyEdited
+        remotelyArchived.isArchived = true
+        remotelyArchived.updatedAt = fixture.clock.now().addingTimeInterval(20)
+        try fixture.repository.applyRemote(
+            JournalTransaction(upserts: [.practiceRoutine(remotelyArchived)], origin: .remote),
+            conflicts: []
+        )
+        fixture.viewModel.refresh()
+
+        assertActiveCardUsesLocalTimerPresentation(
+            fixture.viewModel.practiceCards(now: fixture.clock.now(), calendar: fixture.calendar),
+            routine: routine,
+            targetSeconds: 1_800
+        )
+        XCTAssertTrue(fixture.viewModel.practiceRoutines.first?.isArchived == true)
+        XCTAssertEqual(try fixture.repository.pendingMutations(limit: 10), outboxBeforeRemoteChanges)
+
+        try fixture.repository.applyRemote(
+            JournalTransaction(
+                deletions: [.init(.practiceRoutine, routine.id)],
+                origin: .remote
+            ),
+            conflicts: []
+        )
+        fixture.viewModel.refresh()
+
+        assertActiveCardUsesLocalTimerPresentation(
+            fixture.viewModel.practiceCards(now: fixture.clock.now(), calendar: fixture.calendar),
+            routine: routine,
+            targetSeconds: 1_800
+        )
+        XCTAssertTrue(fixture.viewModel.practiceRoutines.isEmpty)
+        XCTAssertEqual(try fixture.repository.pendingMutations(limit: 10), outboxBeforeRemoteChanges)
+
+        _ = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
+        XCTAssertEqual(fixture.viewModel.practiceTimer.pendingCompletion?.routinePresentation?.name, "Guitar")
+        XCTAssertTrue(fixture.viewModel.practiceTimer.clearPendingCompletion())
+        XCTAssertTrue(
+            fixture.viewModel.practiceCards(now: fixture.clock.now(), calendar: fixture.calendar).isEmpty
+        )
+        XCTAssertEqual(try fixture.repository.pendingMutations(limit: 10), outboxBeforeRemoteChanges)
+    }
+
+    private func assertActiveCardUsesLocalTimerPresentation(
+        _ cards: [StudioPracticeCard],
+        routine: PracticeRoutine,
+        targetSeconds: Int,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard let card = cards.first(where: { $0.id == routine.id }) else {
+            return XCTFail("Expected the active practice card", file: file, line: line)
+        }
+        XCTAssertTrue(card.isActiveTimer, file: file, line: line)
+        XCTAssertEqual(card.routine.name, routine.name, file: file, line: line)
+        XCTAssertEqual(card.routine.symbolName, routine.symbolName, file: file, line: line)
+        XCTAssertEqual(card.routine.color, routine.color, file: file, line: line)
+        XCTAssertEqual(card.targetSeconds, targetSeconds, file: file, line: line)
     }
 
     private func makeEndToEndFixture(now: Date) -> EndToEndFixture {

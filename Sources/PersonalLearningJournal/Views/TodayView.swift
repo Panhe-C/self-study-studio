@@ -363,60 +363,9 @@ public struct TodayView: View {
     }
 
     private var practiceCards: [StudioPracticeCard] {
-        let now = practiceTimer.lastRefreshDate
-        let calendar = Calendar.current
-        let scheduledCards = viewModel.practiceCards(now: now, calendar: calendar).map { card in
-            guard card.isActiveTimer else { return card }
-            return StudioPracticeCard(
-                routine: card.routine,
-                statistics: practiceStatistics(for: card.routine, now: now, calendar: calendar),
-                isActiveTimer: true
-            )
-        }
-        guard let activeRoutineId = practiceTimer.snapshot.activeRoutineId,
-              !scheduledCards.contains(where: { $0.id == activeRoutineId }),
-              let activeRoutine = viewModel.practiceRoutines.first(where: {
-                  $0.id == activeRoutineId && !$0.isArchived && $0.deletedAt == nil
-              }) else {
-            return scheduledCards
-        }
-
-        let activeCard = StudioPracticeCard(
-            routine: activeRoutine,
-            statistics: practiceStatistics(for: activeRoutine, now: now, calendar: calendar),
-            isActiveTimer: true
-        )
-        return [activeCard] + scheduledCards
-    }
-
-    private func practiceStatistics(
-        for routine: PracticeRoutine,
-        now: Date,
-        calendar: Calendar
-    ) -> PracticeRoutineStatistics {
-        var sessions = viewModel.practiceSessions
-        if let liveSession = livePracticeSession(for: routine, now: now) {
-            sessions.append(liveSession)
-        }
-        return PracticeStatistics.calculate(
-            routine: routine,
-            sessions: sessions,
-            now: now,
-            calendar: calendar
-        )
-    }
-
-    private func livePracticeSession(for routine: PracticeRoutine, now: Date) -> PracticeSession? {
-        let snapshot = practiceTimer.snapshot
-        guard snapshot.activeRoutineId == routine.id,
-              let startedAt = snapshot.startedAt else {
-            return nil
-        }
-        return PracticeSession(
-            routineId: routine.id,
-            startedAt: startedAt,
-            endedAt: now,
-            activeDurationSeconds: snapshot.activeElapsedSeconds
+        viewModel.practiceCards(
+            now: practiceTimer.lastRefreshDate,
+            calendar: .current
         )
     }
 
@@ -451,18 +400,24 @@ public struct TodayView: View {
 
     private func restorePendingPractice() {
         guard let pending = practiceTimer.pendingCompletion else { return }
-        selectedPractice = viewModel.practiceRoutines.first(where: {
+        let syncedRoutine = viewModel.practiceRoutines.first(where: {
             $0.id == pending.completion.routineId && $0.deletedAt == nil
-        }) ?? PracticeRoutine(
+        })
+        let presentation = pending.routinePresentation
+        selectedPractice = PracticeRoutine(
             id: pending.completion.routineId,
-            name: "Practice",
-            symbolName: "timer",
-            color: .teal,
-            targetMinutes: max(1, pending.completion.activeDurationSeconds / 60),
-            weekdays: Set(1...7),
-            isArchived: true,
-            createdAt: pending.completion.startedAt,
-            updatedAt: pending.completion.endedAt
+            name: presentation?.name ?? syncedRoutine?.name ?? "Practice",
+            symbolName: presentation?.symbolName ?? syncedRoutine?.symbolName ?? "timer",
+            color: presentation?.color ?? syncedRoutine?.color ?? .teal,
+            targetMinutes: syncedRoutine?.targetMinutes
+                ?? max(1, pending.completion.activeDurationSeconds / 60),
+            weekdays: syncedRoutine?.weekdays ?? Set(1...7),
+            reminderTime: syncedRoutine?.reminderTime,
+            isArchived: syncedRoutine?.isArchived ?? true,
+            createdAt: syncedRoutine?.createdAt ?? pending.completion.startedAt,
+            updatedAt: syncedRoutine?.updatedAt ?? pending.completion.endedAt,
+            deletedAt: nil,
+            schemaVersion: syncedRoutine?.schemaVersion ?? 1
         )
     }
 
@@ -561,7 +516,7 @@ private struct PracticeRoutineCard: View {
     }
 
     private var targetSeconds: Int {
-        card.routine.targetMinutes * 60
+        card.targetSeconds
     }
 
     private var progress: Double {

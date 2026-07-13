@@ -67,15 +67,18 @@ public struct StudioPracticeCard: Identifiable, Equatable, Sendable {
     public let routine: PracticeRoutine
     public let statistics: PracticeRoutineStatistics
     public let isActiveTimer: Bool
+    public let targetSeconds: Int
 
     public init(
         routine: PracticeRoutine,
         statistics: PracticeRoutineStatistics,
-        isActiveTimer: Bool
+        isActiveTimer: Bool,
+        targetSeconds: Int? = nil
     ) {
         self.routine = routine
         self.statistics = statistics
         self.isActiveTimer = isActiveTimer
+        self.targetSeconds = targetSeconds ?? routine.targetMinutes * 60
     }
 }
 
