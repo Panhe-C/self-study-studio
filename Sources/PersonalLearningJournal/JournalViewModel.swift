@@ -19,6 +19,8 @@ public final class JournalViewModel: ObservableObject {
     private let reviewService: ReviewService
     private let exportService: ExportService
     private let attachmentStore: AttachmentStore
+    private let practiceService: PracticeService
+    public let practiceTimer: PracticeTimerRuntime
     private let coursePlanningService: CoursePlanningService?
     private let syncCoordinator: (any CloudSyncCoordinating)?
     private let syncRepository: (any JournalRepository)?
@@ -29,6 +31,8 @@ public final class JournalViewModel: ObservableObject {
         reviewService: ReviewService,
         exportService: ExportService,
         attachmentStore: AttachmentStore = .defaultStore(),
+        practiceService: PracticeService,
+        practiceTimer: PracticeTimerRuntime,
         coursePlanningService: CoursePlanningService? = nil,
         syncCoordinator: (any CloudSyncCoordinating)? = nil,
         syncRepository: (any JournalRepository)? = nil,
@@ -38,6 +42,8 @@ public final class JournalViewModel: ObservableObject {
         self.reviewService = reviewService
         self.exportService = exportService
         self.attachmentStore = attachmentStore
+        self.practiceService = practiceService
+        self.practiceTimer = practiceTimer
         self.coursePlanningService = coursePlanningService
         self.syncCoordinator = syncCoordinator
         self.syncRepository = syncRepository
@@ -144,6 +150,14 @@ public final class JournalViewModel: ObservableObject {
 
     public var plannedSessions: [PlannedSession] {
         snapshot.plannedSessions
+    }
+
+    public var practiceRoutines: [PracticeRoutine] {
+        snapshot.practiceRoutines
+    }
+
+    public var practiceSessions: [PracticeSession] {
+        snapshot.practiceSessions
     }
 
     public var continueCards: [Project] {
@@ -521,6 +535,110 @@ public final class JournalViewModel: ObservableObject {
 
     public func proofsForSession(_ sessionId: UUID) -> [Proof] {
         journalService.proofs(sessionId: sessionId)
+    }
+
+    public func practiceSessionsForProject(_ projectId: UUID) -> [PracticeSession] {
+        snapshot.practiceSessions.filter {
+            $0.deletedAt == nil && $0.linkedProjectId == projectId
+        }
+    }
+
+    public func practiceCards(
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [StudioPracticeCard] {
+        StudioPresentation.practiceCards(
+            routines: practiceRoutines,
+            sessions: practiceSessions,
+            activeRoutineId: practiceTimer.snapshot.activeRoutineId,
+            now: now,
+            calendar: calendar
+        )
+    }
+
+    @discardableResult
+    public func createPracticeRoutine(
+        name: String,
+        symbolName: String,
+        color: PracticeSemanticColor,
+        targetMinutes: Int,
+        weekdays: Set<Int>,
+        reminderTime: PracticeReminderTime? = nil
+    ) throws -> PracticeRoutine {
+        let routine = try practiceService.createRoutine(
+            name: name,
+            symbolName: symbolName,
+            color: color,
+            targetMinutes: targetMinutes,
+            weekdays: weekdays,
+            reminderTime: reminderTime
+        )
+        refresh()
+        return routine
+    }
+
+    @discardableResult
+    public func updatePracticeRoutine(
+        routineId: UUID,
+        name: String,
+        symbolName: String,
+        color: PracticeSemanticColor,
+        targetMinutes: Int,
+        weekdays: Set<Int>,
+        reminderTime: PracticeReminderTime? = nil
+    ) throws -> PracticeRoutine {
+        let routine = try practiceService.updateRoutine(
+            routineId: routineId,
+            name: name,
+            symbolName: symbolName,
+            color: color,
+            targetMinutes: targetMinutes,
+            weekdays: weekdays,
+            reminderTime: reminderTime
+        )
+        refresh()
+        return routine
+    }
+
+    @discardableResult
+    public func archivePracticeRoutine(_ routineId: UUID) throws -> PracticeRoutine {
+        let routine = try practiceService.archiveRoutine(routineId)
+        refresh()
+        return routine
+    }
+
+    public func deletePracticeRoutineIfUnused(_ routineId: UUID) throws {
+        try practiceService.deleteRoutineIfUnused(routineId)
+        refresh()
+    }
+
+    public func startPractice(_ routine: PracticeRoutine) throws {
+        try practiceTimer.start(
+            routineId: routine.id,
+            targetSeconds: routine.targetMinutes * 60
+        )
+    }
+
+    @discardableResult
+    public func savePracticeCompletion(
+        _ completion: PracticeTimerCompletion,
+        linkedProjectId: UUID?,
+        note: String?
+    ) throws -> PracticeSessionSaveResult {
+        let result = try practiceService.saveSession(
+            routineId: completion.routineId,
+            linkedProjectId: linkedProjectId,
+            startedAt: completion.startedAt,
+            endedAt: completion.endedAt,
+            activeDurationSeconds: completion.activeDurationSeconds,
+            note: note
+        )
+        refresh()
+        return result
+    }
+
+    public func discardPractice() {
+        practiceTimer.discard()
     }
 
     public func reviewsForProject(_ projectId: UUID) -> [Review] {

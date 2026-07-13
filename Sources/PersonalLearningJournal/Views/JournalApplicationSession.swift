@@ -9,6 +9,7 @@ public final class JournalApplicationSession: ObservableObject {
     private let documentsDirectory: URL
     private let accountCoordinator: CloudAccountCoordinator
     private let accountProvider: any CloudAccountProviding
+    private let practiceTimer: PracticeTimerRuntime
 
     public init(
         documentsDirectory: URL,
@@ -17,6 +18,9 @@ public final class JournalApplicationSession: ObservableObject {
         self.documentsDirectory = documentsDirectory
         self.accountCoordinator = CloudAccountCoordinator(rootDirectory: documentsDirectory)
         self.accountProvider = accountProvider
+        self.practiceTimer = PracticeTimerRuntime(
+            store: UserDefaultsPracticeTimerStateStore()
+        )
         if let localRepository = accountCoordinator.activeRepository {
             Self.migrateLegacyStore(
                 documentsDirectory: documentsDirectory,
@@ -30,7 +34,8 @@ public final class JournalApplicationSession: ObservableObject {
         )
         self.viewModel = Self.makeViewModel(
             repository: repository,
-            accountCoordinator: accountCoordinator
+            accountCoordinator: accountCoordinator,
+            practiceTimer: practiceTimer
         )
 
         Task { [weak self] in
@@ -47,7 +52,8 @@ public final class JournalApplicationSession: ObservableObject {
         )
         viewModel = Self.makeViewModel(
             repository: repository,
-            accountCoordinator: accountCoordinator
+            accountCoordinator: accountCoordinator,
+            practiceTimer: practiceTimer
         )
         if case .cloud = accountCoordinator.state.mode {
             await viewModel.refreshSyncSummary()
@@ -59,7 +65,8 @@ public final class JournalApplicationSession: ObservableObject {
 
     private static func makeViewModel(
         repository: any JournalRepository,
-        accountCoordinator: CloudAccountCoordinator
+        accountCoordinator: CloudAccountCoordinator,
+        practiceTimer: PracticeTimerRuntime
     ) -> JournalViewModel {
         let journalService = JournalService(repository: repository)
         let syncCoordinator: (any CloudSyncCoordinating)?
@@ -82,6 +89,8 @@ public final class JournalApplicationSession: ObservableObject {
                 provider: AdaptiveAIReviewProvider()
             ),
             exportService: ExportService(),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: practiceTimer,
             coursePlanningService: CoursePlanningService(repository: repository),
             syncCoordinator: syncCoordinator,
             syncRepository: repository,

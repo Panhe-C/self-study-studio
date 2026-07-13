@@ -1,3 +1,4 @@
+import CloudKit
 import XCTest
 @testable import PersonalLearningJournal
 
@@ -5,7 +6,8 @@ import XCTest
 final class JournalViewModelTests: XCTestCase {
     @MainActor
     func testSyncSummaryShowsQueuedChangesAndConflictCount() async throws {
-        let journalService = JournalService(store: InMemoryJournalStore())
+        let repository = InMemoryJournalRepository()
+        let journalService = JournalService(repository: repository)
         let viewModel = JournalViewModel(
             journalService: journalService,
             reviewService: ReviewService(
@@ -13,6 +15,8 @@ final class JournalViewModelTests: XCTestCase {
                 provider: RuleBasedReviewProvider()
             ),
             exportService: ExportService(),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore()),
             syncCoordinator: StaticSyncStatusProvider(
                 status: .failed(pending: 2, conflicts: 1, message: "Offline")
             )
@@ -204,6 +208,8 @@ final class JournalViewModelTests: XCTestCase {
             journalService: journalService,
             reviewService: ReviewService(journalService: journalService),
             exportService: ExportService(),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore()),
             coursePlanningService: CoursePlanningService(
                 repository: repository,
                 provider: StubCoursePlanningProvider()
@@ -253,7 +259,8 @@ final class JournalViewModelTests: XCTestCase {
     }
 
     func testReviewActionsApplyRecommendationAndNextStepOnlyWhenRequested() throws {
-        let journalService = JournalService(store: InMemoryJournalStore())
+        let repository = InMemoryJournalRepository()
+        let journalService = JournalService(repository: repository)
         let project = try journalService.createProject(
             name: "Guitar",
             area: "Music",
@@ -274,7 +281,9 @@ final class JournalViewModelTests: XCTestCase {
         let viewModel = JournalViewModel(
             journalService: journalService,
             reviewService: ReviewService(journalService: journalService),
-            exportService: ExportService()
+            exportService: ExportService(),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore())
         )
 
         try viewModel.applyReviewRecommendation(reviewId: review.id, projectId: project.id)
@@ -343,6 +352,8 @@ final class JournalViewModelTests: XCTestCase {
             journalService: journalService,
             reviewService: ReviewService(journalService: journalService),
             exportService: ExportService(),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore()),
             syncRepository: repository
         )
 
@@ -357,19 +368,139 @@ final class JournalViewModelTests: XCTestCase {
         )
     }
 
+    func testSavingPracticeCompletionRefreshesSnapshotAndReportsDroppedLink() throws {
+        let repository = InMemoryJournalRepository()
+        let journalService = JournalService(repository: repository)
+        let practiceService = PracticeService(repository: repository)
+        let runtime = PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore())
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            practiceService: practiceService,
+            practiceTimer: runtime
+        )
+        let routine = try viewModel.createPracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let completion = PracticeTimerCompletion(
+            routineId: routine.id,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_800),
+            activeDurationSeconds: 1_800
+        )
+
+        let result = try viewModel.savePracticeCompletion(
+            completion,
+            linkedProjectId: UUID(),
+            note: "Scales"
+        )
+
+        XCTAssertEqual(viewModel.practiceSessions.map(\.id), [result.session.id])
+        XCTAssertTrue(result.didDropMissingProjectLink)
+        XCTAssertNil(result.session.linkedProjectId)
+    }
+
+    func testPracticeFacadeUsesInjectedRuntimeAndRefreshesRoutineMutations() throws {
+        let repository = InMemoryJournalRepository()
+        let journalService = JournalService(repository: repository)
+        let runtime = PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore())
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: runtime
+        )
+        let routine = try viewModel.createPracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+
+        try viewModel.startPractice(routine)
+        let updated = try viewModel.updatePracticeRoutine(
+            routineId: routine.id,
+            name: "Acoustic Guitar",
+            symbolName: "music.note",
+            color: .blue,
+            targetMinutes: 45,
+            weekdays: [2, 4]
+        )
+
+        XCTAssertTrue(viewModel.practiceTimer === runtime)
+        XCTAssertEqual(viewModel.practiceTimer.snapshot.activeRoutineId, routine.id)
+        XCTAssertEqual(viewModel.practiceRoutines.first?.name, updated.name)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let monday = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 13, hour: 10))
+        )
+        XCTAssertTrue(
+            viewModel.practiceCards(now: monday, calendar: calendar).first?.isActiveTimer == true
+        )
+
+        viewModel.discardPractice()
+        _ = try viewModel.archivePracticeRoutine(routine.id)
+        XCTAssertTrue(viewModel.practiceRoutines[0].isArchived)
+        try viewModel.deletePracticeRoutineIfUnused(routine.id)
+        XCTAssertTrue(viewModel.practiceRoutines.isEmpty)
+    }
+
+    func testApplicationSessionKeepsPracticeRuntimeAcrossAccountRefresh() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = JournalApplicationSession(
+            documentsDirectory: root,
+            accountProvider: LocalOnlyAccountProvider()
+        )
+        let runtime = session.viewModel.practiceTimer
+
+        await session.refreshAccount()
+
+        XCTAssertTrue(session.viewModel.practiceTimer === runtime)
+    }
+
     private func makeViewModel(
         attachmentRoot: URL? = nil,
-        now: @escaping () -> Date = Date.init
+        now: @escaping @MainActor @Sendable () -> Date = Date.init
     ) -> JournalViewModel {
-        let journalService = JournalService(store: InMemoryJournalStore(), now: now)
+        let repository = InMemoryJournalRepository(now: now)
+        let journalService = JournalService(repository: repository, now: now)
         let attachmentStore = attachmentRoot.map { AttachmentStore(rootDirectory: $0) }
         return JournalViewModel(
             journalService: journalService,
             reviewService: ReviewService(journalService: journalService),
             exportService: ExportService(),
-            attachmentStore: attachmentStore ?? .defaultStore()
+            attachmentStore: attachmentStore ?? .defaultStore(),
+            practiceService: PracticeService(repository: repository, now: now),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore(), now: now)
         )
     }
+}
+
+@MainActor
+private final class ViewModelPracticeTimerStateStore: PracticeTimerStateStore {
+    private var data: Data?
+
+    func load() -> Data? { data }
+
+    func save(_ data: Data?) throws {
+        self.data = data
+    }
+}
+
+private actor LocalOnlyAccountProvider: CloudAccountProviding {
+    func accountStatus() async throws -> CKAccountStatus { .noAccount }
+
+    func currentUserRecordName() async throws -> String? { nil }
 }
 
 private actor StaticSyncStatusProvider: CloudSyncCoordinating {

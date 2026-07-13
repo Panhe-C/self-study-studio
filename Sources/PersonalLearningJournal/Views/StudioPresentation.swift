@@ -62,6 +62,23 @@ public struct StudioFocus: Equatable, Sendable {
     public let planned: PlannedSessionContext?
 }
 
+public struct StudioPracticeCard: Identifiable, Equatable, Sendable {
+    public var id: UUID { routine.id }
+    public let routine: PracticeRoutine
+    public let statistics: PracticeRoutineStatistics
+    public let isActiveTimer: Bool
+
+    public init(
+        routine: PracticeRoutine,
+        statistics: PracticeRoutineStatistics,
+        isActiveTimer: Bool
+    ) {
+        self.routine = routine
+        self.statistics = statistics
+        self.isActiveTimer = isActiveTimer
+    }
+}
+
 public enum StudioPresentation {
     public static func projects(_ projects: [Project], status: ProjectStatus) -> [Project] {
         projects.filter { $0.status == status }
@@ -110,5 +127,42 @@ public enum StudioPresentation {
         guard !query.isEmpty else { return true }
         return [proof.title, proof.statement, proof.type.rawValue, projectName]
             .contains { $0.lowercased().contains(query) }
+    }
+
+    public static func practiceCards(
+        routines: [PracticeRoutine],
+        sessions: [PracticeSession],
+        activeRoutineId: UUID?,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> [StudioPracticeCard] {
+        let weekday = calendar.component(.weekday, from: now)
+        return routines
+            .filter {
+                !$0.isArchived
+                    && $0.deletedAt == nil
+                    && $0.weekdays.contains(weekday)
+            }
+            .map { routine in
+                StudioPracticeCard(
+                    routine: routine,
+                    statistics: PracticeStatistics.calculate(
+                        routine: routine,
+                        sessions: sessions,
+                        now: now,
+                        calendar: calendar
+                    ),
+                    isActiveTimer: routine.id == activeRoutineId
+                )
+            }
+            .sorted { left, right in
+                if left.isActiveTimer != right.isActiveTimer {
+                    return left.isActiveTimer
+                }
+                if left.routine.createdAt != right.routine.createdAt {
+                    return left.routine.createdAt < right.routine.createdAt
+                }
+                return left.routine.name.localizedCaseInsensitiveCompare(right.routine.name) == .orderedAscending
+            }
     }
 }

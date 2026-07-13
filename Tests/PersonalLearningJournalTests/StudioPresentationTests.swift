@@ -98,6 +98,60 @@ final class StudioPresentationTests: XCTestCase {
         )
     }
 
+    func testTodayPracticeCardsFilterWeekdayAndExposeActiveTimer() throws {
+        let monday = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 13, hour: 10))
+        )
+        let mondayRoutine = makeRoutine(name: "Guitar", weekdays: [2])
+        let tuesdayRoutine = makeRoutine(name: "Voice", weekdays: [3])
+
+        let cards = StudioPresentation.practiceCards(
+            routines: [mondayRoutine, tuesdayRoutine],
+            sessions: [],
+            activeRoutineId: mondayRoutine.id,
+            now: monday,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(cards.map(\.routine.id), [mondayRoutine.id])
+        XCTAssertTrue(cards[0].isActiveTimer)
+    }
+
+    func testPracticeCardsExcludeArchivedAndDeletedRoutinesAndSortActiveFirst() throws {
+        let monday = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 13, hour: 10))
+        )
+        let first = makeRoutine(
+            name: "Guitar",
+            weekdays: [2],
+            createdAt: monday.addingTimeInterval(-200)
+        )
+        let active = makeRoutine(
+            name: "Voice",
+            weekdays: [2],
+            createdAt: monday.addingTimeInterval(-100)
+        )
+        let archived = makeRoutine(name: "Archived", weekdays: [2], isArchived: true)
+        let deleted = makeRoutine(name: "Deleted", weekdays: [2], deletedAt: monday)
+        let session = PracticeSession(
+            routineId: active.id,
+            startedAt: monday,
+            endedAt: monday.addingTimeInterval(600),
+            activeDurationSeconds: 600
+        )
+
+        let cards = StudioPresentation.practiceCards(
+            routines: [first, active, archived, deleted],
+            sessions: [session],
+            activeRoutineId: active.id,
+            now: monday,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(cards.map(\.routine.id), [active.id, first.id])
+        XCTAssertEqual(cards[0].statistics.todayActiveSeconds, 600)
+    }
+
     private func makeSession(startedAt: Date, durationMinutes: Int) throws -> LearningSession {
         try LearningSession(
             projectId: UUID(),
@@ -111,6 +165,26 @@ final class StudioPresentationTests: XCTestCase {
             note: "Study session",
             nextStepBefore: "Read",
             nextStepAfter: "Practice"
+        )
+    }
+
+    private func makeRoutine(
+        name: String,
+        weekdays: Set<Int>,
+        createdAt: Date = Date(timeIntervalSince1970: 0),
+        isArchived: Bool = false,
+        deletedAt: Date? = nil
+    ) -> PracticeRoutine {
+        PracticeRoutine(
+            name: name,
+            symbolName: "music.note",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: weekdays,
+            isArchived: isArchived,
+            createdAt: createdAt,
+            updatedAt: createdAt,
+            deletedAt: deletedAt
         )
     }
 }

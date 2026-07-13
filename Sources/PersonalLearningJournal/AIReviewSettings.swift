@@ -181,7 +181,7 @@ public struct OpenAICompatibleReviewProvider: AIReviewProvider {
     }
 
     private static let systemPrompt = """
-    You are a calm personal learning-review assistant. Return only a JSON object with facts, patterns, decisions, projectRecommendations, nextSteps, sourceSummary, and sourceReferences. Use no more than three facts, patterns, or decisions. Every generated insight must cite concrete session or Proof summaries in sourceReferences. Never change project status yourself and do not use motivational or streak language.
+    You are a calm personal learning-review assistant. Return only a JSON object with facts, patterns, decisions, projectRecommendations, nextSteps, sourceSummary, and sourceReferences. Use no more than three facts, patterns, or decisions. Every generated insight must cite concrete session, Proof, or practice summaries in sourceReferences. Never change project status yourself and do not use motivational or streak language.
     """
 
     private static func reviewInput(
@@ -189,12 +189,22 @@ public struct OpenAICompatibleReviewProvider: AIReviewProvider {
         periodStart: Date,
         periodEnd: Date
     ) throws -> String {
+        let practiceSessions = PracticeReviewContext.linkedSessions(
+            snapshot: snapshot,
+            periodStart: periodStart,
+            periodEnd: periodEnd
+        )
         let input = OpenAICompatibleReviewInput(
             periodStart: periodStart,
             periodEnd: periodEnd,
             projects: snapshot.projects,
             sessions: snapshot.sessions,
             proofs: snapshot.proofs,
+            practiceSessions: practiceSessions,
+            practiceSources: PracticeReviewContext.sources(
+                for: practiceSessions,
+                routines: snapshot.practiceRoutines
+            ),
             planProgress: CoursePlanReviewContext.make(snapshot: snapshot, referenceDate: periodEnd)
         )
         return String(decoding: try JSONEncoder.journal.encode(input), as: UTF8.self)
@@ -313,6 +323,8 @@ private struct OpenAICompatibleReviewInput: Codable {
     var projects: [Project]
     var sessions: [LearningSession]
     var proofs: [Proof]
+    var practiceSessions: [PracticeSession]
+    var practiceSources: [String]
     var planProgress: [CoursePlanReviewProgress]
 }
 
