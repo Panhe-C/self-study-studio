@@ -2,6 +2,34 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class JournalRepositoryTests: XCTestCase {
+    func testPracticeEntitiesRoundTripAndEnqueueMutations() throws {
+        let repository = InMemoryJournalRepository()
+        let routine = PracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let session = PracticeSession(
+            routineId: routine.id,
+            startedAt: .now,
+            endedAt: .now.addingTimeInterval(60),
+            activeDurationSeconds: 60
+        )
+
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.practiceRoutine(routine), .practiceSession(session)],
+                origin: .user
+            )
+        )
+
+        XCTAssertEqual(try repository.snapshot().practiceRoutines, [routine])
+        XCTAssertEqual(try repository.snapshot().practiceSessions, [session])
+        XCTAssertEqual(try repository.pendingMutations(limit: 10).count, 2)
+    }
+
     func testUserTransactionPersistsEntityAndOutboxAtomically() throws {
         let repository = InMemoryJournalRepository()
         let project = Project(

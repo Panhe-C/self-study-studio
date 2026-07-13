@@ -46,6 +46,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
             plannedSessions: try decodedRecords(StoredPlannedSessionV2.self, as: PlannedSession.self),
             availabilityRules: try decodedRecords(StoredAvailabilityRuleV2.self, as: AvailabilityRule.self),
             schedulingPreferences: try decodedRecords(StoredSchedulingPreferencesV2.self, as: SchedulingPreferences.self),
+            practiceRoutines: try decodedRecords(StoredPracticeRoutineV2.self, as: PracticeRoutine.self),
+            practiceSessions: try decodedRecords(StoredPracticeSessionV2.self, as: PracticeSession.self),
             hasCompletedOnboarding: metadata?.hasCompletedOnboarding,
             pendingFirstRecordProjectId: metadata?.pendingFirstRecordProjectId
         )
@@ -158,6 +160,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
         case .plannedSession: return try entity(reference.id, in: StoredPlannedSessionV2.self, as: PlannedSession.self).map(JournalEntity.plannedSession)
         case .availabilityRule: return try entity(reference.id, in: StoredAvailabilityRuleV2.self, as: AvailabilityRule.self).map(JournalEntity.availabilityRule)
         case .schedulingPreferences: return try entity(reference.id, in: StoredSchedulingPreferencesV2.self, as: SchedulingPreferences.self).map(JournalEntity.schedulingPreferences)
+        case .practiceRoutine: return try entity(reference.id, in: StoredPracticeRoutineV2.self, as: PracticeRoutine.self).map(JournalEntity.practiceRoutine)
+        case .practiceSession: return try entity(reference.id, in: StoredPracticeSessionV2.self, as: PracticeSession.self).map(JournalEntity.practiceSession)
         }
     }
 
@@ -331,6 +335,10 @@ public final class SwiftDataJournalRepository: JournalRepository {
             try upsert(value, in: StoredAvailabilityRuleV2.self)
         case let .schedulingPreferences(value):
             try upsert(value, in: StoredSchedulingPreferencesV2.self)
+        case let .practiceRoutine(value):
+            try upsert(value, in: StoredPracticeRoutineV2.self)
+        case let .practiceSession(value):
+            try upsert(value, in: StoredPracticeSessionV2.self)
         }
     }
 
@@ -412,6 +420,20 @@ public final class SwiftDataJournalRepository: JournalRepository {
             }
         case .schedulingPreferences:
             try markDeleted(reference.id, in: StoredSchedulingPreferencesV2.self, as: SchedulingPreferences.self) {
+                var value = $0
+                value.deletedAt = now()
+                value.updatedAt = value.deletedAt!
+                return value
+            }
+        case .practiceRoutine:
+            try markDeleted(reference.id, in: StoredPracticeRoutineV2.self, as: PracticeRoutine.self) {
+                var value = $0
+                value.deletedAt = now()
+                value.updatedAt = value.deletedAt!
+                return value
+            }
+        case .practiceSession:
+            try markDeleted(reference.id, in: StoredPracticeSessionV2.self, as: PracticeSession.self) {
                 var value = $0
                 value.deletedAt = now()
                 value.updatedAt = value.deletedAt!
@@ -517,6 +539,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
             StoredPlannedSessionV2.self,
             StoredAvailabilityRuleV2.self,
             StoredSchedulingPreferencesV2.self,
+            StoredPracticeRoutineV2.self,
+            StoredPracticeSessionV2.self,
             StoredPendingMutationV2.self,
             StoredSyncMetadataV2.self,
             StoredSyncConflictV2.self,
@@ -548,6 +572,8 @@ extension PlanPhase: DeletionDated { fileprivate var journalDeletedAt: Date? { d
 extension PlannedSession: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension AvailabilityRule: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension SchedulingPreferences: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension PracticeRoutine: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension PracticeSession: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 
 private protocol StoredEntityV2: PersistentModel {
     var id: UUID { get set }
@@ -675,6 +701,32 @@ private protocol StoredEntityV2: PersistentModel {
 }
 
 @Model private final class StoredSchedulingPreferencesV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id
+        self.ordinal = ordinal
+        self.payload = payload
+        self.deletedAt = deletedAt
+    }
+}
+
+@Model private final class StoredPracticeRoutineV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id
+        self.ordinal = ordinal
+        self.payload = payload
+        self.deletedAt = deletedAt
+    }
+}
+
+@Model private final class StoredPracticeSessionV2: StoredEntityV2 {
     @Attribute(.unique) var id: UUID
     var ordinal: Int
     var payload: Data

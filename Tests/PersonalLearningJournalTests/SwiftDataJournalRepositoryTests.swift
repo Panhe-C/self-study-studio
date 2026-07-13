@@ -2,6 +2,37 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class SwiftDataJournalRepositoryTests: XCTestCase {
+    func testPracticeEntitiesSurviveSwiftDataRestartAndSoftDeletion() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("practice.store")
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let routine = PracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+
+        try SwiftDataJournalRepository(url: url).commit(
+            JournalTransaction(upserts: [.practiceRoutine(routine)], origin: .user)
+        )
+
+        let reopened = try SwiftDataJournalRepository(url: url)
+        XCTAssertEqual(try reopened.snapshot().practiceRoutines, [routine])
+        try reopened.commit(
+            JournalTransaction(
+                deletions: [.init(.practiceRoutine, routine.id)],
+                origin: .user
+            )
+        )
+        XCTAssertTrue(try reopened.snapshot().practiceRoutines.isEmpty)
+        XCTAssertNotNil(try reopened.entity(for: .init(.practiceRoutine, routine.id)))
+    }
+
     func testSwiftDataRepositoryRoundTripsEntityAndOutboxAcrossInstances() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

@@ -666,6 +666,10 @@ public final class JournalViewModel: ObservableObject {
             return .availabilityRule(try JSONDecoder.journal.decode(AvailabilityRule.self, from: payload))
         case .schedulingPreferences:
             return .schedulingPreferences(try JSONDecoder.journal.decode(SchedulingPreferences.self, from: payload))
+        case .practiceRoutine:
+            return .practiceRoutine(try JSONDecoder.journal.decode(PracticeRoutine.self, from: payload))
+        case .practiceSession:
+            return .practiceSession(try JSONDecoder.journal.decode(PracticeSession.self, from: payload))
         }
     }
 

@@ -11,6 +11,8 @@ public enum JournalEntityKind: String, Codable, CaseIterable, Sendable {
     case plannedSession
     case availabilityRule
     case schedulingPreferences
+    case practiceRoutine
+    case practiceSession
 }
 
 public struct JournalEntityReference: Codable, Equatable, Hashable, Sendable {
@@ -34,6 +36,8 @@ public enum JournalEntity: Codable, Equatable, Sendable {
     case plannedSession(PlannedSession)
     case availabilityRule(AvailabilityRule)
     case schedulingPreferences(SchedulingPreferences)
+    case practiceRoutine(PracticeRoutine)
+    case practiceSession(PracticeSession)
 
     public var reference: JournalEntityReference {
         switch self {
@@ -47,6 +51,8 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .plannedSession(value): .init(.plannedSession, value.id)
         case let .availabilityRule(value): .init(.availabilityRule, value.id)
         case let .schedulingPreferences(value): .init(.schedulingPreferences, value.id)
+        case let .practiceRoutine(value): .init(.practiceRoutine, value.id)
+        case let .practiceSession(value): .init(.practiceSession, value.id)
         }
     }
 
@@ -62,6 +68,8 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .plannedSession(value): value.deletedAt != nil
         case let .availabilityRule(value): value.deletedAt != nil
         case let .schedulingPreferences(value): value.deletedAt != nil
+        case let .practiceRoutine(value): value.deletedAt != nil
+        case let .practiceSession(value): value.deletedAt != nil
         }
     }
 
@@ -106,6 +114,14 @@ public enum JournalEntity: Codable, Equatable, Sendable {
             value.deletedAt = date
             value.updatedAt = date
             return .schedulingPreferences(value)
+        case var .practiceRoutine(value):
+            value.deletedAt = date
+            value.updatedAt = date
+            return .practiceRoutine(value)
+        case var .practiceSession(value):
+            value.deletedAt = date
+            value.updatedAt = date
+            return .practiceSession(value)
         }
     }
 }

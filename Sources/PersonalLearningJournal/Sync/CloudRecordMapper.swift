@@ -35,6 +35,8 @@ public struct CloudRecordMapper {
         case let .plannedSession(value): encode(value, into: record)
         case let .availabilityRule(value): encode(value, into: record)
         case let .schedulingPreferences(value): encode(value, into: record)
+        case let .practiceRoutine(value): encode(value, into: record)
+        case let .practiceSession(value): encode(value, into: record)
         }
         return record
     }
@@ -54,6 +56,8 @@ public struct CloudRecordMapper {
         case "PlannedSession": return .plannedSession(try decodePlannedSession(record, id: id))
         case "AvailabilityRule": return .availabilityRule(try decodeAvailabilityRule(record, id: id))
         case "SchedulingPreferences": return .schedulingPreferences(try decodeSchedulingPreferences(record, id: id))
+        case "PracticeRoutine": return .practiceRoutine(try decodePracticeRoutine(record, id: id))
+        case "PracticeSession": return .practiceSession(try decodePracticeSession(record, id: id))
         default: throw CloudRecordMapperError.unsupportedRecordType(record.recordType)
         }
     }
@@ -78,6 +82,8 @@ public struct CloudRecordMapper {
         case .plannedSession: "PlannedSession"
         case .availabilityRule: "AvailabilityRule"
         case .schedulingPreferences: "SchedulingPreferences"
+        case .practiceRoutine: "PracticeRoutine"
+        case .practiceSession: "PracticeSession"
         }
     }
 
@@ -230,6 +236,28 @@ public struct CloudRecordMapper {
         record["updatedAt"] = value.updatedAt
         record["deletedAt"] = value.deletedAt
         record["schemaVersion"] = value.schemaVersion
+    }
+
+    private func encode(_ value: PracticeRoutine, into record: CKRecord) {
+        record["name"] = value.name
+        record["symbolName"] = value.symbolName
+        record["color"] = value.color.rawValue
+        record["targetMinutes"] = value.targetMinutes
+        record["weekdays"] = value.weekdays.sorted().map(NSNumber.init(value:)) as NSArray
+        record["reminderHour"] = value.reminderTime?.hour
+        record["reminderMinute"] = value.reminderTime?.minute
+        record["isArchived"] = value.isArchived
+        encodeDates(value.createdAt, value.updatedAt, nil, value.deletedAt, value.schemaVersion, into: record)
+    }
+
+    private func encode(_ value: PracticeSession, into record: CKRecord) {
+        record["routineId"] = value.routineId.uuidString
+        record["linkedProjectId"] = value.linkedProjectId?.uuidString
+        record["startedAt"] = value.startedAt
+        record["endedAt"] = value.endedAt
+        record["activeDurationSeconds"] = value.activeDurationSeconds
+        record["note"] = value.note
+        encodeDates(value.createdAt, value.updatedAt, nil, value.deletedAt, value.schemaVersion, into: record)
     }
 
     private func encodeDates(
@@ -452,6 +480,47 @@ public struct CloudRecordMapper {
         )
     }
 
+    private func decodePracticeRoutine(_ record: CKRecord, id: UUID) throws -> PracticeRoutine {
+        guard let color = PracticeSemanticColor(rawValue: try string("color", from: record)) else {
+            throw CloudRecordMapperError.invalidField("color")
+        }
+        let reminderHour = optionalInteger("reminderHour", from: record)
+        let reminderMinute = optionalInteger("reminderMinute", from: record)
+        guard (reminderHour == nil) == (reminderMinute == nil) else {
+            throw CloudRecordMapperError.invalidField("reminderTime")
+        }
+        return PracticeRoutine(
+            id: id,
+            name: try string("name", from: record),
+            symbolName: try string("symbolName", from: record),
+            color: color,
+            targetMinutes: try integer("targetMinutes", from: record),
+            weekdays: Set(integers("weekdays", from: record)),
+            reminderTime: reminderHour.map { PracticeReminderTime(hour: $0, minute: reminderMinute!) },
+            isArchived: try boolean("isArchived", from: record),
+            createdAt: try date("createdAt", from: record),
+            updatedAt: try date("updatedAt", from: record),
+            deletedAt: optionalDate("deletedAt", from: record),
+            schemaVersion: try integer("schemaVersion", from: record)
+        )
+    }
+
+    private func decodePracticeSession(_ record: CKRecord, id: UUID) throws -> PracticeSession {
+        PracticeSession(
+            id: id,
+            routineId: try uuid("routineId", from: record),
+            linkedProjectId: try optionalUUID("linkedProjectId", from: record),
+            startedAt: try date("startedAt", from: record),
+            endedAt: try date("endedAt", from: record),
+            activeDurationSeconds: try integer("activeDurationSeconds", from: record),
+            note: optionalString("note", from: record),
+            createdAt: try date("createdAt", from: record),
+            updatedAt: try date("updatedAt", from: record),
+            deletedAt: optionalDate("deletedAt", from: record),
+            schemaVersion: try integer("schemaVersion", from: record)
+        )
+    }
+
     private func contentHash(of url: URL) throws -> String {
         let digest = SHA256.hash(data: try Data(contentsOf: url))
         return digest.map { String(format: "%02x", $0) }.joined()
@@ -506,6 +575,10 @@ public struct CloudRecordMapper {
 
     private func strings(_ key: String, from record: CKRecord) -> [String] {
         record[key] as? [String] ?? []
+    }
+
+    private func integers(_ key: String, from record: CKRecord) -> [Int] {
+        (record[key] as? [NSNumber])?.map(\.intValue) ?? []
     }
 
     private func statusDictionary(_ values: [String]) throws -> [UUID: ProjectStatus] {
