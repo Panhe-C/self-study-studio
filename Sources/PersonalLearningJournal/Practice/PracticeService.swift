@@ -4,6 +4,7 @@ public enum PracticeServiceError: Error, Equatable, Sendable {
     case missingRoutine
     case duplicateActiveRoutineName
     case routineHasSessions
+    case activeRoutineCannotBeModified
 }
 
 public struct PracticeSessionSaveResult: Equatable, Sendable {
@@ -119,6 +120,7 @@ public final class PracticeService {
 
     @discardableResult
     public func saveSession(
+        sessionId: UUID = UUID(),
         routineId: UUID,
         linkedProjectId: UUID?,
         startedAt: Date,
@@ -137,6 +139,7 @@ public final class PracticeService {
         let storedProjectID = hasLiveProject ? linkedProjectId : nil
         let timestamp = now()
         let session = try PracticeSession(
+            id: sessionId,
             routineId: routineId,
             linkedProjectId: storedProjectID,
             startedAt: startedAt,

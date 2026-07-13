@@ -23,7 +23,11 @@ struct PracticeRoutineDraft: Equatable {
         name.trimmedForJournal
     }
 
-    func canSave(comparedWith routines: [PracticeRoutine]) -> Bool {
+    func canSave(
+        comparedWith routines: [PracticeRoutine],
+        activeRoutineId: UUID? = nil
+    ) -> Bool {
+        if let activeRoutineId, routineId == activeRoutineId { return false }
         guard !trimmedName.isEmpty,
               (1...1_440).contains(targetMinutes),
               !weekdays.isEmpty,
@@ -286,18 +290,32 @@ private struct PracticeEditorContext: Identifiable {
 
 private struct PracticeRoutineEditorView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var viewModel: JournalViewModel
+    @ObservedObject private var practiceTimer: PracticeTimerRuntime
     @State private var draft: PracticeRoutineDraft
     @State private var errorMessage: String?
 
     init(viewModel: JournalViewModel, routine: PracticeRoutine?) {
         self.viewModel = viewModel
+        _practiceTimer = ObservedObject(wrappedValue: viewModel.practiceTimer)
         _draft = State(initialValue: PracticeRoutineDraft(routine: routine))
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                if isActiveRoutine {
+                    Section {
+                        Label(
+                            "Finish or discard the active timer before editing this routine.",
+                            systemImage: "timer"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(StudioTheme.notice)
+                    }
+                }
+
                 Section("Routine") {
                     TextField("Name", text: $draft.name)
                         #if os(iOS)
@@ -313,9 +331,14 @@ private struct PracticeRoutineEditorView: View {
                     }
                     .pickerStyle(.menu)
                 }
+                .disabled(isActiveRoutine)
 
                 Section("Color") {
-                    HStack(spacing: 14) {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 44, maximum: 44), spacing: 8)],
+                        alignment: .leading,
+                        spacing: 8
+                    ) {
                         ForEach(PracticeSemanticColor.allCases, id: \.self) { color in
                             Button {
                                 draft.color = color
@@ -326,42 +349,43 @@ private struct PracticeRoutineEditorView: View {
                                     if draft.color == color {
                                         Image(systemName: "checkmark")
                                             .font(.caption.bold())
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(color == .yellow ? .black : .white)
                                     }
                                 }
                                 .frame(width: 34, height: 34)
+                                .frame(width: 44, height: 44)
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("\(color.rawValue.capitalized) color")
                             .accessibilityAddTraits(draft.color == color ? .isSelected : [])
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .disabled(isActiveRoutine)
 
                 Section("Daily Target") {
-                    HStack(spacing: 12) {
-                        TextField("Minutes", value: $draft.targetMinutes, format: .number)
-                            #if os(iOS)
-                            .keyboardType(.numberPad)
-                            #endif
-                            .multilineTextAlignment(.trailing)
-                            .frame(minWidth: 72)
-                        Text("minutes")
-                            .foregroundStyle(.secondary)
-                        Stepper(
-                            "Target minutes",
-                            value: $draft.targetMinutes,
-                            in: 1...1_440
-                        )
-                        .labelsHidden()
-                        .accessibilityLabel("Target minutes")
-                        .accessibilityValue("\(draft.targetMinutes)")
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 12) {
+                            targetTextField
+                            targetStepper
+                        }
+                    } else {
+                        HStack(spacing: 12) {
+                            targetTextField
+                            targetStepper
+                        }
                     }
                 }
+                .disabled(isActiveRoutine)
 
                 Section("Practice Days") {
-                    HStack(spacing: 6) {
+                    LazyVGrid(
+                        columns: Array(
+                            repeating: GridItem(.flexible(), spacing: 6),
+                            count: dynamicTypeSize.isAccessibilitySize ? 3 : 7
+                        ),
+                        spacing: 8
+                    ) {
                         ForEach(orderedWeekdays, id: \.value) { weekday in
                             Toggle(
                                 weekday.shortName,
@@ -372,11 +396,12 @@ private struct PracticeRoutineEditorView: View {
                             .buttonBorderShape(.roundedRectangle(radius: 8))
                             .tint(StudioTheme.practiceColor(draft.color))
                             .font(.caption.weight(.semibold))
-                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                             .accessibilityLabel(weekday.fullName)
                         }
                     }
                 }
+                .disabled(isActiveRoutine)
 
                 if let validationMessage {
                     Section {
@@ -398,7 +423,10 @@ private struct PracticeRoutineEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
-                        .disabled(!draft.canSave(comparedWith: viewModel.practiceRoutines))
+                        .disabled(!draft.canSave(
+                            comparedWith: viewModel.practiceRoutines,
+                            activeRoutineId: practiceTimer.snapshot.activeRoutineId
+                        ))
                 }
             }
         }
@@ -410,6 +438,7 @@ private struct PracticeRoutineEditorView: View {
     }
 
     private var validationMessage: String? {
+        if isActiveRoutine { return nil }
         if draft.trimmedName.isEmpty { return "Enter a routine name." }
         if !(1...1_440).contains(draft.targetMinutes) { return "Choose a target from 1 to 1,440 minutes." }
         if draft.weekdays.isEmpty { return "Choose at least one practice day." }
@@ -417,6 +446,35 @@ private struct PracticeRoutineEditorView: View {
             return "An active routine already uses this name."
         }
         return nil
+    }
+
+    private var isActiveRoutine: Bool {
+        guard let activeRoutineId = practiceTimer.snapshot.activeRoutineId else { return false }
+        return draft.routineId == activeRoutineId
+    }
+
+    private var targetTextField: some View {
+        HStack(spacing: 8) {
+            TextField("Minutes", value: $draft.targetMinutes, format: .number)
+                #if os(iOS)
+                .keyboardType(.numberPad)
+                #endif
+                .multilineTextAlignment(.trailing)
+                .frame(minWidth: 72)
+            Text("minutes")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var targetStepper: some View {
+        Stepper(
+            "Target minutes",
+            value: $draft.targetMinutes,
+            in: 1...1_440
+        )
+        .labelsHidden()
+        .accessibilityLabel("Target minutes")
+        .accessibilityValue("\(draft.targetMinutes)")
     }
 
     private var orderedWeekdays: [PracticeWeekdayOption] {
@@ -454,7 +512,10 @@ private struct PracticeRoutineEditorView: View {
     }
 
     private func save() {
-        guard draft.canSave(comparedWith: viewModel.practiceRoutines) else { return }
+        guard draft.canSave(
+            comparedWith: viewModel.practiceRoutines,
+            activeRoutineId: practiceTimer.snapshot.activeRoutineId
+        ) else { return }
         do {
             if let routineId = draft.routineId {
                 _ = try viewModel.updatePracticeRoutine(

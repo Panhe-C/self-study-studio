@@ -78,6 +78,41 @@ final class PracticeStatisticsTests: XCTestCase {
         XCTAssertEqual(result.weekActiveSeconds, 600)
         XCTAssertEqual(result.allTimeActiveSeconds, 600)
     }
+
+    func testCrossMidnightSessionSplitsSavedAndLiveSecondsByCalendarDay() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.firstWeekday = 2
+        let routine = makeRoutine(targetMinutes: 10)
+        let startedAt = isoDate("2026-07-12T23:50:00Z")
+        let endedAt = isoDate("2026-07-13T00:10:00Z")
+        let session = PracticeSession(
+            routineId: routine.id,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 1_200
+        )
+
+        let result = PracticeStatistics.calculate(
+            routine: routine,
+            sessions: [session],
+            now: isoDate("2026-07-13T00:30:00Z"),
+            calendar: calendar
+        )
+        let liveTodaySeconds = PracticeStatistics.activeSeconds(
+            on: isoDate("2026-07-13T00:30:00Z"),
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 1_200,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(result.todayActiveSeconds, 600)
+        XCTAssertEqual(result.weekActiveSeconds, 600)
+        XCTAssertEqual(result.weekCompletionCount, 1)
+        XCTAssertEqual(result.allTimeActiveSeconds, 1_200)
+        XCTAssertEqual(liveTodaySeconds, result.todayActiveSeconds)
+    }
 }
 
 private func makeRoutine(targetMinutes: Int) -> PracticeRoutine {

@@ -63,7 +63,7 @@ public struct PracticeTimerSnapshot: Equatable, Sendable {
     )
 }
 
-public struct PracticeTimerCompletion: Equatable, Sendable {
+public struct PracticeTimerCompletion: Codable, Equatable, Sendable {
     public let routineId: UUID
     public let startedAt: Date
     public let endedAt: Date
@@ -82,9 +82,51 @@ public struct PracticeTimerCompletion: Equatable, Sendable {
     }
 }
 
+public struct PracticePendingCompletionDraft: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let completion: PracticeTimerCompletion
+    public var note: String
+    public var linkedProjectId: UUID?
+
+    public init(
+        id: UUID = UUID(),
+        completion: PracticeTimerCompletion,
+        note: String = "",
+        linkedProjectId: UUID? = nil
+    ) {
+        self.id = id
+        self.completion = completion
+        self.note = note
+        self.linkedProjectId = linkedProjectId
+    }
+}
+
 public enum PracticeTimerRuntimeError: Error, Equatable, Sendable {
     case invalidTargetSeconds
     case activeTimerAlreadyExists
+    case pendingCompletionExists
+    case pendingCompletionCouldNotClear
+}
+
+@MainActor
+public final class PracticeTimerLifecycleCoordinator {
+    private let runtime: PracticeTimerRuntime
+    private let feedback: @MainActor () -> Void
+
+    public init(
+        runtime: PracticeTimerRuntime,
+        feedback: @escaping @MainActor () -> Void = {}
+    ) {
+        self.runtime = runtime
+        self.feedback = feedback
+    }
+
+    public func refresh(deliverFeedback: Bool) {
+        runtime.refresh()
+        if deliverFeedback, runtime.consumeTargetCrossing() {
+            feedback()
+        }
+    }
 }
 
 struct PersistedPracticeTimerState: Codable, Equatable {
@@ -96,6 +138,18 @@ struct PersistedPracticeTimerState: Codable, Equatable {
     var targetFeedbackConsumed: Bool
 }
 
+private struct PersistedPracticeTimerLocalState: Codable, Equatable {
+    let version: Int
+    var active: PersistedPracticeTimerState?
+    var pending: PracticePendingCompletionDraft?
+
+    init(active: PersistedPracticeTimerState?, pending: PracticePendingCompletionDraft?) {
+        version = 1
+        self.active = active
+        self.pending = pending
+    }
+}
+
 @MainActor
 public final class PracticeTimerRuntime: ObservableObject {
     private let store: any PracticeTimerStateStore
@@ -104,6 +158,8 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     private var activeState: PersistedPracticeTimerState?
     @Published public private(set) var snapshot: PracticeTimerSnapshot
+    @Published public private(set) var pendingCompletion: PracticePendingCompletionDraft?
+    @Published public private(set) var lastRefreshDate: Date
 
     public init(
         store: any PracticeTimerStateStore,
@@ -111,10 +167,13 @@ public final class PracticeTimerRuntime: ObservableObject {
     ) {
         self.store = store
         self.now = now
+        let timestamp = now()
         let persistedData = store.load()
-        let recoveredState = Self.recoverState(from: persistedData, at: now())
-        activeState = recoveredState
-        snapshot = Self.makeSnapshot(for: recoveredState, at: now())
+        let recoveredState = Self.recoverLocalState(from: persistedData, at: timestamp)
+        activeState = recoveredState?.active
+        pendingCompletion = recoveredState?.pending
+        snapshot = Self.makeSnapshot(for: recoveredState?.active, at: timestamp)
+        lastRefreshDate = timestamp
 
         if persistedData != nil, recoveredState == nil {
             try? store.save(nil)
@@ -125,8 +184,12 @@ public final class PracticeTimerRuntime: ObservableObject {
         guard targetSeconds > 0 else {
             throw PracticeTimerRuntimeError.invalidTargetSeconds
         }
+        guard pendingCompletion == nil else {
+            throw PracticeTimerRuntimeError.pendingCompletionExists
+        }
         if activeState != nil {
             let timestamp = now()
+            lastRefreshDate = timestamp
             _ = validActiveState(at: timestamp)
             if activeState != nil {
                 throw PracticeTimerRuntimeError.activeTimerAlreadyExists
@@ -134,6 +197,7 @@ public final class PracticeTimerRuntime: ObservableObject {
         }
 
         let timestamp = now()
+        lastRefreshDate = timestamp
         let state = PersistedPracticeTimerState(
             routineId: routineId,
             startedAt: timestamp,
@@ -149,6 +213,7 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     public func pause() {
         let timestamp = now()
+        lastRefreshDate = timestamp
         guard var state = validActiveState(at: timestamp), let resumedAt = state.resumedAt else {
             return
         }
@@ -160,6 +225,7 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     public func resume() {
         let timestamp = now()
+        lastRefreshDate = timestamp
         guard var state = validActiveState(at: timestamp), state.resumedAt == nil else {
             return
         }
@@ -170,6 +236,7 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     public func refresh() {
         let timestamp = now()
+        lastRefreshDate = timestamp
         guard let state = validActiveState(at: timestamp) else {
             if activeState == nil {
                 snapshot = .inactive
@@ -181,6 +248,7 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     public func consumeTargetCrossing() -> Bool {
         let timestamp = now()
+        lastRefreshDate = timestamp
         guard var state = validActiveState(at: timestamp),
               !state.targetFeedbackConsumed,
               Self.elapsedSeconds(for: state, at: timestamp) >= state.targetSeconds else {
@@ -193,6 +261,7 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     public func finish() -> PracticeTimerCompletion? {
         let timestamp = now()
+        lastRefreshDate = timestamp
         guard let state = validActiveState(at: timestamp) else {
             return nil
         }
@@ -203,28 +272,62 @@ public final class PracticeTimerRuntime: ObservableObject {
             endedAt: timestamp,
             activeDurationSeconds: Self.elapsedSeconds(for: state, at: timestamp)
         )
+        let pending = PracticePendingCompletionDraft(completion: completion)
         do {
-            try store.save(nil)
+            try saveLocalState(active: nil, pending: pending)
         } catch {
             snapshot = Self.makeSnapshot(for: state, at: timestamp)
             return nil
         }
-        clearActiveState()
+        activeState = nil
+        pendingCompletion = pending
+        snapshot = .inactive
         return completion
     }
 
     public func discard() {
         let timestamp = now()
+        lastRefreshDate = timestamp
         guard let state = validActiveState(at: timestamp) else {
             return
         }
         do {
-            try store.save(nil)
+            try saveLocalState(active: nil, pending: pendingCompletion)
         } catch {
             snapshot = Self.makeSnapshot(for: state, at: timestamp)
             return
         }
         clearActiveState()
+    }
+
+    @discardableResult
+    public func updatePendingCompletion(note: String, linkedProjectId: UUID?) -> Bool {
+        let timestamp = now()
+        lastRefreshDate = timestamp
+        guard var pendingCompletion else { return false }
+        pendingCompletion.note = note
+        pendingCompletion.linkedProjectId = linkedProjectId
+        do {
+            try saveLocalState(active: activeState, pending: pendingCompletion)
+        } catch {
+            return false
+        }
+        self.pendingCompletion = pendingCompletion
+        return true
+    }
+
+    @discardableResult
+    public func clearPendingCompletion() -> Bool {
+        let timestamp = now()
+        lastRefreshDate = timestamp
+        guard pendingCompletion != nil else { return true }
+        do {
+            try saveLocalState(active: activeState, pending: nil)
+        } catch {
+            return false
+        }
+        pendingCompletion = nil
+        return true
     }
 
     @discardableResult
@@ -243,7 +346,18 @@ public final class PracticeTimerRuntime: ObservableObject {
     }
 
     private func save(_ state: PersistedPracticeTimerState) throws {
-        try store.save(encoder.encode(state))
+        try saveLocalState(active: state, pending: pendingCompletion)
+    }
+
+    private func saveLocalState(
+        active: PersistedPracticeTimerState?,
+        pending: PracticePendingCompletionDraft?
+    ) throws {
+        if active == nil, pending == nil {
+            try store.save(nil)
+            return
+        }
+        try store.save(encoder.encode(PersistedPracticeTimerLocalState(active: active, pending: pending)))
     }
 
     private func validActiveState(at timestamp: Date) -> PersistedPracticeTimerState? {
@@ -259,7 +373,7 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     private func discardInvalidState() {
         do {
-            try store.save(nil)
+            try saveLocalState(active: nil, pending: pendingCompletion)
         } catch {
             snapshot = .inactive
             return
@@ -299,13 +413,39 @@ public final class PracticeTimerRuntime: ObservableObject {
         max(0, Int(end.timeIntervalSince(start)))
     }
 
-    private static func recoverState(from data: Data?, at now: Date) -> PersistedPracticeTimerState? {
-        guard let data,
-              let state = try? JSONDecoder().decode(PersistedPracticeTimerState.self, from: data),
-              isValid(state, at: now) else {
-            return nil
+    private static func recoverLocalState(
+        from data: Data?,
+        at now: Date
+    ) -> PersistedPracticeTimerLocalState? {
+        guard let data else {
+            return PersistedPracticeTimerLocalState(active: nil, pending: nil)
         }
-        return state
+
+        if let localState = try? JSONDecoder().decode(PersistedPracticeTimerLocalState.self, from: data),
+           isValid(localState, at: now) {
+            return localState
+        }
+
+        if let legacyActive = try? JSONDecoder().decode(PersistedPracticeTimerState.self, from: data),
+           isValid(legacyActive, at: now) {
+            return PersistedPracticeTimerLocalState(active: legacyActive, pending: nil)
+        }
+        return nil
+    }
+
+    private static func isValid(_ state: PersistedPracticeTimerLocalState, at now: Date) -> Bool {
+        guard state.version == 1, state.active == nil || state.pending == nil else { return false }
+        let activeIsValid = state.active.map { isValid($0, at: now) } ?? true
+        let pendingIsValid = state.pending.map { isValid($0) } ?? true
+        return activeIsValid && pendingIsValid
+    }
+
+    private static func isValid(_ pending: PracticePendingCompletionDraft) -> Bool {
+        let completion = pending.completion
+        let wallClockDuration = completion.endedAt.timeIntervalSince(completion.startedAt)
+        return wallClockDuration >= 0
+            && completion.activeDurationSeconds >= 0
+            && Double(completion.activeDurationSeconds) <= wallClockDuration + 1
     }
 
     private static func isValid(_ state: PersistedPracticeTimerState, at now: Date) -> Bool {

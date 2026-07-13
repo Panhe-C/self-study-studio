@@ -425,18 +425,20 @@ final class JournalViewModelTests: XCTestCase {
         )
 
         try viewModel.startPractice(routine)
-        let updated = try viewModel.updatePracticeRoutine(
-            routineId: routine.id,
-            name: "Acoustic Guitar",
-            symbolName: "music.note",
-            color: .blue,
-            targetMinutes: 45,
-            weekdays: [2, 4]
+        XCTAssertThrowsError(
+            try viewModel.updatePracticeRoutine(
+                routineId: routine.id,
+                name: "Acoustic Guitar",
+                symbolName: "music.note",
+                color: .blue,
+                targetMinutes: 45,
+                weekdays: [2, 4]
+            )
         )
 
         XCTAssertTrue(viewModel.practiceTimer === runtime)
         XCTAssertEqual(viewModel.practiceTimer.snapshot.activeRoutineId, routine.id)
-        XCTAssertEqual(viewModel.practiceRoutines.first?.name, updated.name)
+        XCTAssertEqual(viewModel.practiceRoutines.first?.name, routine.name)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let monday = try XCTUnwrap(
@@ -447,6 +449,15 @@ final class JournalViewModelTests: XCTestCase {
         )
 
         viewModel.discardPractice()
+        let updated = try viewModel.updatePracticeRoutine(
+            routineId: routine.id,
+            name: "Acoustic Guitar",
+            symbolName: "music.note",
+            color: .blue,
+            targetMinutes: 45,
+            weekdays: [2, 4]
+        )
+        XCTAssertEqual(viewModel.practiceRoutines.first?.name, updated.name)
         _ = try viewModel.archivePracticeRoutine(routine.id)
         XCTAssertTrue(viewModel.practiceRoutines[0].isArchived)
         try viewModel.deletePracticeRoutineIfUnused(routine.id)

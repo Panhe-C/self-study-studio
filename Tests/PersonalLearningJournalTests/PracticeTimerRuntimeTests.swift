@@ -52,7 +52,7 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         XCTAssertFalse(PracticeTimerRuntime(store: store, now: clock.now).consumeTargetCrossing())
     }
 
-    func testFinishReturnsImmutableCompletionAndClearsActiveState() throws {
+    func testFinishReturnsImmutableCompletionAndPersistsPendingDraft() throws {
         let clock = TestClock(now: Date(timeIntervalSince1970: 100))
         let store = InMemoryPracticeTimerStateStore()
         let runtime = PracticeTimerRuntime(store: store, now: clock.now)
@@ -71,8 +71,12 @@ final class PracticeTimerRuntimeTests: XCTestCase {
             )
         )
         XCTAssertNil(runtime.snapshot.activeRoutineId)
-        XCTAssertNil(store.data)
+        XCTAssertNotNil(store.data)
+        XCTAssertEqual(runtime.pendingCompletion?.completion.activeDurationSeconds, 12)
         XCTAssertNil(runtime.finish())
+
+        XCTAssertTrue(runtime.clearPendingCompletion())
+        XCTAssertNil(store.data)
     }
 
     func testDiscardClearsActiveStateWithoutCompletion() throws {

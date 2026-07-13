@@ -587,6 +587,9 @@ public final class JournalViewModel: ObservableObject {
         weekdays: Set<Int>,
         reminderTime: PracticeReminderTime? = nil
     ) throws -> PracticeRoutine {
+        guard practiceTimer.snapshot.activeRoutineId != routineId else {
+            throw PracticeServiceError.activeRoutineCannotBeModified
+        }
         let routine = try practiceService.updateRoutine(
             routineId: routineId,
             name: name,
@@ -602,12 +605,18 @@ public final class JournalViewModel: ObservableObject {
 
     @discardableResult
     public func archivePracticeRoutine(_ routineId: UUID) throws -> PracticeRoutine {
+        guard practiceTimer.snapshot.activeRoutineId != routineId else {
+            throw PracticeServiceError.activeRoutineCannotBeModified
+        }
         let routine = try practiceService.archiveRoutine(routineId)
         refresh()
         return routine
     }
 
     public func deletePracticeRoutineIfUnused(_ routineId: UUID) throws {
+        guard practiceTimer.snapshot.activeRoutineId != routineId else {
+            throw PracticeServiceError.activeRoutineCannotBeModified
+        }
         try practiceService.deleteRoutineIfUnused(routineId)
         refresh()
     }
@@ -625,7 +634,10 @@ public final class JournalViewModel: ObservableObject {
         linkedProjectId: UUID?,
         note: String?
     ) throws -> PracticeSessionSaveResult {
+        let pending = practiceTimer.pendingCompletion
+        let pendingMatchesCompletion = pending?.completion == completion
         let result = try practiceService.saveSession(
+            sessionId: pendingMatchesCompletion ? pending!.id : UUID(),
             routineId: completion.routineId,
             linkedProjectId: linkedProjectId,
             startedAt: completion.startedAt,
@@ -634,6 +646,9 @@ public final class JournalViewModel: ObservableObject {
             note: note
         )
         refresh()
+        if pendingMatchesCompletion, !practiceTimer.clearPendingCompletion() {
+            throw PracticeTimerRuntimeError.pendingCompletionCouldNotClear
+        }
         return result
     }
 

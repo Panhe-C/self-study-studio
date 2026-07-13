@@ -1,69 +1,16 @@
 import SwiftUI
 
-#if canImport(UIKit)
-import UIKit
-#endif
-
-struct PracticeFinishDraft: Equatable {
-    let completion: PracticeTimerCompletion
-    var note: String
-    var linkedProjectId: UUID?
-    private(set) var errorMessage: String?
-    private(set) var fallbackExplanation: String?
-    private(set) var isSaved = false
-
-    init(
-        completion: PracticeTimerCompletion,
-        note: String = "",
-        linkedProjectId: UUID? = nil
-    ) {
-        self.completion = completion
-        self.note = note
-        self.linkedProjectId = linkedProjectId
-    }
-
-    @discardableResult
-    mutating func submit(
-        using save: (
-            _ completion: PracticeTimerCompletion,
-            _ linkedProjectId: UUID?,
-            _ note: String?
-        ) throws -> PracticeSessionSaveResult
-    ) -> Bool {
-        errorMessage = nil
-        fallbackExplanation = nil
-        do {
-            let result = try save(
-                completion,
-                linkedProjectId,
-                note.trimmedForJournal.nilIfEmpty
-            )
-            isSaved = true
-            if result.didDropMissingProjectLink {
-                linkedProjectId = nil
-                fallbackExplanation = "The linked project is no longer available. The practice session was saved without a project link."
-            }
-            return true
-        } catch {
-            isSaved = false
-            errorMessage = error.localizedDescription
-            return false
-        }
-    }
-
-    mutating func clearError() {
-        errorMessage = nil
-    }
-}
-
 public struct PracticeTimerView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject private var viewModel: JournalViewModel
     @ObservedObject private var timer: PracticeTimerRuntime
     private let routine: PracticeRoutine
 
-    @State private var finishDraft: PracticeFinishDraft?
     @State private var timerError: String?
+    @State private var saveError: String?
+    @State private var fallbackExplanation: String?
+    @State private var isSaving = false
     @State private var showingDiscardConfirmation = false
     @State private var showingFallbackExplanation = false
 
@@ -76,17 +23,17 @@ public struct PracticeTimerView: View {
     public var body: some View {
         NavigationStack {
             Group {
-                if let finishDraft {
-                    finishContent(finishDraft)
+                if let pendingDraft {
+                    finishContent(pendingDraft)
                 } else if timer.snapshot.activeRoutineId == routine.id {
                     timerContent
                 } else {
                     unavailableContent
                 }
             }
-            .navigationTitle(finishDraft == nil ? "Practice" : "Finish Practice")
+            .navigationTitle(pendingDraft == nil ? "Practice" : "Finish Practice")
             .toolbar {
-                if finishDraft == nil {
+                if pendingDraft == nil {
                     ToolbarItem(placement: .cancellationAction) {
                         Button {
                             dismiss()
@@ -98,10 +45,10 @@ public struct PracticeTimerView: View {
                 }
             }
         }
-        .interactiveDismissDisabled(finishDraft != nil)
+        .interactiveDismissDisabled(pendingDraft != nil)
         .onAppear(perform: prepareTimer)
         .confirmationDialog(
-            finishDraft == nil ? "Discard this practice timer?" : "Discard this completed practice?",
+            pendingDraft == nil ? "Discard this practice timer?" : "Discard this completed practice?",
             isPresented: $showingDiscardConfirmation,
             titleVisibility: .visible
         ) {
@@ -116,14 +63,14 @@ public struct PracticeTimerView: View {
             Text(timerError ?? "The practice timer could not be opened.")
         }
         .alert("Could Not Save Practice", isPresented: saveErrorPresented) {
-            Button("OK") { finishDraft?.clearError() }
+            Button("OK") { saveError = nil }
         } message: {
-            Text(finishDraft?.errorMessage ?? "The practice session could not be saved.")
+            Text(saveError ?? "The practice session could not be saved.")
         }
         .alert("Project Link Removed", isPresented: $showingFallbackExplanation) {
             Button("Done") { dismiss() }
         } message: {
-            Text(finishDraft?.fallbackExplanation ?? "The practice session was saved without a project link.")
+            Text(fallbackExplanation ?? "The practice session was saved without a project link.")
         }
     }
 
@@ -179,10 +126,9 @@ public struct PracticeTimerView: View {
                     .font(.title2.bold())
                     .multilineTextAlignment(.center)
                 Text(StudioDurationFormat.clock(seconds: snapshot.activeElapsedSeconds))
-                    .font(.system(.largeTitle, design: .monospaced).weight(.semibold))
+                    .font(.system(elapsedTextStyle, design: .monospaced).weight(.semibold))
                     .monospacedDigit()
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
                     .accessibilityLabel("Elapsed time")
                     .accessibilityValue(StudioDurationFormat.compact(seconds: snapshot.activeElapsedSeconds))
                 Text("Target \(StudioDurationFormat.compact(seconds: snapshot.targetSeconds))")
@@ -228,7 +174,11 @@ public struct PracticeTimerView: View {
         .frame(height: StudioTheme.practiceControlSize + 18)
     }
 
-    private func finishContent(_ draft: PracticeFinishDraft) -> some View {
+    private var elapsedTextStyle: Font.TextStyle {
+        dynamicTypeSize.isAccessibilitySize ? .title2 : .largeTitle
+    }
+
+    private func finishContent(_ draft: PracticePendingCompletionDraft) -> some View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
@@ -267,7 +217,7 @@ public struct PracticeTimerView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(StudioTheme.practiceColor(routine.color))
-                .disabled(draft.isSaved)
+                .disabled(isSaving)
 
                 Button(role: .destructive) {
                     showingDiscardConfirmation = true
@@ -295,8 +245,13 @@ public struct PracticeTimerView: View {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    private var pendingDraft: PracticePendingCompletionDraft? {
+        guard timer.pendingCompletion?.completion.routineId == routine.id else { return nil }
+        return timer.pendingCompletion
+    }
+
     private var missingSelectedProjectID: UUID? {
-        guard let projectID = finishDraft?.linkedProjectId,
+        guard let projectID = pendingDraft?.linkedProjectId,
               !availableProjects.contains(where: { $0.id == projectID }) else {
             return nil
         }
@@ -305,17 +260,17 @@ public struct PracticeTimerView: View {
 
     private var noteBinding: Binding<String> {
         Binding {
-            finishDraft?.note ?? ""
+            pendingDraft?.note ?? ""
         } set: { newValue in
-            finishDraft?.note = newValue
+            updatePendingDraft(note: newValue, linkedProjectId: pendingDraft?.linkedProjectId)
         }
     }
 
     private var projectBinding: Binding<UUID?> {
         Binding {
-            finishDraft?.linkedProjectId
+            pendingDraft?.linkedProjectId
         } set: { newValue in
-            finishDraft?.linkedProjectId = newValue
+            updatePendingDraft(note: pendingDraft?.note ?? "", linkedProjectId: newValue)
         }
     }
 
@@ -329,13 +284,19 @@ public struct PracticeTimerView: View {
 
     private var saveErrorPresented: Binding<Bool> {
         Binding {
-            finishDraft?.errorMessage != nil
+            saveError != nil
         } set: { isPresented in
-            if !isPresented { finishDraft?.clearError() }
+            if !isPresented { saveError = nil }
         }
     }
 
     private func prepareTimer() {
+        if let pending = timer.pendingCompletion {
+            if pending.completion.routineId != routine.id {
+                timerError = "Save or discard the completed practice before starting \(routine.name)."
+            }
+            return
+        }
         do {
             if timer.snapshot.activeRoutineId == nil {
                 try viewModel.startPractice(routine)
@@ -350,32 +311,21 @@ public struct PracticeTimerView: View {
     }
 
     private func refreshTimer() {
-        guard finishDraft == nil, timer.snapshot.activeRoutineId == routine.id else { return }
+        guard pendingDraft == nil, timer.snapshot.activeRoutineId == routine.id else { return }
         timer.refresh()
-        if timer.consumeTargetCrossing() {
-            sendTargetHaptic()
-        }
-    }
-
-    private func sendTargetHaptic() {
-        #if canImport(UIKit)
-        let generator = UINotificationFeedbackGenerator()
-        generator.prepare()
-        generator.notificationOccurred(.success)
-        #endif
     }
 
     private func finishPractice() {
         refreshTimer()
-        guard let completion = timer.finish() else {
+        guard timer.finish() != nil else {
             timerError = "The timer could not finish. Your active practice is still available to retry."
             return
         }
-        finishDraft = PracticeFinishDraft(completion: completion)
     }
 
     private func requestDiscard() {
-        if timer.snapshot.activeElapsedSeconds > 0 {
+        timer.refresh()
+        if pendingDraft != nil || timer.snapshot.activeElapsedSeconds > 0 {
             showingDiscardConfirmation = true
         } else {
             discardPractice()
@@ -383,28 +333,50 @@ public struct PracticeTimerView: View {
     }
 
     private func discardPractice() {
-        if finishDraft == nil {
+        if pendingDraft != nil {
+            guard timer.clearPendingCompletion() else {
+                saveError = "The completed practice could not be discarded from this device. It is still available to retry."
+                return
+            }
+        } else {
             viewModel.discardPractice()
+            guard timer.snapshot.activeRoutineId == nil else {
+                timerError = "The timer could not be discarded. Your active practice is still available."
+                return
+            }
         }
         dismiss()
     }
 
     private func saveCompletion() {
-        guard var draft = finishDraft else { return }
-        let didSave = draft.submit { completion, linkedProjectId, note in
-            try viewModel.savePracticeCompletion(
-                completion,
-                linkedProjectId: linkedProjectId,
-                note: note
+        guard let draft = pendingDraft, !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let result = try viewModel.savePracticeCompletion(
+                draft.completion,
+                linkedProjectId: draft.linkedProjectId,
+                note: draft.note.trimmedForJournal.nilIfEmpty
             )
+            if result.didDropMissingProjectLink {
+                fallbackExplanation = "The linked project is no longer available. The practice session was saved without a project link."
+            }
+        } catch {
+            saveError = error.localizedDescription
+            return
         }
-        finishDraft = draft
 
-        guard didSave else { return }
-        if draft.fallbackExplanation != nil {
+        if fallbackExplanation != nil {
             showingFallbackExplanation = true
         } else {
             dismiss()
+        }
+    }
+
+    private func updatePendingDraft(note: String, linkedProjectId: UUID?) {
+        guard timer.updatePendingCompletion(note: note, linkedProjectId: linkedProjectId) else {
+            saveError = "The completion details could not be preserved on this device. Your previous draft is still available."
+            return
         }
     }
 }
