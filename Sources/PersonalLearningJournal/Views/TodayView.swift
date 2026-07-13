@@ -55,6 +55,7 @@ public struct TodayView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: StudioTheme.sectionSpacing) {
                 todayHeader
+                firstRecordSection
                 rhythmSection
                 focusSection
                 practiceSection
@@ -272,6 +273,32 @@ public struct TodayView: View {
                 .foregroundStyle(StudioTheme.accent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var firstRecordSection: some View {
+        if let project = viewModel.pendingFirstRecordProject {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("FIRST RECORD")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(project.name)
+                    .font(.headline)
+                Text(project.currentNextStep)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button {
+                    quickLogProject = project
+                } label: {
+                    Label("Record First Session", systemImage: "square.and.pencil")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(StudioTheme.accent)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.background, in: RoundedRectangle(cornerRadius: 8))
+        }
     }
 
     private var rhythmSection: some View {

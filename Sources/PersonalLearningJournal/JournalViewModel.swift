@@ -119,6 +119,10 @@ public final class JournalViewModel: ObservableObject {
         snapshot.hasCompletedOnboarding
     }
 
+    public var shouldShowMainTabs: Bool {
+        hasCompletedOnboarding || !projects.isEmpty
+    }
+
     public var pendingFirstRecordProject: Project? {
         guard let projectId = snapshot.pendingFirstRecordProjectId else { return nil }
         return snapshot.projects.first { $0.id == projectId }

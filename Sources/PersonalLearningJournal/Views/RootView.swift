@@ -19,7 +19,7 @@ public struct RootView: View {
 
     public var body: some View {
         Group {
-            if viewModel.hasCompletedOnboarding {
+            if viewModel.shouldShowMainTabs {
                 TabView {
                     NavigationStack {
                         TodayView(viewModel: viewModel)

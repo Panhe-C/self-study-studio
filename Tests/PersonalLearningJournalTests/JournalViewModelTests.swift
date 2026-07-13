@@ -4,6 +4,41 @@ import XCTest
 
 @MainActor
 final class JournalViewModelTests: XCTestCase {
+    func testMainTabsAppearAfterProjectCreationBeforeFirstRecord() throws {
+        let viewModel = makeViewModel()
+
+        XCTAssertFalse(viewModel.shouldShowMainTabs)
+
+        _ = try viewModel.onboardProject(
+            name: "CS336",
+            area: "AI",
+            goal: "复现课程",
+            nextStep: "整理 perplexity"
+        )
+
+        XCTAssertFalse(viewModel.hasCompletedOnboarding)
+        XCTAssertNotNil(viewModel.pendingFirstRecordProject)
+        XCTAssertTrue(viewModel.shouldShowMainTabs)
+    }
+
+    func testMainTabsRemainVisibleAfterOnboardingCompletes() throws {
+        let viewModel = makeViewModel()
+        let project = try viewModel.onboardProject(
+            name: "CS336",
+            area: "AI",
+            goal: "复现课程",
+            nextStep: "整理 perplexity"
+        )
+        _ = try viewModel.quickLog(
+            projectId: project.id,
+            durationMinutes: 20,
+            note: "First session"
+        )
+
+        XCTAssertTrue(viewModel.hasCompletedOnboarding)
+        XCTAssertTrue(viewModel.shouldShowMainTabs)
+    }
+
     @MainActor
     func testSyncSummaryShowsQueuedChangesAndConflictCount() async throws {
         let repository = InMemoryJournalRepository()
