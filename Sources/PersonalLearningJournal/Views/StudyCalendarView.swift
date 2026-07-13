@@ -13,10 +13,28 @@ public struct StudyCalendarView: View {
     public var body: some View {
         VStack(spacing: 0) {
             controls
+            if attentionCount > 0 {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.circle")
+                        .foregroundStyle(StudioTheme.notice)
+                    Text("\(attentionCount) sessions need attention")
+                        .font(.subheadline.weight(.medium))
+                    Spacer()
+                    Button("Review") {
+                        if viewModel.scheduleDraft != nil { showingDraft = true } else { generateDraft() }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .tint(StudioTheme.notice)
+                }
+                .padding(.horizontal, StudioTheme.pageInset)
+                .padding(.vertical, 11)
+                .background(StudioTheme.notice.opacity(0.08))
+            }
             Divider()
             calendarContent
         }
-        .navigationTitle(title)
+        .background(StudioTheme.pageBackground.ignoresSafeArea())
+        .navigationTitle("Calendar")
         .toolbar {
             ToolbarItem(placement: .secondaryAction) {
                 NavigationLink {
@@ -60,7 +78,7 @@ public struct StudyCalendarView: View {
     }
 
     private var controls: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 14) {
             Picker("Calendar mode", selection: modeBinding) {
                 ForEach(StudyCalendarMode.allCases, id: \.self) { mode in
                     Text(mode.rawValue.capitalized).tag(mode)
@@ -74,8 +92,12 @@ public struct StudyCalendarView: View {
                 }
                 .help("Previous")
                 Spacer()
-                Button("Today") { viewModel.goToToday() }
-                    .font(.subheadline.weight(.semibold))
+                VStack(spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                    Button("Today") { viewModel.goToToday() }
+                        .font(.caption.weight(.semibold))
+                }
                 Spacer()
                 Button { viewModel.navigateNext() } label: {
                     Image(systemName: "chevron.right")
@@ -84,7 +106,14 @@ public struct StudyCalendarView: View {
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
+        .background(.background)
+    }
+
+    private var attentionCount: Int {
+        viewModel.unscheduledItems.count
+            + (viewModel.scheduleDraft?.conflicts.count ?? 0)
+            + viewModel.reconciliationItems.count
     }
 
     @ViewBuilder
