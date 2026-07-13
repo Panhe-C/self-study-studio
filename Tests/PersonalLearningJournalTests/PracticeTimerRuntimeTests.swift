@@ -1,0 +1,201 @@
+import Foundation
+import XCTest
+@testable import PersonalLearningJournal
+
+@MainActor
+final class PracticeTimerRuntimeTests: XCTestCase {
+    func testStartRejectsInvalidTargetsAndASecondActiveTimer() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let runtime = PracticeTimerRuntime(store: InMemoryPracticeTimerStateStore(), now: clock.now)
+
+        XCTAssertThrowsError(try runtime.start(routineId: UUID(), targetSeconds: 0))
+
+        try runtime.start(routineId: UUID(), targetSeconds: 30)
+        XCTAssertThrowsError(try runtime.start(routineId: UUID(), targetSeconds: 30))
+    }
+
+    func testPauseResumeAndBackgroundTimeAreDerivedFromDates() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+        let routineID = UUID()
+
+        try runtime.start(routineId: routineID, targetSeconds: 30)
+        clock.advance(by: 20)
+        runtime.pause()
+        clock.advance(by: 100)
+        XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 20)
+        XCTAssertFalse(runtime.snapshot.isRunning)
+
+        runtime.resume()
+        clock.advance(by: 10)
+        XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 30)
+        XCTAssertTrue(runtime.snapshot.isRunning)
+        XCTAssertEqual(runtime.snapshot.activeRoutineId, routineID)
+    }
+
+    func testTargetCrossingFiresOnceWithoutStoppingTimer() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+
+        try runtime.start(routineId: UUID(), targetSeconds: 10)
+        clock.advance(by: 11)
+
+        XCTAssertTrue(runtime.consumeTargetCrossing())
+        XCTAssertFalse(runtime.consumeTargetCrossing())
+        XCTAssertTrue(runtime.snapshot.isRunning)
+        XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 11)
+        XCTAssertFalse(PracticeTimerRuntime(store: store, now: clock.now).consumeTargetCrossing())
+    }
+
+    func testFinishReturnsImmutableCompletionAndClearsActiveState() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+        let routineID = UUID()
+
+        try runtime.start(routineId: routineID, targetSeconds: 30)
+        clock.advance(by: 12)
+
+        XCTAssertEqual(
+            runtime.finish(),
+            PracticeTimerCompletion(
+                routineId: routineID,
+                startedAt: Date(timeIntervalSince1970: 100),
+                endedAt: Date(timeIntervalSince1970: 112),
+                activeDurationSeconds: 12
+            )
+        )
+        XCTAssertNil(runtime.snapshot.activeRoutineId)
+        XCTAssertNil(store.data)
+        XCTAssertNil(runtime.finish())
+    }
+
+    func testDiscardClearsActiveStateWithoutCompletion() throws {
+        let store = InMemoryPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: { Date(timeIntervalSince1970: 100) })
+
+        try runtime.start(routineId: UUID(), targetSeconds: 30)
+        runtime.discard()
+
+        XCTAssertNil(runtime.snapshot.activeRoutineId)
+        XCTAssertNil(store.data)
+    }
+
+    func testRelaunchRecoversValidPersistedState() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let routineID = UUID()
+
+        let firstRuntime = PracticeTimerRuntime(store: store, now: clock.now)
+        try firstRuntime.start(routineId: routineID, targetSeconds: 60)
+        clock.advance(by: 15)
+
+        let recoveredRuntime = PracticeTimerRuntime(store: store, now: clock.now)
+        XCTAssertEqual(recoveredRuntime.snapshot.activeRoutineId, routineID)
+        XCTAssertEqual(recoveredRuntime.snapshot.activeElapsedSeconds, 15)
+        XCTAssertTrue(recoveredRuntime.snapshot.isRunning)
+    }
+
+    func testRecoveryRejectsCorruptionAndImpossibleTimestamps() throws {
+        let now = Date(timeIntervalSince1970: 100)
+        let store = InMemoryPracticeTimerStateStore()
+        store.data = Data("not-json".utf8)
+        XCTAssertNil(PracticeTimerRuntime(store: store, now: { now }).snapshot.activeRoutineId)
+        XCTAssertNil(store.data)
+
+        let invalidStates = [
+            PersistedPracticeTimerState(
+                routineId: UUID(),
+                startedAt: Date(timeIntervalSince1970: 101),
+                accumulatedActiveSeconds: 0,
+                resumedAt: Date(timeIntervalSince1970: 101),
+                targetSeconds: 30,
+                targetFeedbackConsumed: false
+            ),
+            PersistedPracticeTimerState(
+                routineId: UUID(),
+                startedAt: Date(timeIntervalSince1970: 90),
+                accumulatedActiveSeconds: -1,
+                resumedAt: nil,
+                targetSeconds: 30,
+                targetFeedbackConsumed: false
+            ),
+            PersistedPracticeTimerState(
+                routineId: UUID(),
+                startedAt: Date(timeIntervalSince1970: 90),
+                accumulatedActiveSeconds: 0,
+                resumedAt: nil,
+                targetSeconds: 0,
+                targetFeedbackConsumed: false
+            ),
+            PersistedPracticeTimerState(
+                routineId: UUID(),
+                startedAt: Date(timeIntervalSince1970: 90),
+                accumulatedActiveSeconds: 20,
+                resumedAt: Date(timeIntervalSince1970: 101),
+                targetSeconds: 30,
+                targetFeedbackConsumed: false
+            ),
+            PersistedPracticeTimerState(
+                routineId: UUID(),
+                startedAt: Date(timeIntervalSince1970: 95),
+                accumulatedActiveSeconds: 20,
+                resumedAt: nil,
+                targetSeconds: 30,
+                targetFeedbackConsumed: false
+            )
+        ]
+
+        for state in invalidStates {
+            store.data = try JSONEncoder().encode(state)
+            XCTAssertNil(PracticeTimerRuntime(store: store, now: { now }).snapshot.activeRoutineId)
+            XCTAssertNil(store.data)
+        }
+    }
+
+    func testUserDefaultsStateStoreRoundTripsAndClearsData() throws {
+        let suiteName = "PracticeTimerRuntimeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = UserDefaultsPracticeTimerStateStore(userDefaults: defaults)
+        let data = Data("timer-state".utf8)
+
+        try store.save(data)
+        XCTAssertEqual(store.load(), data)
+
+        try store.save(nil)
+        XCTAssertNil(store.load())
+    }
+}
+
+@MainActor
+private final class TestClock {
+    private(set) var current: Date
+
+    init(now: Date) {
+        current = now
+    }
+
+    func now() -> Date {
+        current
+    }
+
+    func advance(by seconds: TimeInterval) {
+        current = current.addingTimeInterval(seconds)
+    }
+}
+
+@MainActor
+private final class InMemoryPracticeTimerStateStore: PracticeTimerStateStore {
+    var data: Data?
+
+    func load() -> Data? {
+        data
+    }
+
+    func save(_ data: Data?) throws {
+        self.data = data
+    }
+}
