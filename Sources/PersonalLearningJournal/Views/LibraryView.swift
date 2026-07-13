@@ -6,45 +6,64 @@ public struct LibraryView: View {
     @State private var isChoosingProjectForProof = false
     @State private var projectForProof: Project?
     @State private var notice: LibraryNotice?
+    @State private var selectedFilter: StudioLibraryFilter = .evidence
+    @State private var searchText = ""
 
     public init(viewModel: JournalViewModel) {
         self.viewModel = viewModel
     }
 
     public var body: some View {
-        List {
-            Section {
-                Picker("View", selection: $grouping) {
-                    ForEach(LibraryGrouping.allCases) { grouping in
-                        Text(grouping.rawValue).tag(grouping)
-                    }
+        VStack(spacing: 0) {
+            Picker("Library mode", selection: $selectedFilter) {
+                ForEach(StudioLibraryFilter.allCases) { filter in
+                    Text(filter.title).tag(filter)
                 }
-                .pickerStyle(.segmented)
             }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, StudioTheme.pageInset)
+            .padding(.vertical, 12)
 
-            ForEach(sectionedProofs) { section in
-                Section(section.title) {
-                    ForEach(section.proofs) { proof in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    if let review = viewModel.reviews.last {
                         NavigationLink {
-                            ProofDetailView(
-                                proof: proof,
-                                projectName: projectName(for: proof),
-                                sessionSummary: sessionSummary(for: proof)
-                            )
+                            ReviewView(viewModel: viewModel, review: review)
                         } label: {
-                            ProofRow(
-                                proof: proof,
-                                projectName: projectName(for: proof),
-                                sessionSummary: sessionSummary(for: proof)
-                            )
+                            reviewBanner(review)
                         }
+                        .buttonStyle(.plain)
+                    }
+
+                    switch selectedFilter {
+                    case .evidence:
+                        evidenceGrid
+                    case .reviews:
+                        reviewsList
+                    case .exports:
+                        exportPanel
                     }
                 }
+                .padding(.horizontal, StudioTheme.pageInset)
+                .padding(.bottom, 24)
             }
         }
+        .background(StudioTheme.pageBackground.ignoresSafeArea())
         .navigationTitle("Library")
+        .searchable(text: $searchText, prompt: "Search your library")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
+                    Picker("Group evidence", selection: $grouping) {
+                        ForEach(LibraryGrouping.allCases) { grouping in
+                            Text(grouping.rawValue).tag(grouping)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                }
+                .accessibilityLabel("Group evidence")
+
                 Button {
                     isChoosingProjectForProof = true
                 } label: {
@@ -74,6 +93,103 @@ public struct LibraryView: View {
                 message: Text(notice.message),
                 dismissButton: .default(Text("OK"))
             )
+        }
+    }
+
+    private var filteredProofs: [Proof] {
+        viewModel.proofs
+            .filter { StudioPresentation.proofMatches(query: searchText, proof: $0, projectName: projectName(for: $0)) }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private var evidenceGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 16) {
+            ForEach(filteredProofs) { proof in
+                NavigationLink {
+                    ProofDetailView(proof: proof, projectName: projectName(for: proof), sessionSummary: sessionSummary(for: proof))
+                } label: {
+                    evidenceCard(proof)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var reviewsList: some View {
+        VStack(spacing: 12) {
+            ForEach(viewModel.reviews.sorted { $0.periodEnd > $1.periodEnd }) { review in
+                NavigationLink {
+                    ReviewView(viewModel: viewModel, review: review)
+                } label: {
+                    reviewBanner(review)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var exportPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Image(systemName: "square.and.arrow.up")
+                .font(.largeTitle)
+                .foregroundStyle(StudioTheme.accent)
+            Text("Export your learning archive")
+                .font(.title3.bold())
+            Text("Creates a portable journal file and copies all available attachments.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("Create Export", action: exportJournal)
+                .buttonStyle(.borderedProminent)
+                .tint(StudioTheme.accent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(.background, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func evidenceCard(_ proof: Proof) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(StudioTheme.mutedSurface)
+                    .aspectRatio(1.15, contentMode: .fit)
+                Image(systemName: proofIcon(for: proof.type))
+                    .font(.system(size: 34, weight: .medium))
+                    .foregroundStyle(proof.type == .audio ? StudioTheme.completed : StudioTheme.accent)
+            }
+            Text(proof.title).font(.subheadline.bold()).lineLimit(2)
+            Text(projectName(for: proof)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Text(proof.createdAt.formatted(date: .abbreviated, time: .omitted))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func reviewBanner(_ review: Review) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "pin.fill")
+                .foregroundStyle(StudioTheme.completed)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Weekly Review · \(review.periodEnd.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.subheadline.bold())
+                Text(review.decisions.first ?? "Review your learning evidence")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .background(.background, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func proofIcon(for type: ProofType) -> String {
+        switch type {
+        case .image: "photo.fill"
+        case .audio: "waveform"
+        case .file: "doc.text.fill"
+        case .link: "link"
         }
     }
 
