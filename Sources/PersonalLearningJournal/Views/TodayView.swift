@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct TodayView: View {
     @ObservedObject private var viewModel: JournalViewModel
+    @ObservedObject private var practiceTimer: PracticeTimerRuntime
     @EnvironmentObject private var calendarViewModel: CalendarViewModel
     @State private var quickLogProject: Project?
     @State private var timerProject: Project?
@@ -10,9 +11,13 @@ public struct TodayView: View {
     @State private var reviewError: String?
     @State private var isCreatingReview = false
     @State private var showingAISettings = false
+    @State private var selectedPractice: PracticeRoutine?
+    @State private var showingPracticeManager = false
+    @State private var practiceError: String?
 
     public init(viewModel: JournalViewModel) {
         self.viewModel = viewModel
+        _practiceTimer = ObservedObject(wrappedValue: viewModel.practiceTimer)
     }
 
     private var projectsNeedingReview: [Project] {
@@ -49,6 +54,7 @@ public struct TodayView: View {
                 todayHeader
                 rhythmSection
                 focusSection
+                practiceSection
 
             if let conflicts = calendarViewModel.scheduleDraft?.conflicts, !conflicts.isEmpty {
                 Section("Schedule Conflicts") {
@@ -231,10 +237,21 @@ public struct TodayView: View {
         .sheet(isPresented: $showingAISettings) {
             AIReviewSettingsView()
         }
+        .sheet(item: $selectedPractice) { routine in
+            PracticeTimerView(viewModel: viewModel, routine: routine)
+        }
+        .sheet(isPresented: $showingPracticeManager) {
+            PracticeManagerView(viewModel: viewModel)
+        }
         .alert("Review failed", isPresented: .constant(reviewError != nil)) {
             Button("OK") { reviewError = nil }
         } message: {
             Text(reviewError ?? "")
+        }
+        .alert("Practice Unavailable", isPresented: practiceErrorPresented) {
+            Button("OK") { practiceError = nil }
+        } message: {
+            Text(practiceError ?? "The practice timer could not be opened.")
         }
     }
 
@@ -312,6 +329,84 @@ public struct TodayView: View {
             }
             .padding(16)
             .background(.background, in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private var practiceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            StudioSectionHeader(title: "Practice", actionTitle: "Manage") {
+                showingPracticeManager = true
+            }
+
+            if practiceCards.isEmpty {
+                Button {
+                    showingPracticeManager = true
+                } label: {
+                    Label("Add Practice", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+            } else {
+                ForEach(practiceCards) { card in
+                    PracticeRoutineCard(
+                        card: card,
+                        liveElapsedSeconds: card.isActiveTimer
+                            ? practiceTimer.snapshot.activeElapsedSeconds
+                            : 0
+                    ) {
+                        openPractice(card.routine)
+                    }
+                }
+            }
+        }
+    }
+
+    private var practiceCards: [StudioPracticeCard] {
+        let now = Date()
+        let calendar = Calendar.current
+        let scheduledCards = viewModel.practiceCards(now: now, calendar: calendar)
+        guard let activeRoutineId = practiceTimer.snapshot.activeRoutineId,
+              !scheduledCards.contains(where: { $0.id == activeRoutineId }),
+              let activeRoutine = viewModel.practiceRoutines.first(where: {
+                  $0.id == activeRoutineId && !$0.isArchived && $0.deletedAt == nil
+              }) else {
+            return scheduledCards
+        }
+
+        let activeCard = StudioPracticeCard(
+            routine: activeRoutine,
+            statistics: PracticeStatistics.calculate(
+                routine: activeRoutine,
+                sessions: viewModel.practiceSessions,
+                now: now,
+                calendar: calendar
+            ),
+            isActiveTimer: true
+        )
+        return [activeCard] + scheduledCards
+    }
+
+    private var practiceErrorPresented: Binding<Bool> {
+        Binding {
+            practiceError != nil
+        } set: { isPresented in
+            if !isPresented { practiceError = nil }
+        }
+    }
+
+    private func openPractice(_ routine: PracticeRoutine) {
+        do {
+            if practiceTimer.snapshot.activeRoutineId == nil {
+                try viewModel.startPractice(routine)
+            } else if practiceTimer.snapshot.activeRoutineId != routine.id {
+                let activeName = viewModel.practiceRoutines.first {
+                    $0.id == practiceTimer.snapshot.activeRoutineId
+                }?.name ?? "another routine"
+                practiceError = "Finish or discard \(activeName) before starting \(routine.name)."
+                return
+            }
+            selectedPractice = routine
+        } catch {
+            practiceError = error.localizedDescription
         }
     }
 
@@ -393,5 +488,117 @@ public struct TodayView: View {
         case "Needs Attention": "exclamationmark.icloud"
         default: "icloud"
         }
+    }
+}
+
+private struct PracticeRoutineCard: View {
+    let card: StudioPracticeCard
+    let liveElapsedSeconds: Int
+    let action: () -> Void
+
+    private var color: Color {
+        StudioTheme.practiceColor(card.routine.color)
+    }
+
+    private var todaySeconds: Int {
+        card.statistics.todayActiveSeconds + max(0, liveElapsedSeconds)
+    }
+
+    private var targetSeconds: Int {
+        card.routine.targetMinutes * 60
+    }
+
+    private var progress: Double {
+        min(Double(todaySeconds) / Double(max(targetSeconds, 1)), 1)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .stroke(StudioTheme.mutedSurface, lineWidth: 6)
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Image(systemName: card.routine.symbolName)
+                        .font(.headline)
+                        .foregroundStyle(color)
+                        .accessibilityHidden(true)
+                }
+                .frame(
+                    width: StudioTheme.practiceRingSize,
+                    height: StudioTheme.practiceRingSize
+                )
+                .accessibilityElement()
+                .accessibilityLabel("\(card.routine.name) target progress")
+                .accessibilityValue("\(Int(progress * 100)) percent")
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(card.routine.name)
+                        .font(.headline)
+                        .lineLimit(2)
+                    Text(
+                        "\(StudioDurationFormat.compact(seconds: todaySeconds)) / \(StudioDurationFormat.compact(seconds: targetSeconds)) today"
+                    )
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                }
+
+                Spacer(minLength: 4)
+
+                Button(action: action) {
+                    Label(card.isActiveTimer ? "Resume" : "Start", systemImage: "play.fill")
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(color)
+                .controlSize(.small)
+                .frame(minWidth: 82, minHeight: 36)
+                .accessibilityLabel("\(card.isActiveTimer ? "Resume" : "Start") \(card.routine.name)")
+            }
+
+            HStack(spacing: 0) {
+                PracticeStatistic(
+                    value: "\(card.statistics.weekCompletionCount)",
+                    label: "This week"
+                )
+                PracticeStatistic(
+                    value: StudioDurationFormat.compact(seconds: card.statistics.weekActiveSeconds),
+                    label: "Week time"
+                )
+                PracticeStatistic(
+                    value: StudioDurationFormat.compact(seconds: card.statistics.allTimeActiveSeconds),
+                    label: "All time"
+                )
+            }
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct PracticeStatistic: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, minHeight: 38)
+        .accessibilityElement(children: .combine)
     }
 }

@@ -281,6 +281,30 @@ private struct ProjectDetailView: View {
                 }
             }
 
+            Section("Related Practice") {
+                if relatedPracticeSessions.isEmpty {
+                    Text("No linked practice")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(relatedPracticeSessions) { session in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(practiceRoutineName(for: session))
+                                .font(.headline)
+                            Text(
+                                "\(session.endedAt.formatted(date: .abbreviated, time: .shortened)) · \(StudioDurationFormat.compact(seconds: session.activeDurationSeconds))"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            if let note = session.note, !note.isEmpty {
+                                Text(note)
+                                    .font(.subheadline)
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+
             Section("Sessions") {
                 ForEach(viewModel.sessionsForProject(currentProject.id)) { session in
                     NavigationLink {
@@ -390,6 +414,15 @@ private struct ProjectDetailView: View {
         } set: { newStatus in
             try? viewModel.updateProjectStatus(projectId: currentProject.id, status: newStatus)
         }
+    }
+
+    private var relatedPracticeSessions: [PracticeSession] {
+        viewModel.practiceSessionsForProject(currentProject.id)
+            .sorted { $0.endedAt > $1.endedAt }
+    }
+
+    private func practiceRoutineName(for session: PracticeSession) -> String {
+        viewModel.practiceRoutines.first { $0.id == session.routineId }?.name ?? "Practice"
     }
 
     private func createReview() async {

@@ -10,6 +10,50 @@ public enum StudioTheme {
     public static let pageInset: CGFloat = 16
     public static let sectionSpacing: CGFloat = 24
     public static let rowSpacing: CGFloat = 12
+    public static let practiceRingSize: CGFloat = 64
+    public static let practiceControlSize: CGFloat = 52
+
+    public static func practiceColor(_ color: PracticeSemanticColor) -> Color {
+        switch color {
+        case .coral:
+            Color(red: 0.88, green: 0.34, blue: 0.29)
+        case .teal:
+            Color(red: 0.09, green: 0.52, blue: 0.50)
+        case .yellow:
+            Color(red: 0.86, green: 0.61, blue: 0.08)
+        case .blue:
+            accent
+        case .green:
+            completed
+        case .pink:
+            Color(red: 0.78, green: 0.25, blue: 0.48)
+        }
+    }
+}
+
+public enum StudioDurationFormat {
+    public static func clock(seconds: Int) -> String {
+        let clampedSeconds = max(0, seconds)
+        return String(
+            format: "%02d:%02d:%02d",
+            clampedSeconds / 3_600,
+            (clampedSeconds % 3_600) / 60,
+            clampedSeconds % 60
+        )
+    }
+
+    public static func compact(seconds: Int) -> String {
+        let clampedSeconds = max(0, seconds)
+        let hours = clampedSeconds / 3_600
+        let minutes = (clampedSeconds % 3_600) / 60
+        if hours > 0 {
+            return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h"
+        }
+        if minutes > 0 {
+            return "\(minutes)m"
+        }
+        return "\(clampedSeconds)s"
+    }
 }
 
 public struct StudioSectionHeader: View {
