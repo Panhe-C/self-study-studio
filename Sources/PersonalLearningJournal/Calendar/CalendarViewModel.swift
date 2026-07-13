@@ -72,6 +72,7 @@ public final class CalendarViewModel: ObservableObject {
     @Published public private(set) var lastApplyResult: CalendarApplyResult?
     @Published public private(set) var reconciliationItems: [CalendarReconciliationItem]
     @Published public private(set) var writableCalendars: [CalendarDescriptor]
+    @Published public private(set) var busyIntervals: [BusyInterval]
     @Published public private(set) var lastErrorMessage: String?
 
     private let repository: any JournalRepository
@@ -109,6 +110,7 @@ public final class CalendarViewModel: ObservableObject {
         self.lastApplyResult = nil
         self.reconciliationItems = []
         self.writableCalendars = []
+        self.busyIntervals = []
         self.lastErrorMessage = nil
         loadInternalItems()
     }
@@ -184,6 +186,7 @@ public final class CalendarViewModel: ObservableObject {
 
     public func refresh() async {
         authorization = await calendarClient.authorizationState()
+        await refreshBusyIntervals()
         loadInternalItems()
         do {
             reconciliationItems = try await syncService.reconcileBindings()
@@ -192,6 +195,14 @@ public final class CalendarViewModel: ObservableObject {
         } catch {
             lastErrorMessage = String(describing: error)
         }
+    }
+
+    public func refreshBusyIntervals() async {
+        guard authorization == .fullAccess else {
+            busyIntervals = []
+            return
+        }
+        busyIntervals = (try? await calendarClient.busyIntervals(in: visibleRange)) ?? []
     }
 
     @discardableResult

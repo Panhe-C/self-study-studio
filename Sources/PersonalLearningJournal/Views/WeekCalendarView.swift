@@ -133,6 +133,7 @@ public struct WeekCalendarView: View {
             ?? dayStart.addingTimeInterval(86_400)
         let range = DateInterval(start: dayStart, end: dayEnd)
         let items = viewModel.items(in: range)
+        let busy = viewModel.busyIntervals.filter { $0.start < range.end && $0.end > range.start }
 
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
@@ -151,9 +152,24 @@ public struct WeekCalendarView: View {
                     eventBlock(item, start: start, end: end, dayStart: dayStart)
                 }
             }
+            ForEach(Array(busy.enumerated()), id: \.offset) { _, interval in
+                busyBlock(interval, dayStart: dayStart)
+            }
         }
         .frame(width: dayWidth, height: hourHeight * 24)
         .overlay(alignment: .leading) { Divider() }
+    }
+
+    private func busyBlock(_ interval: BusyInterval, dayStart: Date) -> some View {
+        let layout = WeekTimelineLayout(pointsPerMinute: 1)
+        let y = layout.yOffset(for: interval.start, dayStart: dayStart)
+        let height = max(20, layout.height(for: CalendarTimelineFrame(start: interval.start, end: interval.end)))
+        return RoundedRectangle(cornerRadius: 6)
+            .fill(StudioTheme.mutedSurface.opacity(0.8))
+            .overlay { Image(systemName: "lock.fill").font(.caption2).foregroundStyle(.secondary) }
+            .frame(width: dayWidth - 8, height: height)
+            .offset(x: 4, y: y)
+            .accessibilityLabel("Busy time")
     }
 
     private func eventBlock(

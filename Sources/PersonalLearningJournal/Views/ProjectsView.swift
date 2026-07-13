@@ -11,12 +11,22 @@ public struct ProjectsView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            Picker("Project status", selection: $selectedStatus) {
-                ForEach(ProjectStatus.allCases, id: \.self) { status in
-                    Text("\(status.rawValue.capitalized)  \(count(for: status))").tag(status)
+            HStack(spacing: 10) {
+                Picker("Project status", selection: $selectedStatus) {
+                    Text("Active  \(count(for: .active))").tag(ProjectStatus.active)
+                    Text("Paused  \(count(for: .paused))").tag(ProjectStatus.paused)
                 }
+                .pickerStyle(.segmented)
+
+                Menu {
+                    Button("Low Frequency (\(count(for: .lowFrequency)))") { selectedStatus = .lowFrequency }
+                    Button("Archived (\(count(for: .archived)))") { selectedStatus = .archived }
+                } label: {
+                    Image(systemName: selectedStatus == .archived ? "archivebox" : "ellipsis.circle")
+                        .frame(width: 36, height: 32)
+                }
+                .accessibilityLabel("More project statuses")
             }
-            .pickerStyle(.segmented)
             .padding(.horizontal, StudioTheme.pageInset)
             .padding(.vertical, 12)
 

@@ -39,11 +39,26 @@ public struct DayCalendarView: View {
                                 dayEvent(item, start: start, end: end, width: proxy.size.width)
                             }
                         }
+
+                        ForEach(Array(viewModel.busyIntervals.enumerated()), id: \.offset) { _, interval in
+                            busyBlock(interval, dayStart: Calendar.current.startOfDay(for: viewModel.focusedDate), width: proxy.size.width)
+                        }
                     }
                 }
                 .frame(height: hourHeight * 24)
             }
         }
+    }
+
+    private func busyBlock(_ interval: BusyInterval, dayStart: Date, width: CGFloat) -> some View {
+        let minute = interval.start.timeIntervalSince(dayStart) / 60
+        let duration = max(15, interval.end.timeIntervalSince(interval.start) / 60)
+        return RoundedRectangle(cornerRadius: 6)
+            .fill(StudioTheme.mutedSurface.opacity(0.8))
+            .overlay { Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary) }
+            .frame(width: max(80, width - 12), height: max(24, duration / 60 * hourHeight))
+            .offset(x: 6, y: minute / 60 * hourHeight)
+            .accessibilityLabel("Busy time")
     }
 
     private func dayEvent(

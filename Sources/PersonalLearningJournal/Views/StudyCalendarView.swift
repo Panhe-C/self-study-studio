@@ -13,26 +13,39 @@ public struct StudyCalendarView: View {
     public var body: some View {
         VStack(spacing: 0) {
             controls
-            if attentionCount > 0 {
+            if !viewModel.reconciliationItems.isEmpty {
                 HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.circle")
+                    Image(systemName: "arrow.triangle.2.circlepath")
                         .foregroundStyle(StudioTheme.notice)
-                    Text("\(attentionCount) sessions need attention")
+                    Text("\(viewModel.reconciliationItems.count) calendar changes")
                         .font(.subheadline.weight(.medium))
                     Spacer()
-                    if !viewModel.reconciliationItems.isEmpty {
-                        NavigationLink("Review") {
-                            CalendarReconciliationView(viewModel: viewModel)
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .tint(StudioTheme.notice)
-                    } else {
-                        Button("Review") {
-                            if viewModel.scheduleDraft != nil { showingDraft = true } else { generateDraft() }
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .tint(StudioTheme.notice)
+                    NavigationLink("Review") {
+                        CalendarReconciliationView(viewModel: viewModel)
                     }
+                    .font(.subheadline.weight(.semibold))
+                    .tint(StudioTheme.notice)
+                }
+                .padding(.horizontal, StudioTheme.pageInset)
+                .padding(.vertical, 11)
+                .background(StudioTheme.notice.opacity(0.08))
+            }
+            if scheduleAttentionCount > 0 {
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                        .foregroundStyle(StudioTheme.notice)
+                    Text("\(scheduleAttentionCount) sessions need placement")
+                        .font(.subheadline.weight(.medium))
+                    Spacer()
+                    Button("Review") {
+                        if viewModel.scheduleDraft != nil {
+                            showingDraft = true
+                        } else {
+                            generateDraft()
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .tint(StudioTheme.notice)
                 }
                 .padding(.horizontal, StudioTheme.pageInset)
                 .padding(.vertical, 11)
@@ -75,6 +88,7 @@ public struct StudyCalendarView: View {
             }
         }
         .task { await viewModel.refresh() }
+        .task(id: viewModel.visibleRange.start) { await viewModel.refreshBusyIntervals() }
         .sheet(isPresented: $showingDraft) {
             ScheduleDraftView(viewModel: viewModel)
         }
@@ -120,10 +134,9 @@ public struct StudyCalendarView: View {
         .background(.background)
     }
 
-    private var attentionCount: Int {
+    private var scheduleAttentionCount: Int {
         viewModel.unscheduledItems.count
             + (viewModel.scheduleDraft?.conflicts.count ?? 0)
-            + viewModel.reconciliationItems.count
     }
 
     @ViewBuilder
