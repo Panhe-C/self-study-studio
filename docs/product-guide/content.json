@@ -1,0 +1,339 @@
+{
+  "release": {
+    "product": "Self Study Studio",
+    "displayName": "Learning Journal",
+    "documentVersion": "1.0",
+    "verifiedOn": "2026-07-13",
+    "gitCommit": "0a605e9",
+    "productStage": "v0.1 learning loop",
+    "testBaseline": "50 tests executed, 49 passed, 1 known assertion failure"
+  },
+  "positioning": {
+    "oneLiner": "一个帮助个人学习者把行动、证据和复盘串成下一步决定的本地优先学习日志。",
+    "audience": "同时推进多个自学项目、但不想被复杂知识管理系统拖慢的人。",
+    "problem": "学习过程容易留下零散记录，却很难回答这周做了什么、证据是什么、接下来该做什么。",
+    "promise": "用低摩擦 Session 记录行动，用 Proof 保存证据，再通过 Review 做出明确决定。",
+    "boundary": "不是课程平台、社交社区、排行榜或自动替用户学习的 Agent。"
+  },
+  "deckSections": [
+    {
+      "id": "positioning",
+      "title": "学习记录的目的，是决定下一步",
+      "takeaway": "Self Study Studio 不要求维护完整知识库，而是持续保留能支持下一步判断的学习轨迹。"
+    },
+    {
+      "id": "loop",
+      "title": "Session 与 Proof 把行动变成可复盘的轨迹",
+      "takeaway": "Quick Log 和 Timer 最终进入同一 Session 模型，Proof 与 Review 再把记录变成证据和决定。"
+    },
+    {
+      "id": "demo",
+      "title": "一次演示讲清完整学习闭环",
+      "takeaway": "从 Today 的 Next Step 开始，用一条 CS336 学习故事贯穿计时、证据、Trail 与周复盘。"
+    },
+    {
+      "id": "status",
+      "title": "当前能力与规划能力保持清晰边界",
+      "takeaway": "v0.1 闭环可运行；CloudKit、课程规划和学习日历仍是已设计能力。"
+    }
+  ],
+  "concepts": [
+    {
+      "term": "Project",
+      "meaning": "一个持续学习目标及其当前状态。"
+    },
+    {
+      "term": "Next Step",
+      "meaning": "下一次打开 App 时可以直接执行的具体动作。"
+    },
+    {
+      "term": "Session",
+      "meaning": "一次已发生的学习行动，由 Quick Log 或 Timer 生成。"
+    },
+    {
+      "term": "Proof",
+      "meaning": "带有“这证明了什么”说明的图片、录音、文件或链接。"
+    },
+    {
+      "term": "Trail",
+      "meaning": "Session、Proof、Next Step、状态和 Review 组成的项目时间线。"
+    },
+    {
+      "term": "Review",
+      "meaning": "把近期证据整理为 Facts、Patterns、Decisions 与 Next Steps 的阶段判断。"
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "learning-loop",
+      "title": "学习轨迹核心闭环",
+      "path": "diagrams/product-learning-loop.png"
+    },
+    {
+      "id": "information-architecture",
+      "title": "当前信息架构",
+      "path": "diagrams/product-information-architecture.png"
+    },
+    {
+      "id": "functional-modules",
+      "title": "功能模块关系",
+      "path": "diagrams/product-functional-modules.png"
+    },
+    {
+      "id": "demo-storyboard",
+      "title": "标准 Demo 故事板",
+      "path": "diagrams/product-demo-storyboard.png"
+    },
+    {
+      "id": "onboarding",
+      "title": "首次使用流程",
+      "path": "diagrams/product-onboarding-flow.png"
+    },
+    {
+      "id": "session",
+      "title": "日常 Session 流程",
+      "path": "diagrams/product-session-flow.png"
+    },
+    {
+      "id": "proof",
+      "title": "Proof 学习证据流程",
+      "path": "diagrams/product-proof-flow.png"
+    },
+    {
+      "id": "review",
+      "title": "Weekly Review 流程",
+      "path": "diagrams/product-review-flow.png"
+    },
+    {
+      "id": "ai-fallback",
+      "title": "AI Review 降级流程",
+      "path": "diagrams/product-ai-fallback-flow.png"
+    },
+    {
+      "id": "export",
+      "title": "数据导出流程",
+      "path": "diagrams/product-export-flow.png"
+    }
+  ],
+  "featureStatus": [
+    {
+      "feature": "首次启动与 1-3 个 Project",
+      "status": "已实现",
+      "visibleResult": "两步 Onboarding 创建当前学习项目，并要求首条 Session。",
+      "evidence": "OnboardingView, JournalServiceTests",
+      "limit": "名称、目标和 Next Step 必填；Area 可留空。"
+    },
+    {
+      "feature": "Today Continue",
+      "status": "已实现",
+      "visibleResult": "显示可继续项目、Next Step、最近 Session 与 Proof。",
+      "evidence": "TodayView, JournalServiceTests",
+      "limit": "只有 active 且有 Next Step 的 Project 出现。"
+    },
+    {
+      "feature": "Project 管理",
+      "status": "已实现",
+      "visibleResult": "创建、编辑、切换状态并查看项目详情。",
+      "evidence": "ProjectsView, JournalViewModelTests",
+      "limit": "状态包含 active、low-frequency、paused、archived。"
+    },
+    {
+      "feature": "Quick Log",
+      "status": "已实现",
+      "visibleResult": "用预设或自定义时长补记 Session，并可更新 Next Step。",
+      "evidence": "QuickLogView, JournalServiceTests",
+      "limit": "备注和有效时长必填。"
+    },
+    {
+      "feature": "Timer Session",
+      "status": "已实现",
+      "visibleResult": "开始、暂停、继续、结束或舍弃现场学习计时。",
+      "evidence": "TimerSessionView, JournalServiceTests",
+      "limit": "暂停时间不计入活动时长，舍弃不保存。"
+    },
+    {
+      "feature": "Proof",
+      "status": "已实现",
+      "visibleResult": "添加图片、录音、文件或链接，并查看对应预览。",
+      "evidence": "AddProofView, ProofPreviewTests",
+      "limit": "必须说明“这证明了什么”；附件能力受系统权限影响。"
+    },
+    {
+      "feature": "Learning Trail",
+      "status": "已实现",
+      "visibleResult": "按项目回看 Session、Proof、状态、Next Step 和 Review。",
+      "evidence": "ProjectDetailView, JournalServiceTests",
+      "limit": "当前位于 Project Detail 内，不是独立主 Tab。"
+    },
+    {
+      "feature": "Weekly Review",
+      "status": "已实现",
+      "visibleResult": "生成、编辑并保存 Facts、Patterns、Decisions 和 Next Steps。",
+      "evidence": "ReviewView, ReviewServiceTests",
+      "limit": "状态与 Next Step 建议必须分别显式应用。"
+    },
+    {
+      "feature": "本地规则 Review",
+      "status": "已实现",
+      "visibleResult": "没有 AI 配置或调用失败时仍可生成可编辑复盘。",
+      "evidence": "AdaptiveAIReviewProvider, ReviewServiceTests",
+      "limit": "表达能力由本地规则决定。"
+    },
+    {
+      "feature": "OpenAI-compatible Review",
+      "status": "部分实现",
+      "visibleResult": "配置 Endpoint、Model 与 API Key 后调用 Chat Completions。",
+      "evidence": "AIReviewSettingsView, OpenAICompatibleAIReviewProvider",
+      "limit": "50 个测试中有 1 个来源引用断言失败；网络和服务兼容性未覆盖全部供应商。"
+    },
+    {
+      "feature": "Library",
+      "status": "已实现",
+      "visibleResult": "按时间、Project 或类型浏览 Proof。",
+      "evidence": "LibraryView",
+      "limit": "v0.1 不提供全文搜索。"
+    },
+    {
+      "feature": "完整 Bundle 导出",
+      "status": "已实现",
+      "visibleResult": "一次导出版本化 journal.json 与附件目录。",
+      "evidence": "LibraryView, ExportServiceTests",
+      "limit": "导出到本地 Documents/LearningJournal/Exports，不自动上传。"
+    },
+    {
+      "feature": "本地存储与旧 JSON 导入",
+      "status": "已实现",
+      "visibleResult": "正常使用 SwiftData；初始化失败时使用 JSON Store，并可一次性导入旧数据。",
+      "evidence": "JournalStoreFactory, JournalStoreTests",
+      "limit": "当前没有多设备冲突处理。"
+    },
+    {
+      "feature": "CloudKit/iCloud 私有同步",
+      "status": "已设计",
+      "visibleResult": "当前 App 不显示同步入口。",
+      "evidence": "设计与实施计划",
+      "limit": "尚未进入产品代码与验证。"
+    },
+    {
+      "feature": "AI 课程规划与学习日历",
+      "status": "已设计",
+      "visibleResult": "当前 App 不显示课程规划或 Calendar Tab。",
+      "evidence": "设计与实施计划",
+      "limit": "尚未进入产品代码与验证。"
+    }
+  ],
+  "demoSteps": [
+    {
+      "id": "today",
+      "title": "从 Today 选择一个可以立刻行动的 Next Step",
+      "screenshot": "docs/assets/product-guide/demo-01-today.png",
+      "action": "打开 Today，选择 CS336 的 Continue 卡片。",
+      "talkTrack": "产品不先要求整理资料，而是把最小可执行动作放在首页。",
+      "expected": "看到 Start、Quick Log、最近 Session 和 Proof 上下文。",
+      "fallback": "若无卡片，检查 Project 是否为 active 且有 Next Step。"
+    },
+    {
+      "id": "quick-log",
+      "title": "用 Quick Log 在 30 秒内补记一次学习",
+      "screenshot": "docs/assets/product-guide/demo-02-quick-log.png",
+      "action": "打开 Quick Log，选择 action type、时长，填写记录与新的 Next Step。",
+      "talkTrack": "补记与现场计时进入同一个 Session 模型。",
+      "expected": "保存后 Session 出现在项目详情与 Trail。",
+      "fallback": "备注为空或时长无效时，补全字段后重试。"
+    },
+    {
+      "id": "timer",
+      "title": "Timer 只统计真正投入的学习时间",
+      "screenshot": "docs/assets/product-guide/demo-03-timer.png",
+      "action": "点击 Start，展示暂停、继续和结束。",
+      "talkTrack": "暂停不累计活动时长，舍弃不会产生 Session。",
+      "expected": "结束后进入保存信息并可更新 Next Step。",
+      "fallback": "演示时间不足时展示计时界面后改用 Quick Log 完成闭环。"
+    },
+    {
+      "id": "session",
+      "title": "Session 把学习行动与下一步变化放在一起",
+      "screenshot": "docs/assets/product-guide/demo-04-session.png",
+      "action": "打开刚保存的 Session。",
+      "talkTrack": "记录不仅包含时长，还保留行动类型、内容和 Next Step 前后变化。",
+      "expected": "Session Detail 可继续添加 Proof。",
+      "fallback": "从 Project Detail 的 Sessions 区域重新进入。"
+    },
+    {
+      "id": "proof-add",
+      "title": "附件只有配上解释，才成为学习证据",
+      "screenshot": "docs/assets/product-guide/demo-05-proof-add.png",
+      "action": "从 Session 或 Project 点击 Add Proof，选择图片、录音、文件或链接。",
+      "talkTrack": "“这证明了什么”是必填项，用来区分收藏附件和保留证据。",
+      "expected": "Proof 保存到项目、Session、Trail 和 Library。",
+      "fallback": "权限不可用时用链接 Proof 演示。"
+    },
+    {
+      "id": "proof-detail",
+      "title": "Proof Detail 同时展示内容、来源与证据说明",
+      "screenshot": "docs/assets/product-guide/demo-06-proof-detail.png",
+      "action": "打开刚添加的 Proof。",
+      "talkTrack": "回看时既能看到附件，也能知道它属于哪个 Project 与 Session。",
+      "expected": "根据类型显示图片、音频、文件或外部链接预览。",
+      "fallback": "本地附件缺失时界面显示不可用状态。"
+    },
+    {
+      "id": "trail",
+      "title": "Trail 把行为、证据与决定放回同一条时间线",
+      "screenshot": "docs/assets/product-guide/demo-07-trail.png",
+      "action": "进入 CS336 Project Detail，滚动到 Learning Trail。",
+      "talkTrack": "这是判断项目是否前进的历史，而不是单纯的完成百分比。",
+      "expected": "看到 Session、Proof、Next Step、状态和 Review 事件。",
+      "fallback": "若事件较少，先完成 Quick Log 和 Proof。"
+    },
+    {
+      "id": "review",
+      "title": "Review 先保存判断，再由用户决定是否应用建议",
+      "screenshot": "docs/assets/product-guide/demo-08-review.png",
+      "action": "打开 Latest Review，编辑 Facts、Patterns、Decisions 或 Next Steps。",
+      "talkTrack": "AI 或本地规则只能提出建议；状态和 Next Step 不会被悄悄改写。",
+      "expected": "来源可回看，Save、Apply Status、Use as Next Step 分离。",
+      "fallback": "AI 不可用时使用本地规则复盘。"
+    },
+    {
+      "id": "library",
+      "title": "Library 用证据组织回看，而不是复制项目管理",
+      "screenshot": "docs/assets/product-guide/demo-09-library.png",
+      "action": "进入 Library，在 Time、Project、Type 之间切换。",
+      "talkTrack": "同一批 Proof 可以按不同线索回看。",
+      "expected": "每条 Proof 显示项目、Session、时间与附件信息。",
+      "fallback": "没有 Proof 时先从 Library 选择 Project 添加。"
+    },
+    {
+      "id": "export",
+      "title": "一次 Export 生成可迁移的完整本地 Bundle",
+      "screenshot": "docs/assets/product-guide/demo-10-export.png",
+      "action": "点击 Library 工具栏 Export。",
+      "talkTrack": "数据默认留在本地，但用户始终可以把结构化记录和附件一起带走。",
+      "expected": "提示 Export Ready，并显示 Documents/LearningJournal/Exports 下的保存路径。",
+      "fallback": "导出失败时原始数据不被修改或删除。"
+    }
+  ],
+  "limitations": [
+    {
+      "category": "测试",
+      "detail": "2026-07-13 执行 50 个测试，49 个通过；OpenAI-compatible Review 解析测试的测试响应缺少 sourceReferences，但断言期望来源映射。"
+    },
+    {
+      "category": "设备",
+      "detail": "模拟器构建和启动可验证；当前文档不把真机安装描述为已验证。"
+    },
+    {
+      "category": "同步",
+      "detail": "v0.1 为本地优先单设备数据，没有账号、CloudKit 或冲突解决。"
+    },
+    {
+      "category": "AI",
+      "detail": "AI Review 是可选边界；未配置、请求失败或响应不可解析时使用本地规则。"
+    },
+    {
+      "category": "范围",
+      "detail": "搜索、复杂日历、课程市场、社交、排行榜与全自动学习 Agent 不在当前版本。"
+    }
+  ]
+}

@@ -4,6 +4,9 @@ Personal Learning Journal is a SwiftUI-first app core for the v0.1 PRD in `perso
 
 ## Product Documentation
 
+- [产品功能手册](docs/PRODUCT_GUIDE.md)
+- [Canva 可导入演示稿](docs/product-guide/self-study-studio-product-deck.pptx)
+- [Canva 可导入 A4 手册](docs/product-guide/self-study-studio-product-guide-a4.pdf)
 - [产品功能说明图](diagrams/PRODUCT_FUNCTION_DIAGRAMS.md)
 - [产品功能手册设计](docs/superpowers/specs/2026-07-12-product-guide-design.md)
 
