@@ -24,11 +24,13 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         clock.advance(by: 20)
         runtime.pause()
         clock.advance(by: 100)
+        runtime.refresh()
         XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 20)
         XCTAssertFalse(runtime.snapshot.isRunning)
 
         runtime.resume()
         clock.advance(by: 10)
+        runtime.refresh()
         XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 30)
         XCTAssertTrue(runtime.snapshot.isRunning)
         XCTAssertEqual(runtime.snapshot.activeRoutineId, routineID)
@@ -41,6 +43,7 @@ final class PracticeTimerRuntimeTests: XCTestCase {
 
         try runtime.start(routineId: UUID(), targetSeconds: 10)
         clock.advance(by: 11)
+        runtime.refresh()
 
         XCTAssertTrue(runtime.consumeTargetCrossing())
         XCTAssertFalse(runtime.consumeTargetCrossing())
@@ -93,6 +96,7 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         clock.advance(by: 15)
 
         let recoveredRuntime = PracticeTimerRuntime(store: store, now: clock.now)
+        recoveredRuntime.refresh()
         XCTAssertEqual(recoveredRuntime.snapshot.activeRoutineId, routineID)
         XCTAssertEqual(recoveredRuntime.snapshot.activeElapsedSeconds, 15)
         XCTAssertTrue(recoveredRuntime.snapshot.isRunning)
@@ -168,6 +172,121 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         try store.save(nil)
         XCTAssertNil(store.load())
     }
+
+    func testFailedPauseKeepsRunningStateAndRelaunchUsesDurableState() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = ThrowingPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+        let routineID = UUID()
+
+        try runtime.start(routineId: routineID, targetSeconds: 30)
+        clock.advance(by: 10)
+        store.shouldFailSaves = true
+
+        runtime.pause()
+        runtime.refresh()
+
+        XCTAssertTrue(runtime.snapshot.isRunning)
+        XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 10)
+
+        let relaunchedRuntime = PracticeTimerRuntime(store: store, now: clock.now)
+        relaunchedRuntime.refresh()
+        XCTAssertTrue(relaunchedRuntime.snapshot.isRunning)
+        XCTAssertEqual(relaunchedRuntime.snapshot.activeRoutineId, routineID)
+    }
+
+    func testFailedTargetConsumptionDoesNotConsumeMemoryOrDurableState() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = ThrowingPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+
+        try runtime.start(routineId: UUID(), targetSeconds: 10)
+        clock.advance(by: 11)
+        store.shouldFailSaves = true
+
+        XCTAssertFalse(runtime.consumeTargetCrossing())
+
+        store.shouldFailSaves = false
+        let relaunchedRuntime = PracticeTimerRuntime(store: store, now: clock.now)
+        XCTAssertTrue(relaunchedRuntime.consumeTargetCrossing())
+    }
+
+    func testFailedFinishKeepsActiveStateAndRelaunchUsesDurableState() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = ThrowingPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+        let routineID = UUID()
+
+        try runtime.start(routineId: routineID, targetSeconds: 30)
+        clock.advance(by: 12)
+        store.shouldFailSaves = true
+
+        XCTAssertNil(runtime.finish())
+        runtime.refresh()
+        XCTAssertEqual(runtime.snapshot.activeRoutineId, routineID)
+
+        let relaunchedRuntime = PracticeTimerRuntime(store: store, now: clock.now)
+        relaunchedRuntime.refresh()
+        XCTAssertEqual(relaunchedRuntime.snapshot.activeRoutineId, routineID)
+    }
+
+    func testFailedDiscardKeepsActiveStateAndRelaunchUsesDurableState() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = ThrowingPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+        let routineID = UUID()
+
+        try runtime.start(routineId: routineID, targetSeconds: 30)
+        store.shouldFailSaves = true
+
+        runtime.discard()
+        XCTAssertEqual(runtime.snapshot.activeRoutineId, routineID)
+
+        let relaunchedRuntime = PracticeTimerRuntime(store: store, now: clock.now)
+        XCTAssertEqual(relaunchedRuntime.snapshot.activeRoutineId, routineID)
+    }
+
+    func testBackwardClockDuringFinishClearsStateAndReturnsNil() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+
+        try runtime.start(routineId: UUID(), targetSeconds: 30)
+        clock.set(to: Date(timeIntervalSince1970: 99))
+
+        XCTAssertNil(runtime.finish())
+        XCTAssertNil(runtime.snapshot.activeRoutineId)
+        XCTAssertNil(store.data)
+    }
+
+    func testBackwardClockBeforeResumeClearsImpossiblePausedState() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+
+        try runtime.start(routineId: UUID(), targetSeconds: 30)
+        clock.advance(by: 10)
+        runtime.pause()
+        clock.set(to: Date(timeIntervalSince1970: 100))
+
+        runtime.resume()
+
+        XCTAssertNil(runtime.snapshot.activeRoutineId)
+        XCTAssertNil(store.data)
+    }
+
+    func testBackwardClockBeforeTargetConsumptionClearsStateWithoutFeedback() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+
+        try runtime.start(routineId: UUID(), targetSeconds: 10)
+        clock.set(to: Date(timeIntervalSince1970: 99))
+
+        XCTAssertFalse(runtime.consumeTargetCrossing())
+        XCTAssertNil(runtime.snapshot.activeRoutineId)
+        XCTAssertNil(store.data)
+    }
 }
 
 @MainActor
@@ -185,6 +304,10 @@ private final class TestClock {
     func advance(by seconds: TimeInterval) {
         current = current.addingTimeInterval(seconds)
     }
+
+    func set(to date: Date) {
+        current = date
+    }
 }
 
 @MainActor
@@ -198,4 +321,25 @@ private final class InMemoryPracticeTimerStateStore: PracticeTimerStateStore {
     func save(_ data: Data?) throws {
         self.data = data
     }
+}
+
+@MainActor
+private final class ThrowingPracticeTimerStateStore: PracticeTimerStateStore {
+    var data: Data?
+    var shouldFailSaves = false
+
+    func load() -> Data? {
+        data
+    }
+
+    func save(_ data: Data?) throws {
+        if shouldFailSaves {
+            throw TestStoreError.saveFailed
+        }
+        self.data = data
+    }
+}
+
+private enum TestStoreError: Error {
+    case saveFailed
 }

@@ -102,11 +102,8 @@ public final class PracticeTimerRuntime: ObservableObject {
     private let now: @MainActor () -> Date
     private let encoder = JSONEncoder()
 
-    @Published private var activeState: PersistedPracticeTimerState?
-
-    public var snapshot: PracticeTimerSnapshot {
-        makeSnapshot(for: activeState, at: now())
-    }
+    private var activeState: PersistedPracticeTimerState?
+    @Published public private(set) var snapshot: PracticeTimerSnapshot
 
     public init(
         store: any PracticeTimerStateStore,
@@ -115,9 +112,11 @@ public final class PracticeTimerRuntime: ObservableObject {
         self.store = store
         self.now = now
         let persistedData = store.load()
-        activeState = Self.recoverState(from: persistedData, at: now())
+        let recoveredState = Self.recoverState(from: persistedData, at: now())
+        activeState = recoveredState
+        snapshot = Self.makeSnapshot(for: recoveredState, at: now())
 
-        if persistedData != nil, activeState == nil {
+        if persistedData != nil, recoveredState == nil {
             try? store.save(nil)
         }
     }
@@ -126,8 +125,12 @@ public final class PracticeTimerRuntime: ObservableObject {
         guard targetSeconds > 0 else {
             throw PracticeTimerRuntimeError.invalidTargetSeconds
         }
-        guard activeState == nil else {
-            throw PracticeTimerRuntimeError.activeTimerAlreadyExists
+        if activeState != nil {
+            let timestamp = now()
+            _ = validActiveState(at: timestamp)
+            if activeState != nil {
+                throw PracticeTimerRuntimeError.activeTimerAlreadyExists
+            }
         }
 
         let timestamp = now()
@@ -141,75 +144,135 @@ public final class PracticeTimerRuntime: ObservableObject {
         )
         try save(state)
         activeState = state
+        snapshot = Self.makeSnapshot(for: state, at: timestamp)
     }
 
     public func pause() {
-        guard var state = activeState, let resumedAt = state.resumedAt else {
+        let timestamp = now()
+        guard var state = validActiveState(at: timestamp), let resumedAt = state.resumedAt else {
             return
         }
 
-        state.accumulatedActiveSeconds += elapsedSeconds(since: resumedAt, until: now())
+        state.accumulatedActiveSeconds += Self.elapsedSeconds(since: resumedAt, until: timestamp)
         state.resumedAt = nil
-        replaceStateAfterTransition(state)
+        persistTransition(state, at: timestamp)
     }
 
     public func resume() {
-        guard var state = activeState, state.resumedAt == nil else {
+        let timestamp = now()
+        guard var state = validActiveState(at: timestamp), state.resumedAt == nil else {
             return
         }
 
-        state.resumedAt = now()
-        replaceStateAfterTransition(state)
+        state.resumedAt = timestamp
+        persistTransition(state, at: timestamp)
     }
 
     public func refresh() {
-        objectWillChange.send()
+        let timestamp = now()
+        guard let state = validActiveState(at: timestamp) else {
+            if activeState == nil {
+                snapshot = .inactive
+            }
+            return
+        }
+        snapshot = Self.makeSnapshot(for: state, at: timestamp)
     }
 
     public func consumeTargetCrossing() -> Bool {
-        guard var state = activeState,
+        let timestamp = now()
+        guard var state = validActiveState(at: timestamp),
               !state.targetFeedbackConsumed,
-              elapsedSeconds(for: state, at: now()) >= state.targetSeconds else {
+              Self.elapsedSeconds(for: state, at: timestamp) >= state.targetSeconds else {
             return false
         }
 
         state.targetFeedbackConsumed = true
-        replaceStateAfterTransition(state)
-        return true
+        return persistTransition(state, at: timestamp)
     }
 
     public func finish() -> PracticeTimerCompletion? {
-        guard let state = activeState else {
+        let timestamp = now()
+        guard let state = validActiveState(at: timestamp) else {
             return nil
         }
 
-        let endedAt = max(now(), state.startedAt)
         let completion = PracticeTimerCompletion(
             routineId: state.routineId,
             startedAt: state.startedAt,
-            endedAt: endedAt,
-            activeDurationSeconds: elapsedSeconds(for: state, at: endedAt)
+            endedAt: timestamp,
+            activeDurationSeconds: Self.elapsedSeconds(for: state, at: timestamp)
         )
-        activeState = nil
-        try? store.save(nil)
+        do {
+            try store.save(nil)
+        } catch {
+            snapshot = Self.makeSnapshot(for: state, at: timestamp)
+            return nil
+        }
+        clearActiveState()
         return completion
     }
 
     public func discard() {
-        activeState = nil
-        try? store.save(nil)
+        let timestamp = now()
+        guard let state = validActiveState(at: timestamp) else {
+            return
+        }
+        do {
+            try store.save(nil)
+        } catch {
+            snapshot = Self.makeSnapshot(for: state, at: timestamp)
+            return
+        }
+        clearActiveState()
     }
 
-    private func replaceStateAfterTransition(_ state: PersistedPracticeTimerState) {
+    @discardableResult
+    private func persistTransition(_ state: PersistedPracticeTimerState, at timestamp: Date) -> Bool {
+        do {
+            try save(state)
+        } catch {
+            if let activeState {
+                snapshot = Self.makeSnapshot(for: activeState, at: timestamp)
+            }
+            return false
+        }
         activeState = state
-        try? save(state)
+        snapshot = Self.makeSnapshot(for: state, at: timestamp)
+        return true
     }
 
     private func save(_ state: PersistedPracticeTimerState) throws {
         try store.save(encoder.encode(state))
     }
 
-    private func makeSnapshot(
+    private func validActiveState(at timestamp: Date) -> PersistedPracticeTimerState? {
+        guard let state = activeState else {
+            return nil
+        }
+        guard Self.isValid(state, at: timestamp) else {
+            discardInvalidState()
+            return nil
+        }
+        return state
+    }
+
+    private func discardInvalidState() {
+        do {
+            try store.save(nil)
+        } catch {
+            snapshot = .inactive
+            return
+        }
+        clearActiveState()
+    }
+
+    private func clearActiveState() {
+        activeState = nil
+        snapshot = .inactive
+    }
+
+    private static func makeSnapshot(
         for state: PersistedPracticeTimerState?,
         at timestamp: Date
     ) -> PracticeTimerSnapshot {
@@ -220,19 +283,19 @@ public final class PracticeTimerRuntime: ObservableObject {
         return PracticeTimerSnapshot(
             activeRoutineId: state.routineId,
             startedAt: state.startedAt,
-            activeElapsedSeconds: elapsedSeconds(for: state, at: timestamp),
+            activeElapsedSeconds: Self.elapsedSeconds(for: state, at: timestamp),
             isRunning: state.resumedAt != nil,
             targetSeconds: state.targetSeconds
         )
     }
 
-    private func elapsedSeconds(for state: PersistedPracticeTimerState, at timestamp: Date) -> Int {
+    private static func elapsedSeconds(for state: PersistedPracticeTimerState, at timestamp: Date) -> Int {
         state.accumulatedActiveSeconds + (state.resumedAt.map {
-            elapsedSeconds(since: $0, until: timestamp)
+            Self.elapsedSeconds(since: $0, until: timestamp)
         } ?? 0)
     }
 
-    private func elapsedSeconds(since start: Date, until end: Date) -> Int {
+    private static func elapsedSeconds(since start: Date, until end: Date) -> Int {
         max(0, Int(end.timeIntervalSince(start)))
     }
 
