@@ -16,6 +16,7 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 - Review prompts for active projects that have gone quiet for 7 days or when recent evidence is ready to review
 - Quick Log sessions with project defaults, presets, custom duration stepping, and first-onboarding completion
 - Timer sessions with pause, resume, end, discard, and a live active-duration display
+- Recurring practice routines with weekday schedules, upward timing, local crash recovery, optional project association, synced completed sessions, and Today/week/all-time totals; practice remains separate from course-plan completion
 - Proof creation with a required "What does this prove?" statement
 - Proof entry points from Project, Session, Quick Log, Timer, and Library
 - Photo Proof from camera or photo library, audio recording, file import, and links
@@ -89,6 +90,7 @@ Current verification status:
 - 2026-07-12: `swift test` completed 105 tests with 0 failures, and the iOS Simulator build completed successfully after adding course planning.
 - 2026-07-12: `swift test` completed 132 tests with 0 failures after adding deterministic scheduling, EventKit confirmation/reconciliation, Calendar views, settings, and the full course-to-review integration test.
 - 2026-07-12: `swift build` and the iOS Simulator app build completed successfully with the Calendar module integrated.
+- 2026-07-13: `swift test` completed 199 tests with 0 failures, and a clean iPhone 16 Pro Simulator build installed and launched successfully after adding recurring practice routines and the recoverable practice timer.
 
 ## iCloud Device Acceptance
 
