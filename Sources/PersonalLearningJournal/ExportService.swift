@@ -12,6 +12,8 @@ public struct JournalExport: Codable, Equatable, Sendable {
     public var plannedSessions: [PlannedSession]
     public var availabilityRules: [AvailabilityRule]
     public var schedulingPreferences: [SchedulingPreferences]
+    public var practiceRoutines: [PracticeRoutine]
+    public var practiceSessions: [PracticeSession]
 
     public init(
         version: String = "v0.2",
@@ -24,7 +26,9 @@ public struct JournalExport: Codable, Equatable, Sendable {
         planPhases: [PlanPhase] = [],
         plannedSessions: [PlannedSession] = [],
         availabilityRules: [AvailabilityRule] = [],
-        schedulingPreferences: [SchedulingPreferences] = []
+        schedulingPreferences: [SchedulingPreferences] = [],
+        practiceRoutines: [PracticeRoutine] = [],
+        practiceSessions: [PracticeSession] = []
     ) {
         self.version = version
         self.exportedAt = exportedAt
@@ -37,6 +41,41 @@ public struct JournalExport: Codable, Equatable, Sendable {
         self.plannedSessions = plannedSessions
         self.availabilityRules = availabilityRules
         self.schedulingPreferences = schedulingPreferences
+        self.practiceRoutines = practiceRoutines
+        self.practiceSessions = practiceSessions
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case exportedAt
+        case projects
+        case sessions
+        case proofs
+        case reviews
+        case coursePlans
+        case planPhases
+        case plannedSessions
+        case availabilityRules
+        case schedulingPreferences
+        case practiceRoutines
+        case practiceSessions
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(String.self, forKey: .version)
+        exportedAt = try container.decode(Date.self, forKey: .exportedAt)
+        projects = try container.decode([Project].self, forKey: .projects)
+        sessions = try container.decode([LearningSession].self, forKey: .sessions)
+        proofs = try container.decode([Proof].self, forKey: .proofs)
+        reviews = try container.decode([Review].self, forKey: .reviews)
+        coursePlans = try container.decode([CoursePlan].self, forKey: .coursePlans)
+        planPhases = try container.decode([PlanPhase].self, forKey: .planPhases)
+        plannedSessions = try container.decode([PlannedSession].self, forKey: .plannedSessions)
+        availabilityRules = try container.decode([AvailabilityRule].self, forKey: .availabilityRules)
+        schedulingPreferences = try container.decode([SchedulingPreferences].self, forKey: .schedulingPreferences)
+        practiceRoutines = try container.decodeIfPresent([PracticeRoutine].self, forKey: .practiceRoutines) ?? []
+        practiceSessions = try container.decodeIfPresent([PracticeSession].self, forKey: .practiceSessions) ?? []
     }
 }
 
@@ -73,7 +112,9 @@ public struct ExportService {
             planPhases: snapshot.planPhases,
             plannedSessions: snapshot.plannedSessions,
             availabilityRules: snapshot.availabilityRules,
-            schedulingPreferences: snapshot.schedulingPreferences
+            schedulingPreferences: snapshot.schedulingPreferences,
+            practiceRoutines: snapshot.practiceRoutines,
+            practiceSessions: snapshot.practiceSessions
         )
         return try JSONEncoder.journal.encode(export)
     }

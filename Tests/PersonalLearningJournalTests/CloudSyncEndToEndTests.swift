@@ -42,6 +42,53 @@ final class CloudSyncEndToEndTests: XCTestCase {
         XCTAssertEqual(try secondRepository.snapshot().projects, [project])
         XCTAssertTrue(try restartedRepository.pendingMutations(limit: 10).isEmpty)
     }
+
+    func testPracticeEntitiesUploadDownloadAndRemoteDeletion() async throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let routine = PracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let session = PracticeSession(
+            routineId: routine.id,
+            linkedProjectId: UUID(),
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(120),
+            activeDurationSeconds: 120,
+            note: "Chord changes",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let cloud = SharedFakeCloudDatabaseClient()
+        let firstRepository = InMemoryJournalRepository()
+        try firstRepository.commit(
+            JournalTransaction(
+                upserts: [.practiceRoutine(routine), .practiceSession(session)],
+                origin: .user
+            )
+        )
+        let firstCoordinator = CloudSyncCoordinator(repository: firstRepository, client: cloud)
+
+        try await firstCoordinator.syncNow()
+
+        let secondRepository = InMemoryJournalRepository()
+        let secondCoordinator = CloudSyncCoordinator(repository: secondRepository, client: cloud)
+        try await secondCoordinator.syncNow()
+        XCTAssertEqual(try secondRepository.snapshot().practiceRoutines, [routine])
+        XCTAssertEqual(try secondRepository.snapshot().practiceSessions, [session])
+
+        await cloud.queueRemoteDeletion(recordName: routine.id.uuidString)
+        try await firstCoordinator.syncNow()
+
+        XCTAssertTrue(try firstRepository.snapshot().practiceRoutines.isEmpty)
+        XCTAssertEqual(try firstRepository.snapshot().practiceSessions, [session])
+        XCTAssertTrue(try firstRepository.pendingMutations(limit: 10).isEmpty)
+    }
 }
 
 private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
@@ -51,6 +98,7 @@ private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
         ownerName: CKCurrentUserDefaultName
     )
     private var records: [CKRecord] = []
+    private var remoteChanges: [CloudRemoteChange] = []
 
     func ensureZone(named: String) async throws {}
 
@@ -88,10 +136,21 @@ private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
     }
 
     func fetchChanges(after tokenData: Data?) async throws -> CloudChangeBatch {
-        guard tokenData == nil else { return CloudChangeBatch() }
-        return CloudChangeBatch(
-            changes: records.map(CloudRemoteChange.save),
-            tokenData: Data("shared-fake-cloud-v1".utf8)
+        if tokenData == nil {
+            return CloudChangeBatch(
+                changes: records.map(CloudRemoteChange.save),
+                tokenData: Data("shared-fake-cloud-v1".utf8)
+            )
+        }
+        let changes = remoteChanges
+        remoteChanges = []
+        return CloudChangeBatch(changes: changes)
+    }
+
+    func queueRemoteDeletion(recordName: String) {
+        records.removeAll { $0.recordID.recordName == recordName }
+        remoteChanges.append(
+            .delete(CKRecord.ID(recordName: recordName, zoneID: zoneID))
         )
     }
 }

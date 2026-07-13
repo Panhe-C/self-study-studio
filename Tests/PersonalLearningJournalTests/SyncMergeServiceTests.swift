@@ -152,4 +152,34 @@ final class SyncMergeServiceTests: XCTestCase {
         XCTAssertEqual(conflict.entity, .init(.planPhase, base.id))
         XCTAssertEqual(conflict.conflictingFields, ["objective"])
     }
+
+    func testRemotePracticeRoutineTombstoneWinsOverOlderLocalValue() throws {
+        let base = PracticeRoutine(
+            id: UUID(),
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        var local = base
+        local.updatedAt = Date(timeIntervalSince1970: 150)
+        var remote = base
+        remote.updatedAt = Date(timeIntervalSince1970: 200)
+        remote.deletedAt = Date(timeIntervalSince1970: 200)
+
+        let result = try SyncMergeService().merge(
+            base: .practiceRoutine(base),
+            local: .practiceRoutine(local),
+            server: .practiceRoutine(remote)
+        )
+
+        guard case let .merged(.practiceRoutine(merged)) = result else {
+            return XCTFail("Expected remote practice tombstone to merge")
+        }
+        XCTAssertEqual(merged.deletedAt, remote.deletedAt)
+        XCTAssertEqual(merged.updatedAt, remote.updatedAt)
+    }
 }

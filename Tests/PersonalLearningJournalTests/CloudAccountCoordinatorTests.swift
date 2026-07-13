@@ -94,6 +94,43 @@ final class CloudAccountCoordinatorTests: XCTestCase {
         XCTAssertTrue(try localRepository.pendingMutations(limit: 10).isEmpty)
     }
 
+    func testBootstrapCopiesPracticeDataToCloudStoreOnlyAfterConfirmation() async throws {
+        let routine = PracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let session = PracticeSession(
+            routineId: routine.id,
+            startedAt: Date(timeIntervalSince1970: 10_000),
+            endedAt: Date(timeIntervalSince1970: 10_120),
+            activeDurationSeconds: 120
+        )
+        let localRepository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(practiceRoutines: [routine], practiceSessions: [session])
+        )
+        let cloudRepository = InMemoryJournalRepository()
+        let coordinator = CloudAccountCoordinator(
+            rootDirectory: temporaryDirectory(),
+            repositoryFactory: { url in
+                url.path.contains("/local/") ? localRepository : cloudRepository
+            }
+        )
+
+        await coordinator.refresh(using: FakeAccountProvider(status: .available))
+
+        XCTAssertEqual(try coordinator.prepareExistingLocalDataForCloud(), 2)
+        try coordinator.confirmExistingLocalDataUpload()
+
+        XCTAssertEqual(
+            try cloudRepository.pendingMutations(limit: 10).map(\.entity),
+            [.init(.practiceRoutine, routine.id), .init(.practiceSession, session.id)]
+        )
+        XCTAssertTrue(try localRepository.pendingMutations(limit: 10).isEmpty)
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

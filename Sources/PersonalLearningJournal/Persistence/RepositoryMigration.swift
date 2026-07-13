@@ -34,6 +34,8 @@ public struct RepositoryMigration {
             + snapshot.proofs.map(JournalEntity.proof)
             + snapshot.reviews.map(JournalEntity.review)
             + snapshot.trailEvents.map(JournalEntity.trailEvent)
+            + snapshot.practiceRoutines.map(JournalEntity.practiceRoutine)
+            + snapshot.practiceSessions.map(JournalEntity.practiceSession)
         try repository.commit(
             JournalTransaction(
                 upserts: entities,

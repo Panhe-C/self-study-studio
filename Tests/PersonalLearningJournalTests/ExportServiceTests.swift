@@ -67,6 +67,57 @@ final class ExportServiceTests: XCTestCase {
         XCTAssertEqual(export.proofs.map(\.id), [proof.id])
     }
 
+    func testExportJSONIncludesPracticeRoutineAndSession() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let routine = PracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let session = PracticeSession(
+            routineId: routine.id,
+            linkedProjectId: UUID(),
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(120),
+            activeDurationSeconds: 120,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+
+        let data = try ExportService().exportJSON(
+            snapshot: JournalSnapshot(practiceRoutines: [routine], practiceSessions: [session])
+        )
+        let export = try JSONDecoder.journal.decode(JournalExport.self, from: data)
+
+        XCTAssertEqual(export.practiceRoutines, [routine])
+        XCTAssertEqual(export.practiceSessions, [session])
+    }
+
+    func testLegacyExportDecodesWithEmptyPracticeCollections() throws {
+        let export = JournalExport(
+            exportedAt: Date(timeIntervalSince1970: 10_000),
+            projects: [],
+            sessions: [],
+            proofs: [],
+            reviews: []
+        )
+        var payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder.journal.encode(export)) as? [String: Any]
+        )
+        payload.removeValue(forKey: "practiceRoutines")
+        payload.removeValue(forKey: "practiceSessions")
+        let legacyData = try JSONSerialization.data(withJSONObject: payload)
+
+        let decoded = try JSONDecoder.journal.decode(JournalExport.self, from: legacyData)
+
+        XCTAssertTrue(decoded.practiceRoutines.isEmpty)
+        XCTAssertTrue(decoded.practiceSessions.isEmpty)
+    }
+
     func testAttachmentManifestUsesProjectSessionProofFolderShape() throws {
         let projectId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
         let sessionId = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!

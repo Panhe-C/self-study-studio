@@ -85,4 +85,31 @@ final class RepositoryMigrationTests: XCTestCase {
 
         XCTAssertEqual(try reopened.snapshot().projects.map(\.id), [firstProject.id])
     }
+
+    func testMigrationImportsPracticeRoutineAndSessionWithoutCreatingOutbox() throws {
+        let routine = PracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let session = PracticeSession(
+            routineId: routine.id,
+            startedAt: Date(timeIntervalSince1970: 10_000),
+            endedAt: Date(timeIntervalSince1970: 10_120),
+            activeDurationSeconds: 120
+        )
+        let legacy = InMemoryJournalStore(
+            snapshot: JournalSnapshot(practiceRoutines: [routine], practiceSessions: [session])
+        )
+        let repository = InMemoryJournalRepository()
+
+        try RepositoryMigration().migrateIfNeeded(from: legacy, to: repository)
+
+        let snapshot = try repository.snapshot()
+        XCTAssertEqual(snapshot.practiceRoutines, [routine])
+        XCTAssertEqual(snapshot.practiceSessions, [session])
+        XCTAssertTrue(try repository.pendingMutations(limit: 10).isEmpty)
+    }
 }

@@ -195,6 +195,47 @@ final class CloudRecordMapperTests: XCTestCase {
         XCTAssertNil(preferencesRecord["calendarIdentifier"])
     }
 
+    func testPracticeSessionCloudRoundTripKeepsOptionalProjectLink() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let projectID = UUID()
+        let session = PracticeSession(
+            id: fixedID,
+            routineId: UUID(),
+            linkedProjectId: projectID,
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(120),
+            activeDurationSeconds: 120,
+            note: "Chord changes",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let mapper = CloudRecordMapper()
+
+        let record = try mapper.record(for: .practiceSession(session), zoneID: zoneID)
+
+        XCTAssertEqual(record.recordType, "PracticeSession")
+        XCTAssertEqual(try mapper.entity(from: record), .practiceSession(session))
+    }
+
+    func testPracticeSessionCloudRoundTripAllowsNoProjectLink() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let session = PracticeSession(
+            id: fixedID,
+            routineId: UUID(),
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(120),
+            activeDurationSeconds: 120,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let mapper = CloudRecordMapper()
+
+        let record = try mapper.record(for: .practiceSession(session), zoneID: zoneID)
+
+        XCTAssertNil(record["linkedProjectId"])
+        XCTAssertEqual(try mapper.entity(from: record), .practiceSession(session))
+    }
+
     func testPracticeRoutineRejectsInvalidTargetMinutes() throws {
         let record = try practiceRoutineRecord()
         record["targetMinutes"] = 0
