@@ -12,6 +12,8 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
     public var plannedSessions: [PlannedSession]
     public var availabilityRules: [AvailabilityRule]
     public var schedulingPreferences: [SchedulingPreferences]
+    public var practiceRoutines: [PracticeRoutine]
+    public var practiceSessions: [PracticeSession]
     public var hasCompletedOnboarding: Bool
     public var pendingFirstRecordProjectId: UUID?
 
@@ -26,6 +28,8 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         plannedSessions: [PlannedSession] = [],
         availabilityRules: [AvailabilityRule] = [],
         schedulingPreferences: [SchedulingPreferences] = [],
+        practiceRoutines: [PracticeRoutine] = [],
+        practiceSessions: [PracticeSession] = [],
         hasCompletedOnboarding: Bool? = nil,
         pendingFirstRecordProjectId: UUID? = nil
     ) {
@@ -39,6 +43,8 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         self.plannedSessions = plannedSessions
         self.availabilityRules = availabilityRules
         self.schedulingPreferences = schedulingPreferences
+        self.practiceRoutines = practiceRoutines
+        self.practiceSessions = practiceSessions
         self.hasCompletedOnboarding = hasCompletedOnboarding ?? !projects.isEmpty
         self.pendingFirstRecordProjectId = pendingFirstRecordProjectId
     }
@@ -54,6 +60,8 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         case plannedSessions
         case availabilityRules
         case schedulingPreferences
+        case practiceRoutines
+        case practiceSessions
         case hasCompletedOnboarding
         case pendingFirstRecordProjectId
     }
@@ -70,6 +78,8 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         plannedSessions = try container.decodeIfPresent([PlannedSession].self, forKey: .plannedSessions) ?? []
         availabilityRules = try container.decodeIfPresent([AvailabilityRule].self, forKey: .availabilityRules) ?? []
         schedulingPreferences = try container.decodeIfPresent([SchedulingPreferences].self, forKey: .schedulingPreferences) ?? []
+        practiceRoutines = try container.decodeIfPresent([PracticeRoutine].self, forKey: .practiceRoutines) ?? []
+        practiceSessions = try container.decodeIfPresent([PracticeSession].self, forKey: .practiceSessions) ?? []
         hasCompletedOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding)
             ?? !projects.isEmpty
         pendingFirstRecordProjectId = try container.decodeIfPresent(UUID.self, forKey: .pendingFirstRecordProjectId)

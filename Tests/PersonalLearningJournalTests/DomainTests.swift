@@ -13,6 +13,13 @@ final class DomainTests: XCTestCase {
         XCTAssertEqual(project.schemaVersion, JournalSchema.currentVersion)
     }
 
+    func testLegacySnapshotDecodesEmptyPracticeCollections() throws {
+        let data = Data(#"{"projects":[],"sessions":[],"proofs":[],"reviews":[],"trailEvents":[]}"#.utf8)
+        let snapshot = try JSONDecoder().decode(JournalSnapshot.self, from: data)
+        XCTAssertEqual(snapshot.practiceRoutines, [])
+        XCTAssertEqual(snapshot.practiceSessions, [])
+    }
+
     func testLegacyJournalEntitiesDecodeWithCurrentSchemaAndNoDeletion() throws {
         let projectId = UUID()
         let sourceId = UUID()
