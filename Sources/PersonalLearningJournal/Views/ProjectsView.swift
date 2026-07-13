@@ -3,47 +3,38 @@ import SwiftUI
 public struct ProjectsView: View {
     @ObservedObject private var viewModel: JournalViewModel
     @State private var showingCreate = false
+    @State private var selectedStatus: ProjectStatus = .active
 
     public init(viewModel: JournalViewModel) {
         self.viewModel = viewModel
     }
 
     public var body: some View {
-        List(viewModel.projects) { project in
-            NavigationLink {
-                ProjectDetailView(viewModel: viewModel, project: project)
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(project.name)
-                            .font(.headline)
-                        Spacer()
-                        Text(project.status.rawValue)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            Picker("Project status", selection: $selectedStatus) {
+                Text("Active  \(count(for: .active))").tag(ProjectStatus.active)
+                Text("Paused  \(count(for: .paused))").tag(ProjectStatus.paused)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, StudioTheme.pageInset)
+            .padding(.vertical, 12)
+
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    ForEach(filteredProjects) { project in
+                        NavigationLink {
+                            ProjectDetailView(viewModel: viewModel, project: project)
+                        } label: {
+                            projectCard(project)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    Text(project.currentNextStep.isEmpty ? "No Next Step" : project.currentNextStep)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    if let latestSession = latestSession(for: project) {
-                        Text("Last: \(latestSession.durationMinutes) min · \(latestSession.actionType.rawValue)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let latestProof = latestProof(for: project) {
-                        Text("Proof: \(latestProof.title)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Label(
-                        progressedThisWeek(project) ? "Progress this week" : "No progress this week",
-                        systemImage: progressedThisWeek(project) ? "checkmark.circle" : "pause.circle"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 }
+                .padding(.horizontal, StudioTheme.pageInset)
+                .padding(.bottom, 24)
             }
         }
+        .background(StudioTheme.pageBackground.ignoresSafeArea())
         .navigationTitle("Projects")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -57,6 +48,54 @@ public struct ProjectsView: View {
         .sheet(isPresented: $showingCreate) {
             CreateProjectView(viewModel: viewModel)
         }
+    }
+
+    private var filteredProjects: [Project] {
+        StudioPresentation.projects(viewModel.projects, status: selectedStatus)
+    }
+
+    private func count(for status: ProjectStatus) -> Int {
+        StudioPresentation.projects(viewModel.projects, status: status).count
+    }
+
+    private func projectCard(_ project: Project) -> some View {
+        let plan = viewModel.activeCoursePlan(for: project.id)
+        let sessions = plan.map { viewModel.plannedSessions(for: $0.id) } ?? []
+        let progress = StudioPresentation.progress(
+            completed: sessions.count { $0.status == .completed },
+            total: sessions.count
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Image(systemName: project.lastActionType == .course ? "book.closed.fill" : "square.grid.2x2.fill")
+                    .foregroundStyle(StudioTheme.accent)
+                Text(project.name).font(.headline)
+                Spacer()
+                Text(sessions.isEmpty ? (progressedThisWeek(project) ? "Active" : "Idle") : progress.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(StudioTheme.accent)
+            }
+            ProgressView(value: sessions.isEmpty ? (progressedThisWeek(project) ? 1 : 0) : progress)
+                .tint(progress >= 1 ? StudioTheme.completed : StudioTheme.accent)
+            Text("Next step")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Text(project.currentNextStep.isEmpty ? "No next step" : project.currentNextStep)
+                    .font(.body.weight(.medium))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.tertiary)
+            }
+            if let proof = latestProof(for: project) {
+                Label(proof.title, systemImage: "paperclip")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func latestSession(for project: Project) -> LearningSession? {

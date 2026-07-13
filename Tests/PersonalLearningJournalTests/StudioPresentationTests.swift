@@ -88,6 +88,16 @@ final class StudioPresentationTests: XCTestCase {
         )
     }
 
+    func testProjectFilterReturnsOnlySelectedStatus() {
+        let active = Project(name: "Active", area: "AI", goal: "Learn", currentNextStep: "Read")
+        let paused = Project(name: "Paused", area: "Music", goal: "Play", status: .paused, currentNextStep: "Practice")
+
+        XCTAssertEqual(
+            StudioPresentation.projects([active, paused], status: .active).map(\.id),
+            [active.id]
+        )
+    }
+
     private func makeSession(startedAt: Date, durationMinutes: Int) throws -> LearningSession {
         try LearningSession(
             projectId: UUID(),

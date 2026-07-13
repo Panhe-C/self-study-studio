@@ -63,6 +63,10 @@ public struct StudioFocus: Equatable, Sendable {
 }
 
 public enum StudioPresentation {
+    public static func projects(_ projects: [Project], status: ProjectStatus) -> [Project] {
+        projects.filter { $0.status == status }
+    }
+
     public static func focus(
         projects: [Project],
         planned: [PlannedSessionContext]
