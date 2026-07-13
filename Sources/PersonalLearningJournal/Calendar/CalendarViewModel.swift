@@ -211,6 +211,7 @@ public final class CalendarViewModel: ObservableObject {
         authorization = state
         if state == .fullAccess {
             writableCalendars = try await calendarClient.writableCalendars()
+            await refreshBusyIntervals()
         }
         return state
     }

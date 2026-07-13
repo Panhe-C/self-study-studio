@@ -46,13 +46,17 @@ public struct DayCalendarView: View {
                     }
                 }
                 .frame(height: hourHeight * 24)
+                .clipped()
             }
         }
     }
 
     private func busyBlock(_ interval: BusyInterval, dayStart: Date, width: CGFloat) -> some View {
-        let minute = interval.start.timeIntervalSince(dayStart) / 60
-        let duration = max(15, interval.end.timeIntervalSince(interval.start) / 60)
+        let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86_400)
+        let start = max(interval.start, dayStart)
+        let end = min(interval.end, dayEnd)
+        let minute = start.timeIntervalSince(dayStart) / 60
+        let duration = max(15, end.timeIntervalSince(start) / 60)
         return RoundedRectangle(cornerRadius: 6)
             .fill(StudioTheme.mutedSurface.opacity(0.8))
             .overlay { Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary) }

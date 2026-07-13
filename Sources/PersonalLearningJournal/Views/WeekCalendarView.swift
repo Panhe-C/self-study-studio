@@ -158,12 +158,16 @@ public struct WeekCalendarView: View {
         }
         .frame(width: dayWidth, height: hourHeight * 24)
         .overlay(alignment: .leading) { Divider() }
+        .clipped()
     }
 
     private func busyBlock(_ interval: BusyInterval, dayStart: Date) -> some View {
+        let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86_400)
+        let start = max(interval.start, dayStart)
+        let end = min(interval.end, dayEnd)
         let layout = WeekTimelineLayout(pointsPerMinute: 1)
-        let y = layout.yOffset(for: interval.start, dayStart: dayStart)
-        let height = max(20, layout.height(for: CalendarTimelineFrame(start: interval.start, end: interval.end)))
+        let y = layout.yOffset(for: start, dayStart: dayStart)
+        let height = max(20, layout.height(for: CalendarTimelineFrame(start: start, end: end)))
         return RoundedRectangle(cornerRadius: 6)
             .fill(StudioTheme.mutedSurface.opacity(0.8))
             .overlay { Image(systemName: "lock.fill").font(.caption2).foregroundStyle(.secondary) }
