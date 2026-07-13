@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public struct LibraryView: View {
     @ObservedObject private var viewModel: JournalViewModel
@@ -103,15 +106,28 @@ public struct LibraryView: View {
     }
 
     private var evidenceGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 16) {
-            ForEach(filteredProofs) { proof in
-                NavigationLink {
-                    ProofDetailView(proof: proof, projectName: projectName(for: proof), sessionSummary: sessionSummary(for: proof))
-                } label: {
-                    evidenceCard(proof)
+        LazyVStack(alignment: .leading, spacing: 18) {
+            ForEach(filteredSections) { section in
+                StudioSectionHeader(title: section.title)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 16) {
+                    ForEach(section.proofs) { proof in
+                        NavigationLink {
+                            ProofDetailView(proof: proof, projectName: projectName(for: proof), sessionSummary: sessionSummary(for: proof))
+                        } label: {
+                            evidenceCard(proof)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
             }
+        }
+    }
+
+    private var filteredSections: [ProofSection] {
+        let allowed = Set(filteredProofs.map(\.id))
+        return sectionedProofs.compactMap { section in
+            let proofs = section.proofs.filter { allowed.contains($0.id) }
+            return proofs.isEmpty ? nil : ProofSection(title: section.title, proofs: proofs)
         }
     }
 
@@ -149,20 +165,42 @@ public struct LibraryView: View {
 
     private func evidenceCard(_ proof: Proof) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(StudioTheme.mutedSurface)
-                    .aspectRatio(1.15, contentMode: .fit)
-                Image(systemName: proofIcon(for: proof.type))
-                    .font(.system(size: 34, weight: .medium))
-                    .foregroundStyle(proof.type == .audio ? StudioTheme.completed : StudioTheme.accent)
-            }
+            proofPreview(proof)
             Text(proof.title).font(.subheadline.bold()).lineLimit(2)
             Text(projectName(for: proof)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             Text(proof.createdAt.formatted(date: .abbreviated, time: .omitted))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    @ViewBuilder
+    private func proofPreview(_ proof: Proof) -> some View {
+        let descriptor = ProofPreviewDescriptor(proof: proof)
+        ZStack {
+            RoundedRectangle(cornerRadius: 8).fill(StudioTheme.mutedSurface)
+            if case let .image(url) = descriptor.kind {
+                #if canImport(UIKit)
+                if let image = UIImage(contentsOfFile: url.path) {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    previewIcon(for: proof.type)
+                }
+                #else
+                previewIcon(for: proof.type)
+                #endif
+            } else {
+                previewIcon(for: proof.type)
+            }
+        }
+        .aspectRatio(1.15, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func previewIcon(for type: ProofType) -> some View {
+        Image(systemName: proofIcon(for: type))
+            .font(.system(size: 34, weight: .medium))
+            .foregroundStyle(type == .audio ? StudioTheme.completed : StudioTheme.accent)
     }
 
     private func reviewBanner(_ review: Review) -> some View {

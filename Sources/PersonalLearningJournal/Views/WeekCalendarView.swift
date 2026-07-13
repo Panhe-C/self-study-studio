@@ -213,9 +213,9 @@ public struct WeekCalendarView: View {
     private func eventColor(_ item: CalendarStudyItem) -> Color {
         switch item.bindingState {
         case .externallyModified, .externallyDeleted:
-            return .orange
+            return StudioTheme.notice
         default:
-            return item.status == .scheduled ? .green : .indigo
+            return item.status == .completed ? StudioTheme.completed : StudioTheme.planned
         }
     }
 }

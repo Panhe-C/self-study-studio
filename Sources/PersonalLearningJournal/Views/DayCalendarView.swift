@@ -66,10 +66,17 @@ public struct DayCalendarView: View {
         }
         .padding(8)
         .frame(width: max(80, width - 12), height: max(32, duration / 60 * hourHeight), alignment: .topLeading)
-        .background(Color.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+        .background(eventColor(item).opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
         .overlay {
-            RoundedRectangle(cornerRadius: 6).stroke(Color.green.opacity(0.55))
+            RoundedRectangle(cornerRadius: 6).stroke(eventColor(item).opacity(0.65))
         }
         .offset(x: 6, y: minute / 60 * hourHeight)
+    }
+
+    private func eventColor(_ item: CalendarStudyItem) -> Color {
+        if item.bindingState == .externallyModified || item.bindingState == .externallyDeleted {
+            return StudioTheme.notice
+        }
+        return item.status == .completed ? StudioTheme.completed : StudioTheme.planned
     }
 }

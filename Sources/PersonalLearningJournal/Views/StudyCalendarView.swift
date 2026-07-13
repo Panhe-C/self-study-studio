@@ -20,11 +20,19 @@ public struct StudyCalendarView: View {
                     Text("\(attentionCount) sessions need attention")
                         .font(.subheadline.weight(.medium))
                     Spacer()
-                    Button("Review") {
-                        if viewModel.scheduleDraft != nil { showingDraft = true } else { generateDraft() }
+                    if !viewModel.reconciliationItems.isEmpty {
+                        NavigationLink("Review") {
+                            CalendarReconciliationView(viewModel: viewModel)
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .tint(StudioTheme.notice)
+                    } else {
+                        Button("Review") {
+                            if viewModel.scheduleDraft != nil { showingDraft = true } else { generateDraft() }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .tint(StudioTheme.notice)
                     }
-                    .font(.subheadline.weight(.semibold))
-                    .tint(StudioTheme.notice)
                 }
                 .padding(.horizontal, StudioTheme.pageInset)
                 .padding(.vertical, 11)
@@ -91,6 +99,7 @@ public struct StudyCalendarView: View {
                     Image(systemName: "chevron.left")
                 }
                 .help("Previous")
+                .accessibilityLabel("Previous date range")
                 Spacer()
                 VStack(spacing: 2) {
                     Text(title)
@@ -103,6 +112,7 @@ public struct StudyCalendarView: View {
                     Image(systemName: "chevron.right")
                 }
                 .help("Next")
+                .accessibilityLabel("Next date range")
             }
         }
         .padding(.horizontal)
@@ -140,7 +150,7 @@ public struct StudyCalendarView: View {
         case .day:
             viewModel.focusedDate.formatted(.dateTime.month(.abbreviated).day())
         case .week:
-            "Study Week"
+            "\(viewModel.visibleRange.start.formatted(.dateTime.month(.abbreviated).day()))–\(viewModel.visibleRange.end.addingTimeInterval(-1).formatted(.dateTime.month(.abbreviated).day()))"
         case .month:
             viewModel.focusedDate.formatted(.dateTime.month(.wide).year())
         }

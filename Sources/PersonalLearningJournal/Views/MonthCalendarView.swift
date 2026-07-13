@@ -59,18 +59,18 @@ public struct MonthCalendarView: View {
                 if hasConflict {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(StudioTheme.notice)
                 }
             }
             if workload > 0 {
                 Label("\(workload)m", systemImage: "clock")
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(StudioTheme.planned)
             }
             if !deadlines.isEmpty {
                 Label("\(deadlines.count)", systemImage: "flag.fill")
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.indigo)
+                    .foregroundStyle(StudioTheme.notice)
             }
             Spacer(minLength: 0)
         }

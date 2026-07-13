@@ -12,8 +12,9 @@ public struct ProjectsView: View {
     public var body: some View {
         VStack(spacing: 0) {
             Picker("Project status", selection: $selectedStatus) {
-                Text("Active  \(count(for: .active))").tag(ProjectStatus.active)
-                Text("Paused  \(count(for: .paused))").tag(ProjectStatus.paused)
+                ForEach(ProjectStatus.allCases, id: \.self) { status in
+                    Text("\(status.rawValue.capitalized)  \(count(for: status))").tag(status)
+                }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, StudioTheme.pageInset)
@@ -75,8 +76,17 @@ public struct ProjectsView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(StudioTheme.accent)
             }
-            ProgressView(value: sessions.isEmpty ? (progressedThisWeek(project) ? 1 : 0) : progress)
-                .tint(progress >= 1 ? StudioTheme.completed : StudioTheme.accent)
+            if sessions.isEmpty {
+                Label(
+                    progressedThisWeek(project) ? "Activity this week" : "No activity this week",
+                    systemImage: progressedThisWeek(project) ? "checkmark.circle" : "pause.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView(value: progress)
+                    .tint(progress >= 1 ? StudioTheme.completed : StudioTheme.accent)
+            }
             Text("Next step")
                 .font(.caption)
                 .foregroundStyle(.secondary)
