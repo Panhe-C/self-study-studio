@@ -58,6 +58,35 @@ public enum JournalValidationError: Error, Equatable, Sendable {
     case missingPlannedSession
 }
 
+extension JournalValidationError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .emptyName:
+            "Add a project name."
+        case .emptyGoal:
+            "Add a learning goal."
+        case .emptyNextStep:
+            "Add a next step."
+        case .emptySessionNote:
+            "Add one sentence about what you worked on."
+        case .emptyProofStatement:
+            "Describe what this proof demonstrates."
+        case .invalidDuration:
+            "Set a duration greater than zero."
+        case .missingProject:
+            "This project is no longer available."
+        case .missingReview:
+            "This review is no longer available."
+        case .missingFirstRecord:
+            "Record your first learning session before continuing."
+        case .missingReviewRecommendation:
+            "Choose a review recommendation before continuing."
+        case .missingPlannedSession:
+            "This planned session is no longer available."
+        }
+    }
+}
+
 public struct Project: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var name: String

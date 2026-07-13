@@ -62,6 +62,7 @@ public struct QuickLogView: View {
                     Button("Save") {
                         save(addProof: false)
                     }
+                    .disabled(!Self.canSave(note: note))
                 }
 
                 ToolbarItem(placement: .primaryAction) {
@@ -70,6 +71,7 @@ public struct QuickLogView: View {
                     } label: {
                         Label("Save & Add Proof", systemImage: "paperclip.badge.plus")
                     }
+                    .disabled(!Self.canSave(note: note))
                 }
             }
             .sheet(item: $proofSession) { session in
@@ -84,6 +86,10 @@ public struct QuickLogView: View {
                 Text(errorMessage ?? "")
             }
         }
+    }
+
+    static func canSave(note: String) -> Bool {
+        !note.trimmedForJournal.isEmpty
     }
 
     private func save(addProof: Bool) {
