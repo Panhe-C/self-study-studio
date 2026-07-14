@@ -2,6 +2,40 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class ExportServiceTests: XCTestCase {
+    func testExportContainsDomainSchemaButNoSyncMetadata() throws {
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Finish",
+            currentNextStep: "Lecture 1"
+        )
+        let proof = try Proof(
+            projectId: project.id,
+            type: .file,
+            title: "Local notes",
+            statement: "Shows the notes were captured",
+            localPath: "/private/user/Documents/notes.md"
+        )
+
+        let data = try ExportService().exportJSON(
+            snapshot: JournalSnapshot(projects: [project], proofs: [proof])
+        )
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let export = try JSONDecoder.journal.decode(JournalExport.self, from: data)
+
+        XCTAssertTrue(json.contains("schemaVersion"))
+        XCTAssertFalse(json.contains("recordChangeTag"))
+        XCTAssertFalse(json.contains("accountRecordName"))
+        XCTAssertFalse(json.contains("accountHash"))
+        XCTAssertFalse(json.contains("PendingMutation"))
+        XCTAssertFalse(json.contains("lastError"))
+        XCTAssertFalse(json.contains("SyncConflict"))
+        XCTAssertFalse(json.contains("CalendarBinding"))
+        XCTAssertFalse(json.contains("eventIdentifier"))
+        XCTAssertFalse(json.contains("/private/user/Documents/notes.md"))
+        XCTAssertNil(export.proofs.first?.localPath)
+    }
+
     func testExportJSONContainsVersionAndJournalData() throws {
         let service = JournalService(store: InMemoryJournalStore())
         let project = try service.createProject(
@@ -27,10 +61,61 @@ final class ExportServiceTests: XCTestCase {
         let exportedData = try ExportService().exportJSON(snapshot: service.snapshot())
         let export = try JSONDecoder.journal.decode(JournalExport.self, from: exportedData)
 
-        XCTAssertEqual(export.version, "v0.1")
+        XCTAssertEqual(export.version, "v0.2")
         XCTAssertEqual(export.projects.map(\.id), [project.id])
         XCTAssertEqual(export.sessions.map(\.id), [session.id])
         XCTAssertEqual(export.proofs.map(\.id), [proof.id])
+    }
+
+    func testExportJSONIncludesPracticeRoutineAndSession() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let routine = PracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let session = PracticeSession(
+            routineId: routine.id,
+            linkedProjectId: UUID(),
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(120),
+            activeDurationSeconds: 120,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+
+        let data = try ExportService().exportJSON(
+            snapshot: JournalSnapshot(practiceRoutines: [routine], practiceSessions: [session])
+        )
+        let export = try JSONDecoder.journal.decode(JournalExport.self, from: data)
+
+        XCTAssertEqual(export.practiceRoutines, [routine])
+        XCTAssertEqual(export.practiceSessions, [session])
+    }
+
+    func testLegacyExportDecodesWithEmptyPracticeCollections() throws {
+        let export = JournalExport(
+            exportedAt: Date(timeIntervalSince1970: 10_000),
+            projects: [],
+            sessions: [],
+            proofs: [],
+            reviews: []
+        )
+        var payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder.journal.encode(export)) as? [String: Any]
+        )
+        payload.removeValue(forKey: "practiceRoutines")
+        payload.removeValue(forKey: "practiceSessions")
+        let legacyData = try JSONSerialization.data(withJSONObject: payload)
+
+        let decoded = try JSONDecoder.journal.decode(JournalExport.self, from: legacyData)
+
+        XCTAssertTrue(decoded.practiceRoutines.isEmpty)
+        XCTAssertTrue(decoded.practiceSessions.isEmpty)
     }
 
     func testAttachmentManifestUsesProjectSessionProofFolderShape() throws {

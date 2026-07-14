@@ -1,15 +1,25 @@
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 public struct RootView: View {
     @ObservedObject private var viewModel: JournalViewModel
+    @ObservedObject private var calendarViewModel: CalendarViewModel
+    private let practiceLifecycle: PracticeTimerLifecycleCoordinator
 
-    public init(viewModel: JournalViewModel) {
+    public init(viewModel: JournalViewModel, calendarViewModel: CalendarViewModel) {
         self.viewModel = viewModel
+        self.calendarViewModel = calendarViewModel
+        practiceLifecycle = PracticeTimerLifecycleCoordinator(runtime: viewModel.practiceTimer) {
+            Self.sendPracticeTargetHaptic()
+        }
     }
 
     public var body: some View {
         Group {
-            if viewModel.hasCompletedOnboarding {
+            if viewModel.shouldShowMainTabs {
                 TabView {
                     NavigationStack {
                         TodayView(viewModel: viewModel)
@@ -22,13 +32,51 @@ public struct RootView: View {
                     .tabItem { Label("Projects", systemImage: "folder") }
 
                     NavigationStack {
+                        StudyCalendarView(viewModel: calendarViewModel)
+                    }
+                    .tabItem { Label("Calendar", systemImage: "calendar") }
+
+                    NavigationStack {
                         LibraryView(viewModel: viewModel)
                     }
                     .tabItem { Label("Library", systemImage: "paperclip") }
                 }
+                .environmentObject(calendarViewModel)
+                .tint(StudioTheme.accent)
             } else {
                 OnboardingView(viewModel: viewModel)
             }
         }
+        .background {
+            PracticeTimerLifecycleView(coordinator: practiceLifecycle)
+        }
+    }
+
+    private static func sendPracticeTargetHaptic() {
+        #if canImport(UIKit)
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(.success)
+        #endif
+    }
+}
+
+private struct PracticeTimerLifecycleView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    let coordinator: PracticeTimerLifecycleCoordinator
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            Color.clear
+                .frame(width: 0, height: 0)
+                .onChange(of: timeline.date, initial: true) { _, _ in
+                    guard scenePhase == .active else { return }
+                    coordinator.refresh(deliverFeedback: true)
+                }
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            coordinator.refresh(deliverFeedback: phase == .active)
+        }
+        .accessibilityHidden(true)
     }
 }

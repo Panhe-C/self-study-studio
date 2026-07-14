@@ -82,6 +82,27 @@ public struct AttachmentStore: Sendable {
         )
     }
 
+    public func importCloudAsset(
+        at sourceURL: URL,
+        proofId: UUID
+    ) throws -> URL {
+        let ext = sourceURL.pathExtension
+        let filename = ext.isEmpty ? proofId.uuidString : "\(proofId.uuidString).\(ext)"
+        let destination = rootDirectory
+            .appendingPathComponent("LearningJournal", isDirectory: true)
+            .appendingPathComponent("ImportedAssets", isDirectory: true)
+            .appendingPathComponent(filename)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.copyItem(at: sourceURL, to: destination)
+        return destination
+    }
+
     public func attachmentURL(
         projectId: UUID,
         sessionId: UUID?,

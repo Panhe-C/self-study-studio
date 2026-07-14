@@ -7,14 +7,28 @@ public struct JournalExport: Codable, Equatable, Sendable {
     public var sessions: [LearningSession]
     public var proofs: [Proof]
     public var reviews: [Review]
+    public var coursePlans: [CoursePlan]
+    public var planPhases: [PlanPhase]
+    public var plannedSessions: [PlannedSession]
+    public var availabilityRules: [AvailabilityRule]
+    public var schedulingPreferences: [SchedulingPreferences]
+    public var practiceRoutines: [PracticeRoutine]
+    public var practiceSessions: [PracticeSession]
 
     public init(
-        version: String = "v0.1",
+        version: String = "v0.2",
         exportedAt: Date = Date(),
         projects: [Project],
         sessions: [LearningSession],
         proofs: [Proof],
-        reviews: [Review]
+        reviews: [Review],
+        coursePlans: [CoursePlan] = [],
+        planPhases: [PlanPhase] = [],
+        plannedSessions: [PlannedSession] = [],
+        availabilityRules: [AvailabilityRule] = [],
+        schedulingPreferences: [SchedulingPreferences] = [],
+        practiceRoutines: [PracticeRoutine] = [],
+        practiceSessions: [PracticeSession] = []
     ) {
         self.version = version
         self.exportedAt = exportedAt
@@ -22,6 +36,46 @@ public struct JournalExport: Codable, Equatable, Sendable {
         self.sessions = sessions
         self.proofs = proofs
         self.reviews = reviews
+        self.coursePlans = coursePlans
+        self.planPhases = planPhases
+        self.plannedSessions = plannedSessions
+        self.availabilityRules = availabilityRules
+        self.schedulingPreferences = schedulingPreferences
+        self.practiceRoutines = practiceRoutines
+        self.practiceSessions = practiceSessions
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case exportedAt
+        case projects
+        case sessions
+        case proofs
+        case reviews
+        case coursePlans
+        case planPhases
+        case plannedSessions
+        case availabilityRules
+        case schedulingPreferences
+        case practiceRoutines
+        case practiceSessions
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(String.self, forKey: .version)
+        exportedAt = try container.decode(Date.self, forKey: .exportedAt)
+        projects = try container.decode([Project].self, forKey: .projects)
+        sessions = try container.decode([LearningSession].self, forKey: .sessions)
+        proofs = try container.decode([Proof].self, forKey: .proofs)
+        reviews = try container.decode([Review].self, forKey: .reviews)
+        coursePlans = try container.decode([CoursePlan].self, forKey: .coursePlans)
+        planPhases = try container.decode([PlanPhase].self, forKey: .planPhases)
+        plannedSessions = try container.decode([PlannedSession].self, forKey: .plannedSessions)
+        availabilityRules = try container.decode([AvailabilityRule].self, forKey: .availabilityRules)
+        schedulingPreferences = try container.decode([SchedulingPreferences].self, forKey: .schedulingPreferences)
+        practiceRoutines = try container.decodeIfPresent([PracticeRoutine].self, forKey: .practiceRoutines) ?? []
+        practiceSessions = try container.decodeIfPresent([PracticeSession].self, forKey: .practiceSessions) ?? []
     }
 }
 
@@ -43,12 +97,24 @@ public struct ExportService {
     }
 
     public func exportJSON(snapshot: JournalSnapshot) throws -> Data {
+        let exportProofs = snapshot.proofs.map { proof in
+            var exportProof = proof
+            exportProof.localPath = nil
+            return exportProof
+        }
         let export = JournalExport(
             exportedAt: now(),
             projects: snapshot.projects,
             sessions: snapshot.sessions,
-            proofs: snapshot.proofs,
-            reviews: snapshot.reviews
+            proofs: exportProofs,
+            reviews: snapshot.reviews,
+            coursePlans: snapshot.coursePlans,
+            planPhases: snapshot.planPhases,
+            plannedSessions: snapshot.plannedSessions,
+            availabilityRules: snapshot.availabilityRules,
+            schedulingPreferences: snapshot.schedulingPreferences,
+            practiceRoutines: snapshot.practiceRoutines,
+            practiceSessions: snapshot.practiceSessions
         )
         return try JSONEncoder.journal.encode(export)
     }

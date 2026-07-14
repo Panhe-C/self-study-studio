@@ -1,21 +1,33 @@
 import Foundation
 
 public final class JournalService {
-    private let store: JournalStore
+    private let repository: any JournalRepository
     private let now: () -> Date
     private var state: JournalSnapshot
 
     public init(
-        store: JournalStore,
+        repository: any JournalRepository,
         now: @escaping () -> Date = Date.init
     ) {
-        self.store = store
+        self.repository = repository
         self.now = now
-        self.state = (try? store.load()) ?? JournalSnapshot()
+        self.state = (try? repository.snapshot()) ?? JournalSnapshot()
+    }
+
+    public convenience init(
+        store: any JournalStore,
+        now: @escaping () -> Date = Date.init
+    ) {
+        let snapshot = (try? store.load()) ?? JournalSnapshot()
+        self.init(repository: InMemoryJournalRepository(snapshot: snapshot), now: now)
     }
 
     public func snapshot() -> JournalSnapshot {
         state
+    }
+
+    public func refreshFromRepository() {
+        state = (try? repository.snapshot()) ?? state
     }
 
     public func project(id: UUID) -> Project? {
@@ -67,7 +79,10 @@ public final class JournalService {
         nextState.projects.append(contentsOf: projects)
         nextState.hasCompletedOnboarding = false
         nextState.pendingFirstRecordProjectId = projects.first?.id
-        try store.save(nextState)
+        try persist(
+            upserts: projects.map(JournalEntity.project),
+            stateMetadata: JournalStateMetadata(snapshot: nextState)
+        )
         state = nextState
         return projects
     }
@@ -83,7 +98,7 @@ public final class JournalService {
         var nextState = state
         nextState.hasCompletedOnboarding = true
         nextState.pendingFirstRecordProjectId = nil
-        try store.save(nextState)
+        try persist(stateMetadata: JournalStateMetadata(snapshot: nextState))
         state = nextState
     }
 
@@ -109,7 +124,7 @@ public final class JournalService {
             updatedAt: createdAt
         )
         state.projects.append(project)
-        try persist()
+        try persist(upserts: [.project(project)])
         return project
     }
 
@@ -128,6 +143,7 @@ public final class JournalService {
         guard !goal.trimmedForJournal.isEmpty else { throw JournalValidationError.emptyGoal }
 
         let updatedAt = now()
+        let trailStartIndex = state.trailEvents.count
         let previousNextStep = state.projects[index].currentNextStep
         state.projects[index].name = name.trimmedForJournal
         state.projects[index].area = area.trimmedForJournal
@@ -143,7 +159,10 @@ public final class JournalService {
             occurredAt: updatedAt
         )
 
-        try persist()
+        try persist(
+            upserts: [.project(state.projects[index])]
+                + state.trailEvents[trailStartIndex...].map(JournalEntity.trailEvent)
+        )
         return state.projects[index]
     }
 
@@ -239,6 +258,7 @@ public final class JournalService {
         durationMinutes: Int,
         note: String,
         nextStep: String? = nil,
+        plannedSessionId: UUID? = nil,
         endedAt: Date? = nil
     ) throws -> LearningSession {
         let finishedAt = endedAt ?? now()
@@ -249,6 +269,7 @@ public final class JournalService {
             durationMinutes: durationMinutes,
             note: note,
             nextStep: nextStep,
+            plannedSessionId: plannedSessionId,
             startedAt: finishedAt.addingTimeInterval(TimeInterval(-durationMinutes * 60)),
             endedAt: finishedAt
         )
@@ -261,7 +282,8 @@ public final class JournalService {
         startedAt: Date,
         endedAt: Date,
         note: String,
-        nextStep: String? = nil
+        nextStep: String? = nil,
+        plannedSessionId: UUID? = nil
     ) throws -> LearningSession {
         let durationMinutes = Int(endedAt.timeIntervalSince(startedAt) / 60)
         guard durationMinutes > 0 else { throw JournalValidationError.invalidDuration }
@@ -272,6 +294,7 @@ public final class JournalService {
             durationMinutes: durationMinutes,
             note: note,
             nextStep: nextStep,
+            plannedSessionId: plannedSessionId,
             startedAt: startedAt,
             endedAt: endedAt
         )
@@ -285,14 +308,24 @@ public final class JournalService {
         durationMinutes: Int,
         note: String,
         nextStep: String?,
+        plannedSessionId: UUID?,
         startedAt: Date,
         endedAt: Date
     ) throws -> LearningSession {
+        refreshFromRepository()
         guard let projectIndex = state.projects.firstIndex(where: { $0.id == projectId }) else {
             throw JournalValidationError.missingProject
         }
+        let plannedSessionIndex = try plannedSessionId.map { id -> Int in
+            guard let index = state.plannedSessions.firstIndex(where: { $0.id == id }),
+                  state.plannedSessions[index].projectId == projectId else {
+                throw JournalValidationError.missingPlannedSession
+            }
+            return index
+        }
 
         let project = state.projects[projectIndex]
+        let trailStartIndex = state.trailEvents.count
         let resolvedActionType = actionType ?? project.lastActionType
         let resolvedNextStep = nextStep?.trimmedForJournal.isEmpty == false
             ? nextStep!.trimmedForJournal
@@ -334,7 +367,25 @@ public final class JournalService {
             occurredAt: endedAt
         )
 
-        try persist()
+        var plannedSession: PlannedSession?
+        if let plannedSessionIndex {
+            var value = state.plannedSessions[plannedSessionIndex]
+            value.status = .completed
+            value.completedSessionId = session.id
+            value.updatedAt = endedAt
+            state.plannedSessions[plannedSessionIndex] = value
+            plannedSession = value
+        }
+
+        var upserts: [JournalEntity] = [
+            .project(state.projects[projectIndex]),
+            .session(session)
+        ]
+        upserts.append(contentsOf: state.trailEvents[trailStartIndex...].map(JournalEntity.trailEvent))
+        if let plannedSession {
+            upserts.append(.plannedSession(plannedSession))
+        }
+        try persist(upserts: upserts)
         return session
     }
 
@@ -356,6 +407,7 @@ public final class JournalService {
         }
 
         let createdAt = now()
+        let trailStartIndex = state.trailEvents.count
         let proof = try Proof(
             id: id,
             projectId: projectId,
@@ -379,7 +431,10 @@ public final class JournalService {
             title: proof.title,
             detail: proof.statement
         )
-        try persist()
+        try persist(
+            upserts: [.proof(proof)]
+                + state.trailEvents[trailStartIndex...].map(JournalEntity.trailEvent)
+        )
         return proof
     }
 
@@ -389,6 +444,7 @@ public final class JournalService {
         }
 
         let changedAt = now()
+        let trailStartIndex = state.trailEvents.count
         state.projects[index].status = status
         state.projects[index].updatedAt = changedAt
         state.projects[index].archivedAt = status == .archived ? changedAt : nil
@@ -401,7 +457,10 @@ public final class JournalService {
             title: "Status changed",
             detail: "Project status changed to \(status.rawValue)"
         )
-        try persist()
+        try persist(
+            upserts: [.project(state.projects[index])]
+                + state.trailEvents[trailStartIndex...].map(JournalEntity.trailEvent)
+        )
     }
 
     public func applyReviewRecommendation(reviewId: UUID, projectId: UUID) throws {
@@ -419,6 +478,7 @@ public final class JournalService {
     }
 
     public func recordReview(_ review: Review) throws {
+        let trailStartIndex = state.trailEvents.count
         state.reviews.append(review)
 
         let referencedProjectIds = Set(
@@ -435,7 +495,10 @@ public final class JournalService {
             )
         }
 
-        try persist()
+        try persist(
+            upserts: [.review(review)]
+                + state.trailEvents[trailStartIndex...].map(JournalEntity.trailEvent)
+        )
     }
 
     @discardableResult
@@ -457,13 +520,8 @@ public final class JournalService {
             .filter { !$0.value.isEmpty }
         state.reviews[index].updatedAt = now()
 
-        try persist()
+        try persist(upserts: [.review(state.reviews[index])])
         return state.reviews[index]
-    }
-
-    public func replaceSnapshot(_ snapshot: JournalSnapshot) throws {
-        state = snapshot
-        try persist()
     }
 
     private func appendNextStepChangeIfNeeded(
@@ -516,8 +574,24 @@ public final class JournalService {
         )
     }
 
-    private func persist() throws {
-        try store.save(state)
+    private func persist(
+        upserts: [JournalEntity] = [],
+        deletions: [JournalEntityReference] = [],
+        stateMetadata: JournalStateMetadata? = nil
+    ) throws {
+        do {
+            try repository.commit(
+                JournalTransaction(
+                    upserts: upserts,
+                    deletions: deletions,
+                    origin: .user,
+                    stateMetadata: stateMetadata
+                )
+            )
+        } catch {
+            state = (try? repository.snapshot()) ?? state
+            throw error
+        }
     }
 }
 

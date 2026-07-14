@@ -2,6 +2,32 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class JournalServiceTests: XCTestCase {
+    func testQuickLogCommitsOnlyChangedEntities() throws {
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Finish",
+            currentNextStep: "Lecture 1"
+        )
+        let repository = TransactionSpyRepository(
+            snapshot: JournalSnapshot(projects: [project])
+        )
+        let service = JournalService(repository: repository)
+
+        _ = try service.quickLog(
+            projectId: project.id,
+            durationMinutes: 30,
+            note: "Finished lecture one",
+            nextStep: "Lecture 2"
+        )
+
+        let transaction = try XCTUnwrap(repository.transactions.last)
+        XCTAssertEqual(
+            transaction.upserts.map(\.reference.kind),
+            [.project, .session, .trailEvent, .trailEvent]
+        )
+        XCTAssertTrue(transaction.deletions.isEmpty)
+    }
     func testOnboardingIsNotCompleteUntilFirstSessionIsRecorded() throws {
         let service = JournalService(store: InMemoryJournalStore())
         let project = try XCTUnwrap(
@@ -171,6 +197,76 @@ final class JournalServiceTests: XCTestCase {
         XCTAssertEqual(session.nextStepBefore, "做一组 before/after")
         XCTAssertEqual(session.nextStepAfter, "修正肤色偏红")
         XCTAssertEqual(updatedProject.currentNextStep, "修正肤色偏红")
+    }
+
+    func testQuickLogCompletesLinkedPlannedSessionInSameJournal() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Build a model",
+            currentNextStep: "Read lecture 1",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let plan = try CoursePlan(
+            projectId: project.id,
+            revision: 1,
+            status: .active,
+            courseURL: nil,
+            courseTitle: "CS336",
+            courseOutline: "Language models",
+            goal: project.goal,
+            expectedOutcome: "Notebook",
+            startsOn: timestamp,
+            deadline: nil,
+            weeklyBudgetMinutes: 180,
+            summary: "Build a model",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let phase = try PlanPhase(
+            planId: plan.id,
+            title: "Foundations",
+            objective: "Understand tokenization",
+            expectedProof: "Tokenizer notebook",
+            ordinal: 0,
+            targetStart: timestamp,
+            targetEnd: timestamp,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let planned = try PlannedSession(
+            planId: plan.id,
+            phaseId: phase.id,
+            projectId: project.id,
+            title: "Implement tokenizer",
+            actionType: .course,
+            durationMinutes: 30,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(
+                projects: [project],
+                coursePlans: [plan],
+                planPhases: [phase],
+                plannedSessions: [planned]
+            )
+        )
+        let service = JournalService(repository: repository, now: { timestamp })
+
+        let session = try service.quickLog(
+            projectId: project.id,
+            durationMinutes: planned.durationMinutes,
+            note: "Completed tokenizer exercise",
+            plannedSessionId: planned.id,
+            endedAt: timestamp.addingTimeInterval(30 * 60)
+        )
+
+        let updated = try XCTUnwrap(repository.snapshot().plannedSessions.first)
+        XCTAssertEqual(updated.status, .completed)
+        XCTAssertEqual(updated.completedSessionId, session.id)
     }
 
     func testListsSessionsAndProofsByProjectAndSession() throws {
@@ -369,4 +465,52 @@ final class JournalServiceTests: XCTestCase {
         XCTAssertTrue(events[2].detail.contains("复现了 bigram baseline"))
         XCTAssertTrue(events[3].detail.contains("low-frequency"))
     }
+}
+
+private final class TransactionSpyRepository: JournalRepository {
+    private var storedSnapshot: JournalSnapshot
+    var transactions: [JournalTransaction] = []
+
+    init(snapshot: JournalSnapshot) {
+        self.storedSnapshot = snapshot
+    }
+
+    func snapshot() throws -> JournalSnapshot { storedSnapshot }
+
+    func commit(_ transaction: JournalTransaction) throws {
+        transactions.append(transaction)
+    }
+
+    func pendingMutations(limit: Int) throws -> [PendingMutation] { [] }
+
+    func acknowledge(
+        _ mutationIDs: Set<UUID>,
+        metadata: [SyncRecordMetadata]
+    ) throws {}
+
+    func conflicts() throws -> [SyncConflict] { [] }
+
+    func resolveConflict(id: UUID, with entity: JournalEntity) throws {}
+
+    func hasCompletedMigration(identifier: String) throws -> Bool { false }
+
+    func entity(for reference: JournalEntityReference) throws -> JournalEntity? { nil }
+
+    func metadata(for reference: JournalEntityReference) throws -> SyncRecordMetadata? { nil }
+
+    func reference(recordName: String) throws -> JournalEntityReference? { nil }
+
+    func recordSyncFailures(
+        retryable: [UUID: String],
+        terminal: [UUID: String]
+    ) throws {}
+
+    func syncChangeToken() throws -> Data? { nil }
+
+    func storeSyncChangeToken(_ token: Data?) throws {}
+
+    func applyRemote(
+        _ transaction: JournalTransaction,
+        conflicts: [SyncConflict]
+    ) throws {}
 }

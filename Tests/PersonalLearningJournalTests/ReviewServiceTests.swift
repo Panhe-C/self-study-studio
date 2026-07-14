@@ -193,6 +193,138 @@ final class ReviewServiceTests: XCTestCase {
         )
     }
 
+    func testLinkedPracticeAppearsInProjectHistoryAndRuleBasedReviewSources() async throws {
+        let repository = InMemoryJournalRepository()
+        let journalService = JournalService(repository: repository)
+        let practiceService = PracticeService(repository: repository)
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            practiceService: practiceService,
+            practiceTimer: PracticeTimerRuntime(store: ReviewPracticeTimerStateStore())
+        )
+        let project = try viewModel.createProject(
+            name: "Guitar Project",
+            area: "Music",
+            goal: "Play cleanly",
+            nextStep: "Practice scales"
+        )
+        let routine = try viewModel.createPracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let completion = PracticeTimerCompletion(
+            routineId: routine.id,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_800),
+            activeDurationSeconds: 1_800
+        )
+        let saved = try viewModel.savePracticeCompletion(
+            completion,
+            linkedProjectId: project.id,
+            note: "Scales"
+        )
+        let reviewService = ReviewService(
+            journalService: journalService,
+            provider: RuleBasedReviewProvider()
+        )
+
+        let review = try await reviewService.createWeeklyReview(
+            periodStart: Date(timeIntervalSince1970: 900),
+            periodEnd: Date(timeIntervalSince1970: 3_000)
+        )
+
+        XCTAssertEqual(viewModel.practiceSessionsForProject(project.id).map(\.id), [saved.session.id])
+        XCTAssertTrue(viewModel.sessions.isEmpty)
+        XCTAssertTrue(review.facts.contains { $0.contains("0 min") })
+        XCTAssertTrue(
+            review.aiSourceSummary.contains(
+                "practice \(saved.session.id.uuidString.prefix(8)): 30 min - Scales"
+            )
+        )
+    }
+
+    func testStructuredReviewInputIncludesOnlyLinkedPracticeInPeriod() async throws {
+        let project = Project(
+            name: "Guitar Project",
+            area: "Music",
+            goal: "Play cleanly",
+            currentNextStep: "Practice scales"
+        )
+        let routine = PracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let linked = PracticeSession(
+            routineId: routine.id,
+            linkedProjectId: project.id,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_800),
+            activeDurationSeconds: 1_800,
+            note: nil
+        )
+        let unlinked = PracticeSession(
+            routineId: routine.id,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_600),
+            activeDurationSeconds: 600,
+            note: "Unlinked"
+        )
+        let outsidePeriod = PracticeSession(
+            routineId: routine.id,
+            linkedProjectId: project.id,
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 700),
+            activeDurationSeconds: 600,
+            note: "Outside"
+        )
+        let deleted = PracticeSession(
+            routineId: routine.id,
+            linkedProjectId: project.id,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_600),
+            activeDurationSeconds: 600,
+            note: "Deleted",
+            deletedAt: Date(timeIntervalSince1970: 2_000)
+        )
+        let transport = CapturingReviewHTTPTransport()
+        let provider = OpenAICompatibleReviewProvider(
+            settings: AIReviewSettings(
+                endpoint: URL(string: "https://example.test/v1")!,
+                model: "test-model"
+            ),
+            apiKey: "test-key",
+            transport: transport
+        )
+
+        _ = try await provider.makeReview(
+            snapshot: JournalSnapshot(
+                projects: [project],
+                practiceRoutines: [routine],
+                practiceSessions: [linked, unlinked, outsidePeriod, deleted]
+            ),
+            periodStart: Date(timeIntervalSince1970: 900),
+            periodEnd: Date(timeIntervalSince1970: 3_000)
+        )
+
+        let reviewInput = try XCTUnwrap(transport.reviewInput())
+        let practiceSessions = try XCTUnwrap(reviewInput["practiceSessions"] as? [[String: Any]])
+        let practiceSources = try XCTUnwrap(reviewInput["practiceSources"] as? [String])
+        XCTAssertEqual(practiceSessions.count, 1)
+        XCTAssertEqual(practiceSessions[0]["id"] as? String, linked.id.uuidString)
+        XCTAssertEqual(
+            practiceSources,
+            ["practice \(linked.id.uuidString.prefix(8)): 30 min - Guitar"]
+        )
+    }
+
     func testAIReviewSettingsStoreKeepsAPIKeyOutsideRegularSettings() throws {
         let suiteName = "PersonalLearningJournalTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -338,7 +470,7 @@ private struct FailingReviewProvider: AIReviewProvider {
     }
 }
 
-private struct StubReviewHTTPTransport: ReviewHTTPTransport {
+private struct StubReviewHTTPTransport: AIHTTPTransport {
     let data: Data
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
@@ -361,5 +493,57 @@ private final class TestAPIKeyStore: APIKeyStore, @unchecked Sendable {
 
     func setValue(_ value: String?, for key: String) throws {
         values[key] = value
+    }
+}
+
+@MainActor
+private final class ReviewPracticeTimerStateStore: PracticeTimerStateStore {
+    private var data: Data?
+
+    func load() -> Data? { data }
+
+    func save(_ data: Data?) throws {
+        self.data = data
+    }
+}
+
+private final class CapturingReviewHTTPTransport: AIHTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var request: URLRequest?
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        lock.withLock {
+            self.request = request
+        }
+        let data = Data(
+            """
+            {
+              "choices": [{
+                "message": {
+                  "content": "{\\\"facts\\\":[],\\\"patterns\\\":[],\\\"decisions\\\":[],\\\"projectRecommendations\\\":{},\\\"nextSteps\\\":{},\\\"sourceSummary\\\":[],\\\"sourceReferences\\\":{}}"
+                }
+              }]
+            }
+            """.utf8
+        )
+        let response = HTTPURLResponse(
+            url: request.url ?? URL(string: "https://example.test")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return (data, response)
+    }
+
+    func reviewInput() -> [String: Any]? {
+        let body = lock.withLock { request?.httpBody }
+        guard let body,
+              let outer = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let messages = outer["messages"] as? [[String: Any]],
+              let user = messages.first(where: { $0["role"] as? String == "user" }),
+              let content = user["content"] as? String,
+              let inputData = content.data(using: .utf8)
+        else { return nil }
+        return try? JSONSerialization.jsonObject(with: inputData) as? [String: Any]
     }
 }

@@ -3,47 +3,49 @@ import SwiftUI
 public struct ProjectsView: View {
     @ObservedObject private var viewModel: JournalViewModel
     @State private var showingCreate = false
+    @State private var selectedStatus: ProjectStatus = .active
 
     public init(viewModel: JournalViewModel) {
         self.viewModel = viewModel
     }
 
     public var body: some View {
-        List(viewModel.projects) { project in
-            NavigationLink {
-                ProjectDetailView(viewModel: viewModel, project: project)
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(project.name)
-                            .font(.headline)
-                        Spacer()
-                        Text(project.status.rawValue)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(project.currentNextStep.isEmpty ? "No Next Step" : project.currentNextStep)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    if let latestSession = latestSession(for: project) {
-                        Text("Last: \(latestSession.durationMinutes) min · \(latestSession.actionType.rawValue)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let latestProof = latestProof(for: project) {
-                        Text("Proof: \(latestProof.title)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Label(
-                        progressedThisWeek(project) ? "Progress this week" : "No progress this week",
-                        systemImage: progressedThisWeek(project) ? "checkmark.circle" : "pause.circle"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Picker("Project status", selection: $selectedStatus) {
+                    Text("Active  \(count(for: .active))").tag(ProjectStatus.active)
+                    Text("Paused  \(count(for: .paused))").tag(ProjectStatus.paused)
                 }
+                .pickerStyle(.segmented)
+
+                Menu {
+                    Button("Low Frequency (\(count(for: .lowFrequency)))") { selectedStatus = .lowFrequency }
+                    Button("Archived (\(count(for: .archived)))") { selectedStatus = .archived }
+                } label: {
+                    Image(systemName: selectedStatus == .archived ? "archivebox" : "ellipsis.circle")
+                        .frame(width: 36, height: 32)
+                }
+                .accessibilityLabel("More project statuses")
+            }
+            .padding(.horizontal, StudioTheme.pageInset)
+            .padding(.vertical, 12)
+
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    ForEach(filteredProjects) { project in
+                        NavigationLink {
+                            ProjectDetailView(viewModel: viewModel, project: project)
+                        } label: {
+                            projectCard(project)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, StudioTheme.pageInset)
+                .padding(.bottom, 24)
             }
         }
+        .background(StudioTheme.pageBackground.ignoresSafeArea())
         .navigationTitle("Projects")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -57,6 +59,63 @@ public struct ProjectsView: View {
         .sheet(isPresented: $showingCreate) {
             CreateProjectView(viewModel: viewModel)
         }
+    }
+
+    private var filteredProjects: [Project] {
+        StudioPresentation.projects(viewModel.projects, status: selectedStatus)
+    }
+
+    private func count(for status: ProjectStatus) -> Int {
+        StudioPresentation.projects(viewModel.projects, status: status).count
+    }
+
+    private func projectCard(_ project: Project) -> some View {
+        let plan = viewModel.activeCoursePlan(for: project.id)
+        let sessions = plan.map { viewModel.plannedSessions(for: $0.id) } ?? []
+        let progress = StudioPresentation.progress(
+            completed: sessions.count { $0.status == .completed },
+            total: sessions.count
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Image(systemName: project.lastActionType == .course ? "book.closed.fill" : "square.grid.2x2.fill")
+                    .foregroundStyle(StudioTheme.accent)
+                Text(project.name).font(.headline)
+                Spacer()
+                Text(sessions.isEmpty ? (progressedThisWeek(project) ? "Active" : "Idle") : progress.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(StudioTheme.accent)
+            }
+            if sessions.isEmpty {
+                Label(
+                    progressedThisWeek(project) ? "Activity this week" : "No activity this week",
+                    systemImage: progressedThisWeek(project) ? "checkmark.circle" : "pause.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView(value: progress)
+                    .tint(progress >= 1 ? StudioTheme.completed : StudioTheme.accent)
+            }
+            Text("Next step")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Text(project.currentNextStep.isEmpty ? "No next step" : project.currentNextStep)
+                    .font(.body.weight(.medium))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.tertiary)
+            }
+            if let proof = latestProof(for: project) {
+                Label(proof.title, systemImage: "paperclip")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func latestSession(for project: Project) -> LearningSession? {
@@ -128,6 +187,7 @@ private struct ProjectDetailView: View {
     @State private var reviewError: String?
     @State private var isCreatingReview = false
     @State private var showingAISettings = false
+    @State private var showingCoursePlanWizard = false
 
     private var currentProject: Project {
         viewModel.projects.first { $0.id == project.id } ?? project
@@ -165,6 +225,34 @@ private struct ProjectDetailView: View {
                 }
             }
 
+            Section("Study Plan") {
+                if let plan = viewModel.activeCoursePlan(for: currentProject.id) {
+                    NavigationLink {
+                        CoursePlanDetailView(viewModel: viewModel, project: currentProject, plan: plan)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Revision \(plan.revision)")
+                                .font(.headline)
+                            Text("\(viewModel.plannedSessions(for: plan.id).count) planned sessions")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    Button {
+                        showingCoursePlanWizard = true
+                    } label: {
+                        Label("Create Study Plan", systemImage: "list.bullet.rectangle")
+                    }
+                }
+
+                if let draft = viewModel.draftCoursePlan, draft.projectId == currentProject.id {
+                    Text("Draft revision \(draft.revision) is ready to review.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if projectNeedsReview {
                 Section("Review") {
                     Button {
@@ -189,6 +277,30 @@ private struct ProjectDetailView: View {
                 Picker("Status", selection: statusBinding) {
                     ForEach(ProjectStatus.allCases, id: \.self) { status in
                         Text(status.rawValue).tag(status)
+                    }
+                }
+            }
+
+            Section("Related Practice") {
+                if relatedPracticeSessions.isEmpty {
+                    Text("No linked practice")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(relatedPracticeSessions) { session in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(practiceRoutineName(for: session))
+                                .font(.headline)
+                            Text(
+                                "\(session.endedAt.formatted(date: .abbreviated, time: .shortened)) · \(StudioDurationFormat.compact(seconds: session.activeDurationSeconds))"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            if let note = session.note, !note.isEmpty {
+                                Text(note)
+                                    .font(.subheadline)
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
                     }
                 }
             }
@@ -286,6 +398,9 @@ private struct ProjectDetailView: View {
         .sheet(isPresented: $showingAISettings) {
             AIReviewSettingsView()
         }
+        .sheet(isPresented: $showingCoursePlanWizard) {
+            CoursePlanWizardView(viewModel: viewModel, project: currentProject)
+        }
         .alert("Review failed", isPresented: .constant(reviewError != nil)) {
             Button("OK") { reviewError = nil }
         } message: {
@@ -299,6 +414,15 @@ private struct ProjectDetailView: View {
         } set: { newStatus in
             try? viewModel.updateProjectStatus(projectId: currentProject.id, status: newStatus)
         }
+    }
+
+    private var relatedPracticeSessions: [PracticeSession] {
+        viewModel.practiceSessionsForProject(currentProject.id)
+            .sorted { $0.endedAt > $1.endedAt }
+    }
+
+    private func practiceRoutineName(for session: PracticeSession) -> String {
+        viewModel.practiceRoutines.first { $0.id == session.routineId }?.name ?? "Practice"
     }
 
     private func createReview() async {

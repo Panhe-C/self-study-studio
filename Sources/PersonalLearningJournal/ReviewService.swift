@@ -36,6 +36,138 @@ public protocol AIReviewProvider: Sendable {
     ) async throws -> ReviewDraft
 }
 
+public struct CoursePlanReviewProgress: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID { planID }
+    public var planID: UUID
+    public var projectID: UUID
+    public var revision: Int
+    public var currentPhaseID: UUID?
+    public var currentPhaseTitle: String?
+    public var completedCount: Int
+    public var scheduledCount: Int
+    public var skippedCount: Int
+    public var missedDeadlineCount: Int
+    public var expectedProofs: [String]
+    public var plannedSessionReferences: [String]
+
+    public init(
+        planID: UUID,
+        projectID: UUID,
+        revision: Int,
+        currentPhaseID: UUID?,
+        currentPhaseTitle: String?,
+        completedCount: Int,
+        scheduledCount: Int,
+        skippedCount: Int,
+        missedDeadlineCount: Int,
+        expectedProofs: [String],
+        plannedSessionReferences: [String]
+    ) {
+        self.planID = planID
+        self.projectID = projectID
+        self.revision = revision
+        self.currentPhaseID = currentPhaseID
+        self.currentPhaseTitle = currentPhaseTitle
+        self.completedCount = completedCount
+        self.scheduledCount = scheduledCount
+        self.skippedCount = skippedCount
+        self.missedDeadlineCount = missedDeadlineCount
+        self.expectedProofs = expectedProofs
+        self.plannedSessionReferences = plannedSessionReferences
+    }
+
+    public var sourceSummary: String {
+        "plan \(planID.uuidString.prefix(8)): revision \(revision), completed \(completedCount) of \(completedCount + scheduledCount + skippedCount), scheduled \(scheduledCount), skipped \(skippedCount), missed \(missedDeadlineCount)"
+    }
+
+    public var sourceReferences: [String] {
+        var references = [sourceSummary]
+        if let currentPhaseID, let currentPhaseTitle {
+            references.append("phase \(currentPhaseID.uuidString.prefix(8)): \(currentPhaseTitle)")
+        }
+        references.append(contentsOf: expectedProofs.map { "plan expected Proof: \($0)" })
+        references.append(contentsOf: plannedSessionReferences)
+        return references
+    }
+}
+
+public enum CoursePlanReviewContext {
+    public static func make(
+        snapshot: JournalSnapshot,
+        referenceDate: Date
+    ) -> [CoursePlanReviewProgress] {
+        let activePlanIDs = Set(snapshot.projects.compactMap(\.activeCoursePlanId))
+        return snapshot.coursePlans.compactMap { plan in
+            guard activePlanIDs.contains(plan.id), plan.status == .active else { return nil }
+            let phases = snapshot.planPhases
+                .filter { $0.planId == plan.id }
+                .sorted { $0.ordinal < $1.ordinal }
+            let phaseOrder = Dictionary(uniqueKeysWithValues: phases.map { ($0.id, $0.ordinal) })
+            let sessions = snapshot.plannedSessions
+                .filter { $0.planId == plan.id }
+                .sorted {
+                    (phaseOrder[$0.phaseId] ?? .max, $0.createdAt) < (phaseOrder[$1.phaseId] ?? .max, $1.createdAt)
+                }
+            let currentPhase = phases.first { phase in
+                sessions.contains {
+                    $0.phaseId == phase.id && $0.status != .completed && $0.status != .skipped && $0.status != .cancelled
+                }
+            } ?? phases.last
+            let expectedProofs = Array(
+                Set(
+                    phases.map(\.expectedProof).filter { !$0.isEmpty }
+                        + sessions.compactMap(\.expectedProof).filter { !$0.isEmpty }
+                )
+            ).sorted()
+            return CoursePlanReviewProgress(
+                planID: plan.id,
+                projectID: plan.projectId,
+                revision: plan.revision,
+                currentPhaseID: currentPhase?.id,
+                currentPhaseTitle: currentPhase?.title,
+                completedCount: sessions.filter { $0.status == .completed }.count,
+                scheduledCount: sessions.filter { $0.status == .scheduled || $0.status == .unscheduled }.count,
+                skippedCount: sessions.filter { $0.status == .skipped || $0.status == .cancelled }.count,
+                missedDeadlineCount: sessions.filter {
+                    guard let deadline = $0.deadline else { return false }
+                    return deadline < referenceDate && $0.status != .completed && $0.status != .skipped && $0.status != .cancelled
+                }.count,
+                expectedProofs: expectedProofs,
+                plannedSessionReferences: sessions.map {
+                    "plannedSession \($0.id.uuidString.prefix(8)): \($0.status.rawValue)"
+                }
+            )
+        }
+    }
+}
+
+enum PracticeReviewContext {
+    static func linkedSessions(
+        snapshot: JournalSnapshot,
+        periodStart: Date,
+        periodEnd: Date
+    ) -> [PracticeSession] {
+        snapshot.practiceSessions.filter {
+            $0.deletedAt == nil
+                && $0.linkedProjectId != nil
+                && $0.endedAt >= periodStart
+                && $0.endedAt <= periodEnd
+        }
+    }
+
+    static func sources(
+        for sessions: [PracticeSession],
+        routines: [PracticeRoutine]
+    ) -> [String] {
+        let routinesByID = Dictionary(uniqueKeysWithValues: routines.map { ($0.id, $0) })
+        return sessions.map { session in
+            let note = session.note.flatMap { $0.isEmpty ? nil : $0 }
+            let detail = note ?? routinesByID[session.routineId]?.name ?? "Practice"
+            return "practice \(session.id.uuidString.prefix(8)): \(session.activeDurationSeconds / 60) min - \(detail)"
+        }
+    }
+}
+
 public struct RuleBasedReviewProvider: AIReviewProvider {
     public init() {}
 
@@ -50,6 +182,12 @@ public struct RuleBasedReviewProvider: AIReviewProvider {
         let periodProofs = snapshot.proofs.filter {
             $0.createdAt >= periodStart && $0.createdAt <= periodEnd
         }
+        let periodPracticeSessions = PracticeReviewContext.linkedSessions(
+            snapshot: snapshot,
+            periodStart: periodStart,
+            periodEnd: periodEnd
+        )
+        let planProgress = CoursePlanReviewContext.make(snapshot: snapshot, referenceDate: periodEnd)
         var facts: [String] = []
         var patterns: [String] = []
         var decisions: [String] = []
@@ -61,7 +199,17 @@ public struct RuleBasedReviewProvider: AIReviewProvider {
         for project in snapshot.projects where project.status == .active {
             let projectSessions = periodSessions.filter { $0.projectId == project.id }
             let projectProofs = periodProofs.filter { $0.projectId == project.id }
-            if projectSessions.isEmpty && projectProofs.isEmpty {
+            let projectPracticeSessions = periodPracticeSessions.filter {
+                $0.linkedProjectId == project.id
+            }
+            let practiceSources = PracticeReviewContext.sources(
+                for: projectPracticeSessions,
+                routines: snapshot.practiceRoutines
+            )
+            let planSources = planProgress
+                .filter { $0.projectID == project.id }
+                .flatMap(\.sourceReferences)
+            if projectSessions.isEmpty && projectProofs.isEmpty && projectPracticeSessions.isEmpty {
                 let lastActivity = latestActivityDate(for: project, in: snapshot)
                 if periodEnd.timeIntervalSince(lastActivity) >= 7 * 24 * 60 * 60 {
                     let activitySource = "project \(project.id.uuidString.prefix(8)): no session or Proof recorded in this period"
@@ -71,9 +219,11 @@ public struct RuleBasedReviewProvider: AIReviewProvider {
                     facts.append(fact)
                     patterns.append(pattern)
                     decisions.append(decision)
-                    sourceReferences[fact] = [activitySource]
-                    sourceReferences[pattern] = [activitySource]
-                    sourceReferences[decision] = [activitySource]
+                    let sourcesForProject = [activitySource] + planSources
+                    sourceReferences[fact] = sourcesForProject
+                    sourceReferences[pattern] = sourcesForProject
+                    sourceReferences[decision] = sourcesForProject
+                    sources.append(contentsOf: sourcesForProject)
                     nextSteps[project.id] = "Choose one small Proof or lower this project for the week"
                     recommendations[project.id] = .lowFrequency
                 }
@@ -83,6 +233,8 @@ public struct RuleBasedReviewProvider: AIReviewProvider {
             let minutes = projectSessions.reduce(0) { $0 + $1.durationMinutes }
             let projectSources = projectSessions.map { "session \($0.id.uuidString.prefix(8)): \($0.note)" }
                 + projectProofs.map { "proof \($0.id.uuidString.prefix(8)): \($0.statement)" }
+                + practiceSources
+                + planSources
             let fact = "\(project.name): \(projectSessions.count) sessions, \(projectProofs.count) Proofs, \(minutes) min."
             facts.append(fact)
             sourceReferences[fact] = projectSources
@@ -156,11 +308,16 @@ public struct RuleBasedReviewProvider: AIReviewProvider {
             .filter { $0.projectId == project.id }
             .map(\.createdAt)
             .max()
+        let lastPracticeDate = snapshot.practiceSessions
+            .filter { $0.linkedProjectId == project.id && $0.deletedAt == nil }
+            .map(\.endedAt)
+            .max()
 
         return [
             project.updatedAt,
             lastSessionDate,
-            lastProofDate
+            lastProofDate,
+            lastPracticeDate
         ].compactMap { $0 }.max() ?? project.createdAt
     }
 }
@@ -194,13 +351,24 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
         if let apiKey, !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
+        let practiceSessions = PracticeReviewContext.linkedSessions(
+            snapshot: snapshot,
+            periodStart: periodStart,
+            periodEnd: periodEnd
+        )
         request.httpBody = try JSONEncoder.journal.encode(
             HTTPAIReviewRequest(
                 periodStart: periodStart,
                 periodEnd: periodEnd,
                 projects: snapshot.projects,
                 sessions: snapshot.sessions,
-                proofs: snapshot.proofs
+                proofs: snapshot.proofs,
+                practiceSessions: practiceSessions,
+                practiceSources: PracticeReviewContext.sources(
+                    for: practiceSessions,
+                    routines: snapshot.practiceRoutines
+                ),
+                planProgress: CoursePlanReviewContext.make(snapshot: snapshot, referenceDate: periodEnd)
             )
         )
 
@@ -216,6 +384,13 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
 
     public static func decodeDraft(from data: Data) throws -> ReviewDraft {
         let response = try JSONDecoder.journal.decode(HTTPAIReviewResponse.self, from: data)
+        var sourceReferences = response.sourceReferences ?? [:]
+        if !response.sourceSummary.isEmpty {
+            for insight in response.facts + response.patterns + response.decisions
+            where sourceReferences[insight, default: []].isEmpty {
+                sourceReferences[insight] = response.sourceSummary
+            }
+        }
         return ReviewDraft(
             facts: response.facts,
             patterns: response.patterns,
@@ -224,7 +399,7 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
                 .compactMapValues(ProjectStatus.init(rawValue:)),
             nextSteps: response.nextSteps.compactMapKeys(UUID.init),
             sourceSummary: response.sourceSummary,
-            sourceReferences: response.sourceReferences ?? [:]
+            sourceReferences: sourceReferences
         )
     }
 
@@ -296,6 +471,9 @@ private struct HTTPAIReviewRequest: Codable {
     var projects: [Project]
     var sessions: [LearningSession]
     var proofs: [Proof]
+    var practiceSessions: [PracticeSession]
+    var practiceSources: [String]
+    var planProgress: [CoursePlanReviewProgress]
 }
 
 private struct HTTPAIReviewResponse: Codable {

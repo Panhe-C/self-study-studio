@@ -30,6 +30,47 @@
 		100000000000000000000115 /* ProofDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* ProofDetailView.swift */; };
 		100000000000000000000116 /* AIReviewSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000216 /* AIReviewSettings.swift */; };
 		100000000000000000000117 /* AIReviewSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000217 /* AIReviewSettingsView.swift */; };
+		100000000000000000000118 /* JournalEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000218 /* JournalEntity.swift */; };
+		100000000000000000000119 /* JournalRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* JournalRepository.swift */; };
+		10000000000000000000011A /* SyncDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021A /* SyncDomain.swift */; };
+		10000000000000000000011B /* SwiftDataJournalRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021B /* SwiftDataJournalRepository.swift */; };
+		10000000000000000000011C /* RepositoryMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021C /* RepositoryMigration.swift */; };
+		10000000000000000000011D /* CloudRecordMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021D /* CloudRecordMapper.swift */; };
+		10000000000000000000011E /* SyncMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021E /* SyncMergeService.swift */; };
+		10000000000000000000011F /* CloudSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000021F /* CloudSyncCoordinator.swift */; };
+		100000000000000000000120 /* CloudAccountCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000220 /* CloudAccountCoordinator.swift */; };
+		100000000000000000000121 /* SyncSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000221 /* SyncSummary.swift */; };
+		100000000000000000000122 /* SyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000222 /* SyncSettingsView.swift */; };
+		100000000000000000000123 /* CKSyncEngineDatabaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000224 /* CKSyncEngineDatabaseClient.swift */; };
+		100000000000000000000124 /* JournalApplicationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000225 /* JournalApplicationSession.swift */; };
+		100000000000000000000125 /* CoursePlanningDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000226 /* CoursePlanningDomain.swift */; };
+		100000000000000000000126 /* CoursePlanValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000227 /* CoursePlanValidator.swift */; };
+		100000000000000000000127 /* CoursePlanningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000228 /* CoursePlanningService.swift */; };
+		100000000000000000000128 /* StructuredAIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000229 /* StructuredAIClient.swift */; };
+		100000000000000000000129 /* CoursePlanningProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000230 /* CoursePlanningProvider.swift */; };
+		100000000000000000000130 /* CoursePlanWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000231 /* CoursePlanWizardView.swift */; };
+		100000000000000000000131 /* CoursePlanDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000232 /* CoursePlanDetailView.swift */; };
+		100000000000000000000132 /* CalendarDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000233 /* CalendarDomain.swift */; };
+		100000000000000000000133 /* StudySchedulingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* StudySchedulingEngine.swift */; };
+		100000000000000000000134 /* CalendarClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000235 /* CalendarClient.swift */; };
+		100000000000000000000135 /* EventKitCalendarClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000236 /* EventKitCalendarClient.swift */; };
+		100000000000000000000136 /* CalendarSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000237 /* CalendarSyncService.swift */; };
+		100000000000000000000137 /* CalendarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000238 /* CalendarViewModel.swift */; };
+		100000000000000000000138 /* StudyCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000239 /* StudyCalendarView.swift */; };
+		100000000000000000000139 /* DayCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023A /* DayCalendarView.swift */; };
+		10000000000000000000013A /* WeekCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023B /* WeekCalendarView.swift */; };
+		10000000000000000000013B /* MonthCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023C /* MonthCalendarView.swift */; };
+		10000000000000000000013C /* ScheduleDraftView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023D /* ScheduleDraftView.swift */; };
+		10000000000000000000013D /* CalendarSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023E /* CalendarSettingsView.swift */; };
+		10000000000000000000013E /* CalendarReconciliationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000023F /* CalendarReconciliationView.swift */; };
+		10000000000000000000013F /* StudioPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000240 /* StudioPresentation.swift */; };
+		100000000000000000000140 /* StudioTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000241 /* StudioTheme.swift */; };
+		100000000000000000000141 /* PracticeDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000242 /* PracticeDomain.swift */; };
+		100000000000000000000142 /* PracticeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000243 /* PracticeService.swift */; };
+		100000000000000000000143 /* PracticeStatistics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000244 /* PracticeStatistics.swift */; };
+		100000000000000000000144 /* PracticeTimerRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000245 /* PracticeTimerRuntime.swift */; };
+		100000000000000000000145 /* PracticeTimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000246 /* PracticeTimerView.swift */; };
+		100000000000000000000146 /* PracticeManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000247 /* PracticeManagerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +97,48 @@
 		100000000000000000000215 /* ProofDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ProofDetailView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000216 /* AIReviewSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/AIReviewSettings.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000217 /* AIReviewSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/AIReviewSettingsView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000218 /* JournalEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Persistence/JournalEntity.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000219 /* JournalRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Persistence/JournalRepository.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000021A /* SyncDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/SyncDomain.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000021B /* SwiftDataJournalRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Persistence/SwiftDataJournalRepository.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000021C /* RepositoryMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Persistence/RepositoryMigration.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000021D /* CloudRecordMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/CloudRecordMapper.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000021E /* SyncMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/SyncMergeService.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000021F /* CloudSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/CloudSyncCoordinator.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000220 /* CloudAccountCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/CloudAccountCoordinator.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000221 /* SyncSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/SyncSummary.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000222 /* SyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/SyncSettingsView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000223 /* SelfStudyStudio.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SelfStudyStudio/SelfStudyStudio.entitlements; sourceTree = SOURCE_ROOT; };
+		100000000000000000000224 /* CKSyncEngineDatabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/CKSyncEngineDatabaseClient.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000225 /* JournalApplicationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/JournalApplicationSession.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000226 /* CoursePlanningDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CoursePlanningDomain.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000227 /* CoursePlanValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CoursePlanValidator.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000228 /* CoursePlanningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CoursePlanningService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000229 /* StructuredAIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/AI/StructuredAIClient.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000230 /* CoursePlanningProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CoursePlanningProvider.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000231 /* CoursePlanWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CoursePlanWizardView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000232 /* CoursePlanDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CoursePlanDetailView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000233 /* CalendarDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/CalendarDomain.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000234 /* StudySchedulingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/StudySchedulingEngine.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000235 /* CalendarClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/CalendarClient.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000236 /* EventKitCalendarClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/EventKitCalendarClient.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000237 /* CalendarSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/CalendarSyncService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000238 /* CalendarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Calendar/CalendarViewModel.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000239 /* StudyCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/StudyCalendarView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000023A /* DayCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/DayCalendarView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000023B /* WeekCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/WeekCalendarView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000023C /* MonthCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/MonthCalendarView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000023D /* ScheduleDraftView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ScheduleDraftView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000023E /* CalendarSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CalendarSettingsView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000023F /* CalendarReconciliationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CalendarReconciliationView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000240 /* StudioPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/StudioPresentation.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000241 /* StudioTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/StudioTheme.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000242 /* PracticeDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Practice/PracticeDomain.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000243 /* PracticeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Practice/PracticeService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000244 /* PracticeStatistics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Practice/PracticeStatistics.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000245 /* PracticeTimerRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Practice/PracticeTimerRuntime.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000246 /* PracticeTimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/PracticeTimerView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000247 /* PracticeManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/PracticeManagerView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -96,6 +179,48 @@
 				100000000000000000000215 /* ProofDetailView.swift */,
 				100000000000000000000216 /* AIReviewSettings.swift */,
 				100000000000000000000217 /* AIReviewSettingsView.swift */,
+				100000000000000000000218 /* JournalEntity.swift */,
+				100000000000000000000219 /* JournalRepository.swift */,
+				10000000000000000000021A /* SyncDomain.swift */,
+				10000000000000000000021B /* SwiftDataJournalRepository.swift */,
+				10000000000000000000021C /* RepositoryMigration.swift */,
+				10000000000000000000021D /* CloudRecordMapper.swift */,
+				10000000000000000000021E /* SyncMergeService.swift */,
+				10000000000000000000021F /* CloudSyncCoordinator.swift */,
+				100000000000000000000220 /* CloudAccountCoordinator.swift */,
+				100000000000000000000221 /* SyncSummary.swift */,
+				100000000000000000000222 /* SyncSettingsView.swift */,
+				100000000000000000000223 /* SelfStudyStudio.entitlements */,
+				100000000000000000000224 /* CKSyncEngineDatabaseClient.swift */,
+				100000000000000000000225 /* JournalApplicationSession.swift */,
+				100000000000000000000226 /* CoursePlanningDomain.swift */,
+				100000000000000000000227 /* CoursePlanValidator.swift */,
+				100000000000000000000228 /* CoursePlanningService.swift */,
+				100000000000000000000229 /* StructuredAIClient.swift */,
+				100000000000000000000230 /* CoursePlanningProvider.swift */,
+				100000000000000000000231 /* CoursePlanWizardView.swift */,
+				100000000000000000000232 /* CoursePlanDetailView.swift */,
+				100000000000000000000233 /* CalendarDomain.swift */,
+				100000000000000000000234 /* StudySchedulingEngine.swift */,
+				100000000000000000000235 /* CalendarClient.swift */,
+				100000000000000000000236 /* EventKitCalendarClient.swift */,
+				100000000000000000000237 /* CalendarSyncService.swift */,
+				100000000000000000000238 /* CalendarViewModel.swift */,
+				100000000000000000000239 /* StudyCalendarView.swift */,
+				10000000000000000000023A /* DayCalendarView.swift */,
+				10000000000000000000023B /* WeekCalendarView.swift */,
+				10000000000000000000023C /* MonthCalendarView.swift */,
+				10000000000000000000023D /* ScheduleDraftView.swift */,
+				10000000000000000000023E /* CalendarSettingsView.swift */,
+				10000000000000000000023F /* CalendarReconciliationView.swift */,
+				100000000000000000000240 /* StudioPresentation.swift */,
+				100000000000000000000241 /* StudioTheme.swift */,
+				100000000000000000000242 /* PracticeDomain.swift */,
+				100000000000000000000243 /* PracticeService.swift */,
+				100000000000000000000244 /* PracticeStatistics.swift */,
+				100000000000000000000245 /* PracticeTimerRuntime.swift */,
+				100000000000000000000246 /* PracticeTimerView.swift */,
+				100000000000000000000247 /* PracticeManagerView.swift */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -207,6 +332,47 @@
 				100000000000000000000115 /* ProofDetailView.swift in Sources */,
 				100000000000000000000116 /* AIReviewSettings.swift in Sources */,
 				100000000000000000000117 /* AIReviewSettingsView.swift in Sources */,
+				100000000000000000000118 /* JournalEntity.swift in Sources */,
+				100000000000000000000119 /* JournalRepository.swift in Sources */,
+				10000000000000000000011A /* SyncDomain.swift in Sources */,
+				10000000000000000000011B /* SwiftDataJournalRepository.swift in Sources */,
+				10000000000000000000011C /* RepositoryMigration.swift in Sources */,
+				10000000000000000000011D /* CloudRecordMapper.swift in Sources */,
+				10000000000000000000011E /* SyncMergeService.swift in Sources */,
+				10000000000000000000011F /* CloudSyncCoordinator.swift in Sources */,
+				100000000000000000000120 /* CloudAccountCoordinator.swift in Sources */,
+				100000000000000000000121 /* SyncSummary.swift in Sources */,
+				100000000000000000000122 /* SyncSettingsView.swift in Sources */,
+				100000000000000000000123 /* CKSyncEngineDatabaseClient.swift in Sources */,
+				100000000000000000000124 /* JournalApplicationSession.swift in Sources */,
+				100000000000000000000125 /* CoursePlanningDomain.swift in Sources */,
+				100000000000000000000126 /* CoursePlanValidator.swift in Sources */,
+				100000000000000000000127 /* CoursePlanningService.swift in Sources */,
+				100000000000000000000128 /* StructuredAIClient.swift in Sources */,
+				100000000000000000000129 /* CoursePlanningProvider.swift in Sources */,
+				100000000000000000000130 /* CoursePlanWizardView.swift in Sources */,
+				100000000000000000000131 /* CoursePlanDetailView.swift in Sources */,
+				100000000000000000000132 /* CalendarDomain.swift in Sources */,
+				100000000000000000000133 /* StudySchedulingEngine.swift in Sources */,
+				100000000000000000000134 /* CalendarClient.swift in Sources */,
+				100000000000000000000135 /* EventKitCalendarClient.swift in Sources */,
+				100000000000000000000136 /* CalendarSyncService.swift in Sources */,
+				100000000000000000000137 /* CalendarViewModel.swift in Sources */,
+				100000000000000000000138 /* StudyCalendarView.swift in Sources */,
+				100000000000000000000139 /* DayCalendarView.swift in Sources */,
+				10000000000000000000013A /* WeekCalendarView.swift in Sources */,
+				10000000000000000000013B /* MonthCalendarView.swift in Sources */,
+				10000000000000000000013C /* ScheduleDraftView.swift in Sources */,
+				10000000000000000000013D /* CalendarSettingsView.swift in Sources */,
+				10000000000000000000013E /* CalendarReconciliationView.swift in Sources */,
+				10000000000000000000013F /* StudioPresentation.swift in Sources */,
+				100000000000000000000140 /* StudioTheme.swift in Sources */,
+				100000000000000000000141 /* PracticeDomain.swift in Sources */,
+				100000000000000000000142 /* PracticeService.swift in Sources */,
+				100000000000000000000143 /* PracticeStatistics.swift in Sources */,
+				100000000000000000000144 /* PracticeTimerRuntime.swift in Sources */,
+				100000000000000000000145 /* PracticeTimerView.swift in Sources */,
+				100000000000000000000146 /* PracticeManagerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -330,12 +496,15 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				APS_ENVIRONMENT = development;
+				CODE_SIGN_ENTITLEMENTS = SelfStudyStudio/SelfStudyStudio.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Learning Journal";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Learning Journal reads your busy times and writes only the study sessions you confirm.";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Learning Journal lets you capture photo Proof for learning sessions.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Learning Journal records optional audio Proof for practice sessions.";
@@ -344,6 +513,8 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
+				ICLOUD_CONTAINER_IDENTIFIER = iCloud.com.local.selfstudystudio;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -364,12 +535,15 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				APS_ENVIRONMENT = production;
+				CODE_SIGN_ENTITLEMENTS = SelfStudyStudio/SelfStudyStudio.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Learning Journal";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Learning Journal reads your busy times and writes only the study sessions you confirm.";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Learning Journal lets you capture photo Proof for learning sessions.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Learning Journal records optional audio Proof for practice sessions.";
@@ -378,6 +552,8 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
+				ICLOUD_CONTAINER_IDENTIFIER = iCloud.com.local.selfstudystudio;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

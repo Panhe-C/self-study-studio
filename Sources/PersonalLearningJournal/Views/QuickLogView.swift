@@ -4,6 +4,7 @@ public struct QuickLogView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var viewModel: JournalViewModel
     private let project: Project
+    private let plannedSession: PlannedSession?
     @State private var actionType: ActionType
     @State private var durationMinutes: Int
     @State private var note = ""
@@ -11,11 +12,16 @@ public struct QuickLogView: View {
     @State private var proofSession: LearningSession?
     @State private var errorMessage: String?
 
-    public init(viewModel: JournalViewModel, project: Project) {
+    public init(
+        viewModel: JournalViewModel,
+        project: Project,
+        plannedSession: PlannedSession? = nil
+    ) {
         self.viewModel = viewModel
         self.project = project
-        _actionType = State(initialValue: project.lastActionType)
-        _durationMinutes = State(initialValue: project.defaultDurationMinutes)
+        self.plannedSession = plannedSession
+        _actionType = State(initialValue: plannedSession?.actionType ?? project.lastActionType)
+        _durationMinutes = State(initialValue: plannedSession?.durationMinutes ?? project.defaultDurationMinutes)
         _nextStep = State(initialValue: project.currentNextStep)
     }
 
@@ -23,6 +29,15 @@ public struct QuickLogView: View {
         NavigationStack {
             Form {
                 Section(project.name) {
+                    if let plannedSession {
+                        Text(plannedSession.title)
+                            .font(.headline)
+                        if let expectedProof = plannedSession.expectedProof, !expectedProof.isEmpty {
+                            Label(expectedProof, systemImage: "paperclip")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     Picker("Action", selection: $actionType) {
                         ForEach(ActionType.allCases, id: \.self) { action in
                             Text(action.rawValue).tag(action)
@@ -47,6 +62,7 @@ public struct QuickLogView: View {
                     Button("Save") {
                         save(addProof: false)
                     }
+                    .disabled(!Self.canSave(note: note))
                 }
 
                 ToolbarItem(placement: .primaryAction) {
@@ -55,6 +71,7 @@ public struct QuickLogView: View {
                     } label: {
                         Label("Save & Add Proof", systemImage: "paperclip.badge.plus")
                     }
+                    .disabled(!Self.canSave(note: note))
                 }
             }
             .sheet(item: $proofSession) { session in
@@ -71,6 +88,10 @@ public struct QuickLogView: View {
         }
     }
 
+    static func canSave(note: String) -> Bool {
+        !note.trimmedForJournal.isEmpty
+    }
+
     private func save(addProof: Bool) {
         do {
             let session = try viewModel.quickLog(
@@ -78,7 +99,8 @@ public struct QuickLogView: View {
                 actionType: actionType,
                 durationMinutes: durationMinutes,
                 note: note,
-                nextStep: nextStep
+                nextStep: nextStep,
+                plannedSessionId: plannedSession?.id
             )
             if addProof {
                 proofSession = session

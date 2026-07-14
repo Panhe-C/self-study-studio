@@ -143,35 +143,25 @@ public final class AIReviewSettingsStore: @unchecked Sendable {
     }
 }
 
-public protocol ReviewHTTPTransport: Sendable {
-    func data(for request: URLRequest) async throws -> (Data, URLResponse)
-}
+@available(*, deprecated, renamed: "AIHTTPTransport")
+public typealias ReviewHTTPTransport = AIHTTPTransport
 
-public struct URLSessionReviewHTTPTransport: ReviewHTTPTransport {
-    private let session: URLSession
-
-    public init(session: URLSession = .shared) {
-        self.session = session
-    }
-
-    public func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await session.data(for: request)
-    }
-}
+@available(*, deprecated, renamed: "URLSessionAIHTTPTransport")
+public typealias URLSessionReviewHTTPTransport = URLSessionAIHTTPTransport
 
 public struct OpenAICompatibleReviewProvider: AIReviewProvider {
-    private let settings: AIReviewSettings
-    private let apiKey: String
-    private let transport: any ReviewHTTPTransport
+    private let client: OpenAICompatibleStructuredClient
 
     public init(
         settings: AIReviewSettings,
         apiKey: String,
-        transport: any ReviewHTTPTransport = URLSessionReviewHTTPTransport()
+        transport: any AIHTTPTransport = URLSessionAIHTTPTransport()
     ) {
-        self.settings = settings
-        self.apiKey = apiKey
-        self.transport = transport
+        self.client = OpenAICompatibleStructuredClient(
+            settings: settings,
+            apiKey: apiKey,
+            transport: transport
+        )
     }
 
     public func makeReview(
@@ -179,46 +169,19 @@ public struct OpenAICompatibleReviewProvider: AIReviewProvider {
         periodStart: Date,
         periodEnd: Date
     ) async throws -> ReviewDraft {
-        var request = URLRequest(url: settings.chatCompletionsURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder.journal.encode(
-            OpenAICompatibleReviewRequest(
-                model: settings.model,
-                messages: [
-                    .init(role: "system", content: Self.systemPrompt),
-                    .init(
-                        role: "user",
-                        content: try Self.reviewInput(
-                            snapshot: snapshot,
-                            periodStart: periodStart,
-                            periodEnd: periodEnd
-                        )
-                    )
-                ],
-                responseFormat: .init(type: "json_object")
+        let response: OpenAIReviewDraftPayload = try await client.completeJSON(
+            system: Self.systemPrompt,
+            user: try Self.reviewInput(
+                snapshot: snapshot,
+                periodStart: periodStart,
+                periodEnd: periodEnd
             )
         )
-
-        let (data, response) = try await transport.data(for: request)
-        if let httpResponse = response as? HTTPURLResponse,
-           !(200...299).contains(httpResponse.statusCode)
-        {
-            throw URLError(.badServerResponse)
-        }
-
-        let completion = try JSONDecoder().decode(OpenAICompatibleReviewResponse.self, from: data)
-        guard let content = completion.choices.first?.message.content,
-              let resultData = content.data(using: .utf8)
-        else {
-            throw URLError(.cannotParseResponse)
-        }
-        return try HTTPAIReviewProvider.decodeDraft(from: resultData)
+        return response.reviewDraft
     }
 
     private static let systemPrompt = """
-    You are a calm personal learning-review assistant. Return only a JSON object with facts, patterns, decisions, projectRecommendations, nextSteps, sourceSummary, and sourceReferences. Use no more than three facts, patterns, or decisions. Every generated insight must cite concrete session or Proof summaries in sourceReferences. Never change project status yourself and do not use motivational or streak language.
+    You are a calm personal learning-review assistant. Return only a JSON object with facts, patterns, decisions, projectRecommendations, nextSteps, sourceSummary, and sourceReferences. Use no more than three facts, patterns, or decisions. Every generated insight must cite concrete session, Proof, or practice summaries in sourceReferences. Never change project status yourself and do not use motivational or streak language.
     """
 
     private static func reviewInput(
@@ -226,25 +189,68 @@ public struct OpenAICompatibleReviewProvider: AIReviewProvider {
         periodStart: Date,
         periodEnd: Date
     ) throws -> String {
+        let practiceSessions = PracticeReviewContext.linkedSessions(
+            snapshot: snapshot,
+            periodStart: periodStart,
+            periodEnd: periodEnd
+        )
         let input = OpenAICompatibleReviewInput(
             periodStart: periodStart,
             periodEnd: periodEnd,
             projects: snapshot.projects,
             sessions: snapshot.sessions,
-            proofs: snapshot.proofs
+            proofs: snapshot.proofs,
+            practiceSessions: practiceSessions,
+            practiceSources: PracticeReviewContext.sources(
+                for: practiceSessions,
+                routines: snapshot.practiceRoutines
+            ),
+            planProgress: CoursePlanReviewContext.make(snapshot: snapshot, referenceDate: periodEnd)
         )
         return String(decoding: try JSONEncoder.journal.encode(input), as: UTF8.self)
     }
 }
 
+private struct OpenAIReviewDraftPayload: Decodable, Sendable {
+    var facts: [String]
+    var patterns: [String]
+    var decisions: [String]
+    var projectRecommendations: [String: String]
+    var nextSteps: [String: String]
+    var sourceSummary: [String]
+    var sourceReferences: [String: [String]]?
+
+    var reviewDraft: ReviewDraft {
+        var references = sourceReferences ?? [:]
+        for insight in facts + patterns + decisions where references[insight, default: []].isEmpty {
+            references[insight] = sourceSummary
+        }
+        return ReviewDraft(
+            facts: facts,
+            patterns: patterns,
+            decisions: decisions,
+            projectRecommendations: projectRecommendations.reduce(into: [:]) { result, item in
+                guard let id = UUID(uuidString: item.key), let status = ProjectStatus(rawValue: item.value) else { return }
+                result[id] = status
+            },
+            nextSteps: nextSteps.reduce(into: [:]) { result, item in
+                guard let id = UUID(uuidString: item.key) else { return }
+                result[id] = item.value
+            },
+            sourceSummary: sourceSummary,
+            sourceReferences: references
+        )
+    }
+}
+
 public struct AdaptiveAIReviewProvider: AIReviewProvider {
     private let settingsStore: AIReviewSettingsStore
-    private let transport: any ReviewHTTPTransport
+    private let transport: any AIHTTPTransport
     private let fallback: any AIReviewProvider
 
     public init(
         settingsStore: AIReviewSettingsStore = AIReviewSettingsStore(),
-        transport: any ReviewHTTPTransport = URLSessionReviewHTTPTransport(),
+        transport: any AIHTTPTransport = URLSessionAIHTTPTransport(),
         fallback: any AIReviewProvider = RuleBasedReviewProvider()
     ) {
         self.settingsStore = settingsStore
@@ -317,6 +323,9 @@ private struct OpenAICompatibleReviewInput: Codable {
     var projects: [Project]
     var sessions: [LearningSession]
     var proofs: [Proof]
+    var practiceSessions: [PracticeSession]
+    var practiceSources: [String]
+    var planProgress: [CoursePlanReviewProgress]
 }
 
 private struct OpenAICompatibleReviewResponse: Decodable {
