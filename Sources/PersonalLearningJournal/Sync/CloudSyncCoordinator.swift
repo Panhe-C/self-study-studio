@@ -75,6 +75,7 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
     private let merger: SyncMergeService
     private let now: () -> Date
     private var currentStatus: SyncStatus = .idle
+    private var inFlightSync: Task<Void, Error>?
 
     public init(
         repository: any JournalRepository,
@@ -97,6 +98,24 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
     }
 
     public func syncNow() async throws {
+        if let inFlightSync {
+            return try await inFlightSync.value
+        }
+
+        let operation = Task { @MainActor [self] in
+            try await performSync()
+        }
+        inFlightSync = operation
+        do {
+            try await operation.value
+            inFlightSync = nil
+        } catch {
+            inFlightSync = nil
+            throw error
+        }
+    }
+
+    private func performSync() async throws {
         let pending = try repository.pendingMutations(limit: 100)
         currentStatus = .syncing(pending: pending.count)
         do {

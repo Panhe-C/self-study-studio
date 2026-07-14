@@ -62,6 +62,59 @@ final class JournalViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.syncSummary.title, "Needs Attention")
         XCTAssertEqual(viewModel.syncSummary.detail, "2 changes waiting, 1 conflict")
     }
+
+    func testUserMutationAutomaticallyRequestsCloudSync() async throws {
+        let repository = InMemoryJournalRepository()
+        let journalService = JournalService(repository: repository)
+        let syncStarted = expectation(description: "Cloud sync started")
+        let syncCoordinator = RecordingSyncCoordinator {
+            syncStarted.fulfill()
+        }
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore()),
+            syncCoordinator: syncCoordinator,
+            syncRepository: repository
+        )
+
+        _ = try viewModel.createProject(
+            name: "CS336",
+            area: "AI",
+            goal: "Finish the course",
+            nextStep: "Read lecture 1"
+        )
+
+        await fulfillment(of: [syncStarted], timeout: 1)
+        let startCount = await syncCoordinator.startCount
+        XCTAssertEqual(startCount, 1)
+    }
+
+    func testBecomingActiveRefreshesCloudChanges() async throws {
+        let repository = InMemoryJournalRepository()
+        let journalService = JournalService(repository: repository)
+        let syncRequested = expectation(description: "Foreground cloud refresh requested")
+        let syncCoordinator = RecordingSyncCoordinator(onSyncNow: {
+            syncRequested.fulfill()
+        })
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore()),
+            syncCoordinator: syncCoordinator,
+            syncRepository: repository
+        )
+
+        await viewModel.applicationDidBecomeActive()
+
+        await fulfillment(of: [syncRequested], timeout: 1)
+        let syncNowCount = await syncCoordinator.syncNowCount
+        XCTAssertEqual(syncNowCount, 1)
+    }
     func testOnboardingCompletesAfterFirstQuickLogAndShowsTodayContinueCard() throws {
         let viewModel = makeViewModel()
 
@@ -561,6 +614,33 @@ private actor StaticSyncStatusProvider: CloudSyncCoordinating {
     func start() async {}
 
     func syncNow() async throws {}
+}
+
+private actor RecordingSyncCoordinator: CloudSyncCoordinating {
+    private(set) var startCount = 0
+    private(set) var syncNowCount = 0
+    private let onStart: @Sendable () -> Void
+    private let onSyncNow: @Sendable () -> Void
+
+    init(
+        onStart: @escaping @Sendable () -> Void = {},
+        onSyncNow: @escaping @Sendable () -> Void = {}
+    ) {
+        self.onStart = onStart
+        self.onSyncNow = onSyncNow
+    }
+
+    var status: SyncStatus { .idle }
+
+    func start() async {
+        startCount += 1
+        onStart()
+    }
+
+    func syncNow() async throws {
+        syncNowCount += 1
+        onSyncNow()
+    }
 }
 
 private struct StubCoursePlanningProvider: CoursePlanningProvider {

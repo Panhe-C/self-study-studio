@@ -25,6 +25,7 @@ public final class JournalViewModel: ObservableObject {
     private let syncCoordinator: (any CloudSyncCoordinating)?
     private let syncRepository: (any JournalRepository)?
     private let accountCoordinator: CloudAccountCoordinator?
+    private var automaticSyncTask: Task<Void, Never>?
 
     public init(
         journalService: JournalService,
@@ -97,10 +98,20 @@ public final class JournalViewModel: ObservableObject {
         await refreshSyncSummary()
     }
 
+    public func applicationDidBecomeActive() async {
+        guard syncCoordinator != nil else {
+            refresh()
+            await refreshSyncSummary()
+            return
+        }
+        try? await syncNow()
+    }
+
     public func confirmExistingLocalDataUpload() throws {
         try accountCoordinator?.confirmExistingLocalDataUpload()
         refreshSyncRepositoryDetails()
         bootstrapEntityCount = 0
+        scheduleAutomaticSyncIfNeeded()
     }
 
     public func resolveSyncConflict(id: UUID, using payload: Data) throws {
@@ -825,11 +836,36 @@ public final class JournalViewModel: ObservableObject {
     public func refresh() {
         journalService.refreshFromRepository()
         snapshot = journalService.snapshot()
+        refreshSyncRepositoryDetails()
+        scheduleAutomaticSyncIfNeeded()
     }
 
     private func refreshSyncRepositoryDetails() {
         syncConflicts = (try? syncRepository?.conflicts()) ?? []
         syncPendingMutationCount = (try? syncRepository?.pendingMutations(limit: 1_000).count) ?? 0
+    }
+
+    private func scheduleAutomaticSyncIfNeeded() {
+        guard automaticSyncTask == nil,
+              syncPendingMutationCount > 0,
+              let syncCoordinator else { return }
+
+        automaticSyncTask = Task { @MainActor [weak self, syncCoordinator] in
+            await Task.yield()
+            guard let self, !Task.isCancelled else { return }
+
+            await syncCoordinator.start()
+            self.journalService.refreshFromRepository()
+            self.snapshot = self.journalService.snapshot()
+            self.refreshSyncRepositoryDetails()
+            let status = await syncCoordinator.status
+            await self.refreshSyncSummary()
+            self.automaticSyncTask = nil
+
+            if case .synced = status {
+                self.scheduleAutomaticSyncIfNeeded()
+            }
+        }
     }
 
     private func decodedConflictEntity(

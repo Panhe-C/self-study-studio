@@ -139,19 +139,70 @@ final class CloudSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(try repository.snapshot().projects.isEmpty)
         XCTAssertTrue(try repository.pendingMutations(limit: 10).isEmpty)
     }
+
+    func testConcurrentSyncRequestsShareOneInFlightOperation() async throws {
+        let repository = InMemoryJournalRepository()
+        let client = FakeCloudDatabaseClient(result: CloudSendResult())
+        let coordinator = CloudSyncCoordinator(repository: repository, client: client)
+
+        async let first: Void = coordinator.syncNow()
+        async let second: Void = coordinator.syncNow()
+        _ = try await (first, second)
+
+        let ensureZoneCallCount = await client.ensureZoneCallCount()
+        XCTAssertEqual(ensureZoneCallCount, 1)
+    }
+
+    func testConcurrentSyncRequestWaitsForInFlightOperation() async throws {
+        let repository = InMemoryJournalRepository()
+        let client = PausingCloudDatabaseClient()
+        let coordinator = CloudSyncCoordinator(repository: repository, client: client)
+        let secondStarted = AsyncFlag()
+        let secondFinished = AsyncFlag()
+
+        let first = Task { try await coordinator.syncNow() }
+        while await client.ensureZoneCallCount() == 0 {
+            await Task.yield()
+        }
+        let second = Task {
+            await secondStarted.set()
+            try await coordinator.syncNow()
+            await secondFinished.set()
+        }
+        while !(await secondStarted.value()) {
+            await Task.yield()
+        }
+        for _ in 0..<100 {
+            if await secondFinished.value() { break }
+            await Task.yield()
+        }
+
+        let finishedBeforeRelease = await secondFinished.value()
+        XCTAssertFalse(finishedBeforeRelease)
+
+        await client.releaseZoneRequest()
+        try await first.value
+        try await second.value
+        let finishedAfterRelease = await secondFinished.value()
+        XCTAssertTrue(finishedAfterRelease)
+    }
 }
 
 private actor FakeCloudDatabaseClient: CloudDatabaseClient {
     private var result: CloudSendResult
     private var batches: [CloudChangeBatch]
     private var sentMutations: [CloudMutation] = []
+    private var ensureZoneCalls = 0
 
     init(result: CloudSendResult, batches: [CloudChangeBatch] = []) {
         self.result = result
         self.batches = batches
     }
 
-    func ensureZone(named: String) async throws {}
+    func ensureZone(named: String) async throws {
+        ensureZoneCalls += 1
+        await Task.yield()
+    }
 
     func send(_ mutations: [CloudMutation]) async throws -> CloudSendResult {
         sentMutations.append(contentsOf: mutations)
@@ -165,4 +216,41 @@ private actor FakeCloudDatabaseClient: CloudDatabaseClient {
     func sentMutationCount() -> Int { sentMutations.count }
 
     func firstSentMutation() -> CloudMutation? { sentMutations.first }
+
+    func ensureZoneCallCount() -> Int { ensureZoneCalls }
+}
+
+private actor PausingCloudDatabaseClient: CloudDatabaseClient {
+    private var ensureZoneCalls = 0
+    private var zoneContinuation: CheckedContinuation<Void, Never>?
+
+    func ensureZone(named: String) async throws {
+        ensureZoneCalls += 1
+        await withCheckedContinuation { continuation in
+            zoneContinuation = continuation
+        }
+    }
+
+    func send(_ mutations: [CloudMutation]) async throws -> CloudSendResult {
+        CloudSendResult()
+    }
+
+    func fetchChanges(after tokenData: Data?) async throws -> CloudChangeBatch {
+        CloudChangeBatch()
+    }
+
+    func ensureZoneCallCount() -> Int { ensureZoneCalls }
+
+    func releaseZoneRequest() {
+        zoneContinuation?.resume()
+        zoneContinuation = nil
+    }
+}
+
+private actor AsyncFlag {
+    private var isSet = false
+
+    func set() { isSet = true }
+
+    func value() -> Bool { isSet }
 }

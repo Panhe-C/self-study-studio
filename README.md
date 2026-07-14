@@ -44,7 +44,7 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 - Normalized SwiftData runtime store for Projects, Sessions, Proofs, Reviews, Trail events, and onboarding state; one-time import from legacy `journal.json`
 - JSON export plus attachment directory export from Library
 - SwiftUI screens for onboarding, Today, Projects, Library, Quick Log, Timer, Review, Proof detail, and AI Review settings
-- Private personal iCloud sync foundation with an account-scoped journal store, encrypted-independent local attachment handling, retryable outbox, conflict review, and a visible iCloud status surface
+- Private personal iCloud sync with account-scoped journal stores, local-first attachments, a retryable outbox, conflict review, automatic upload after local edits, foreground refresh, and a visible iCloud status surface
 
 ## Current Shape
 
@@ -91,6 +91,7 @@ Current verification status:
 - 2026-07-12: `swift test` completed 132 tests with 0 failures after adding deterministic scheduling, EventKit confirmation/reconciliation, Calendar views, settings, and the full course-to-review integration test.
 - 2026-07-12: `swift build` and the iOS Simulator app build completed successfully with the Calendar module integrated.
 - 2026-07-13: `swift test` completed 199 tests with 0 failures, and a clean iPhone 16 Pro Simulator build installed and launched successfully after adding recurring practice routines and the recoverable practice timer.
+- 2026-07-14: `swift test` completed 207 tests with 0 failures; `swift build` and the unsigned iOS Simulator build also succeeded after adding automatic post-mutation sync, foreground refresh, and concurrent-sync coalescing.
 
 ## iCloud Device Acceptance
 

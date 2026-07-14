@@ -5,6 +5,7 @@ import UIKit
 #endif
 
 public struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var viewModel: JournalViewModel
     @ObservedObject private var calendarViewModel: CalendarViewModel
     private let practiceLifecycle: PracticeTimerLifecycleCoordinator
@@ -49,6 +50,10 @@ public struct RootView: View {
         }
         .background {
             PracticeTimerLifecycleView(coordinator: practiceLifecycle)
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            guard phase == .active else { return }
+            Task { await viewModel.applicationDidBecomeActive() }
         }
     }
 
