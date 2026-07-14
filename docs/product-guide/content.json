@@ -280,7 +280,7 @@
     {
       "id": "trail",
       "title": "Trail 把行为、证据与决定放回同一条时间线",
-      "screenshot": "docs/assets/product-guide/demo-07-trail.png",
+      "screenshot": "docs/assets/product-guide/demo-07-project-detail.png",
       "action": "进入 CS336 Project Detail，滚动到 Learning Trail。",
       "talkTrack": "这是判断项目是否前进的历史，而不是单纯的完成百分比。",
       "expected": "看到 Session、Proof、Next Step、状态和 Review 事件。",
@@ -307,7 +307,7 @@
     {
       "id": "export",
       "title": "一次 Export 生成可迁移的完整本地 Bundle",
-      "screenshot": "docs/assets/product-guide/demo-10-export.png",
+      "screenshot": null,
       "action": "点击 Library 工具栏 Export。",
       "talkTrack": "数据默认留在本地，但用户始终可以把结构化记录和附件一起带走。",
       "expected": "提示 Export Ready，并显示 Documents/LearningJournal/Exports 下的保存路径。",

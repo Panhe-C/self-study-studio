@@ -1,0 +1,250 @@
+{
+  "hasCompletedOnboarding": true,
+  "pendingFirstRecordProjectId": null,
+  "projects": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "CS336",
+      "area": "AI Systems",
+      "goal": "完成 Stanford CS336 并建立大模型训练系统的完整心智模型",
+      "status": "active",
+      "currentNextStep": "完成 Lecture 2 注意力机制笔记",
+      "lastActionType": "course",
+      "defaultDurationMinutes": 45,
+      "createdAt": "2026-06-20T09:00:00Z",
+      "updatedAt": "2026-07-13T11:30:00Z",
+      "archivedAt": null
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "吉他弹唱",
+      "area": "Music",
+      "goal": "可以稳定弹唱三首完整歌曲",
+      "status": "active",
+      "currentNextStep": "把副歌和弦切换练到 80 BPM",
+      "lastActionType": "practice",
+      "defaultDurationMinutes": 30,
+      "createdAt": "2026-06-25T09:00:00Z",
+      "updatedAt": "2026-07-12T12:20:00Z",
+      "archivedAt": null
+    },
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "DaVinci 调色",
+      "area": "Visual Creation",
+      "goal": "独立完成一支短片的基础校色与风格化调色",
+      "status": "low-frequency",
+      "currentNextStep": "完成一组夜景肤色匹配练习",
+      "lastActionType": "output",
+      "defaultDurationMinutes": 40,
+      "createdAt": "2026-06-28T09:00:00Z",
+      "updatedAt": "2026-07-08T14:00:00Z",
+      "archivedAt": null
+    }
+  ],
+  "sessions": [
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+      "projectId": "11111111-1111-1111-1111-111111111111",
+      "source": "timer",
+      "actionType": "course",
+      "startedAt": "2026-07-13T10:45:00Z",
+      "endedAt": "2026-07-13T11:30:00Z",
+      "durationMinutes": 45,
+      "note": "完成 Lecture 1 tokenizer 章节，并整理训练数据管线的三个关键约束",
+      "nextStepBefore": "观看 Lecture 1 tokenizer 与数据章节",
+      "nextStepAfter": "完成 Lecture 2 注意力机制笔记",
+      "createdAt": "2026-07-13T11:30:00Z",
+      "updatedAt": "2026-07-13T11:30:00Z"
+    },
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2",
+      "projectId": "11111111-1111-1111-1111-111111111111",
+      "source": "quickLog",
+      "actionType": "reading",
+      "startedAt": "2026-07-11T12:00:00Z",
+      "endedAt": "2026-07-11T12:25:00Z",
+      "durationMinutes": 25,
+      "note": "对照课程代码复习 BPE merge 过程，确认了特殊 token 的处理顺序",
+      "nextStepBefore": "阅读 tokenizer 参考实现",
+      "nextStepAfter": "观看 Lecture 1 tokenizer 与数据章节",
+      "createdAt": "2026-07-11T12:25:00Z",
+      "updatedAt": "2026-07-11T12:25:00Z"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1",
+      "projectId": "22222222-2222-2222-2222-222222222222",
+      "source": "timer",
+      "actionType": "practice",
+      "startedAt": "2026-07-12T11:50:00Z",
+      "endedAt": "2026-07-12T12:20:00Z",
+      "durationMinutes": 30,
+      "note": "分段练习主歌到副歌的和弦切换，70 BPM 下已经可以连续完成三遍",
+      "nextStepBefore": "练习主歌和弦切换",
+      "nextStepAfter": "把副歌和弦切换练到 80 BPM",
+      "createdAt": "2026-07-12T12:20:00Z",
+      "updatedAt": "2026-07-12T12:20:00Z"
+    },
+    {
+      "id": "cccccccc-cccc-cccc-cccc-ccccccccccc1",
+      "projectId": "33333333-3333-3333-3333-333333333333",
+      "source": "quickLog",
+      "actionType": "output",
+      "startedAt": "2026-07-08T13:20:00Z",
+      "endedAt": "2026-07-08T14:00:00Z",
+      "durationMinutes": 40,
+      "note": "完成室内采访素材的基础校色，对比了 CST 前后肤色响应",
+      "nextStepBefore": "练习 CST 基础流程",
+      "nextStepAfter": "完成一组夜景肤色匹配练习",
+      "createdAt": "2026-07-08T14:00:00Z",
+      "updatedAt": "2026-07-08T14:00:00Z"
+    }
+  ],
+  "proofs": [
+    {
+      "id": "dddddddd-dddd-dddd-dddd-ddddddddddd1",
+      "projectId": "11111111-1111-1111-1111-111111111111",
+      "sessionId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+      "type": "link",
+      "title": "Tokenizer 训练笔记",
+      "statement": "这证明我已经能从输入文本解释 BPE 训练、编码与特殊 token 的完整路径。",
+      "localPath": null,
+      "url": "https://stanford-cs336.github.io/spring2025/",
+      "mimeType": "text/html",
+      "fileSize": null,
+      "createdAt": "2026-07-13T11:35:00Z",
+      "updatedAt": "2026-07-13T11:35:00Z"
+    },
+    {
+      "id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1",
+      "projectId": "22222222-2222-2222-2222-222222222222",
+      "sessionId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1",
+      "type": "audio",
+      "title": "70 BPM 副歌练习",
+      "statement": "这证明在 70 BPM 下已经可以连续三遍不间断完成主歌到副歌切换。",
+      "localPath": null,
+      "url": null,
+      "mimeType": "audio/m4a",
+      "fileSize": null,
+      "createdAt": "2026-07-12T12:25:00Z",
+      "updatedAt": "2026-07-12T12:25:00Z"
+    },
+    {
+      "id": "ffffffff-ffff-ffff-ffff-fffffffffff1",
+      "projectId": "33333333-3333-3333-3333-333333333333",
+      "sessionId": "cccccccc-cccc-cccc-cccc-ccccccccccc1",
+      "type": "image",
+      "title": "采访画面校色对比",
+      "statement": "这证明我能使用 CST 建立正确色彩空间，并把肤色控制在一致范围。",
+      "localPath": null,
+      "url": null,
+      "mimeType": "image/png",
+      "fileSize": null,
+      "createdAt": "2026-07-08T14:05:00Z",
+      "updatedAt": "2026-07-08T14:05:00Z"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "99999999-9999-9999-9999-999999999999",
+      "periodStart": "2026-07-06T00:00:00Z",
+      "periodEnd": "2026-07-13T12:00:00Z",
+      "facts": [
+        "CS336 本周完成 70 分钟学习并留下 1 条可回看的 Proof。",
+        "吉他练习在 70 BPM 下连续完成三遍和弦切换。",
+        "DaVinci 调色本周只完成一次输出练习。"
+      ],
+      "patterns": [
+        "带有明确 Next Step 的项目更容易在两天内继续。",
+        "输出或练习后马上添加 Proof，复盘时的判断更具体。"
+      ],
+      "decisions": [
+        "继续把 CS336 作为本周主要学习项目。",
+        "DaVinci 调色暂时维持低频节奏，先完成夜景肤色练习。"
+      ],
+      "projectRecommendations": [
+        "33333333-3333-3333-3333-333333333333",
+        "low-frequency"
+      ],
+      "nextSteps": [
+        "11111111-1111-1111-1111-111111111111",
+        "完成 Lecture 2 注意力机制笔记",
+        "22222222-2222-2222-2222-222222222222",
+        "把副歌和弦切换练到 80 BPM"
+      ],
+      "aiSourceSummary": [
+        "CS336 · 45 min course · 完成 Lecture 1 tokenizer 章节",
+        "CS336 · Proof · Tokenizer 训练笔记",
+        "吉他弹唱 · 30 min practice · 70 BPM 和弦切换",
+        "DaVinci 调色 · 40 min output · CST 基础校色"
+      ],
+      "sourceReferences": {
+        "CS336 本周完成 70 分钟学习并留下 1 条可回看的 Proof。": [
+          "CS336 · 45 min course · 完成 Lecture 1 tokenizer 章节",
+          "CS336 · Proof · Tokenizer 训练笔记"
+        ],
+        "继续把 CS336 作为本周主要学习项目。": [
+          "CS336 · 45 min course · 完成 Lecture 1 tokenizer 章节"
+        ]
+      },
+      "createdAt": "2026-07-13T12:00:00Z",
+      "updatedAt": "2026-07-13T12:00:00Z"
+    }
+  ],
+  "trailEvents": [
+    {
+      "id": "70000000-0000-0000-0000-000000000001",
+      "projectId": "11111111-1111-1111-1111-111111111111",
+      "type": "session",
+      "sourceId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+      "occurredAt": "2026-07-13T11:30:00Z",
+      "title": "45 min course",
+      "detail": "完成 Lecture 1 tokenizer 章节，并整理训练数据管线的三个关键约束"
+    },
+    {
+      "id": "70000000-0000-0000-0000-000000000002",
+      "projectId": "11111111-1111-1111-1111-111111111111",
+      "type": "nextStepChange",
+      "sourceId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+      "occurredAt": "2026-07-13T11:30:01Z",
+      "title": "Next Step changed",
+      "detail": "完成 Lecture 2 注意力机制笔记"
+    },
+    {
+      "id": "70000000-0000-0000-0000-000000000003",
+      "projectId": "11111111-1111-1111-1111-111111111111",
+      "type": "proof",
+      "sourceId": "dddddddd-dddd-dddd-dddd-ddddddddddd1",
+      "occurredAt": "2026-07-13T11:35:00Z",
+      "title": "Tokenizer 训练笔记",
+      "detail": "这证明我已经能从输入文本解释 BPE 训练、编码与特殊 token 的完整路径。"
+    },
+    {
+      "id": "70000000-0000-0000-0000-000000000004",
+      "projectId": "11111111-1111-1111-1111-111111111111",
+      "type": "review",
+      "sourceId": "99999999-9999-9999-9999-999999999999",
+      "occurredAt": "2026-07-13T12:00:00Z",
+      "title": "Weekly Review",
+      "detail": "继续把 CS336 作为本周主要学习项目。"
+    },
+    {
+      "id": "70000000-0000-0000-0000-000000000005",
+      "projectId": "22222222-2222-2222-2222-222222222222",
+      "type": "session",
+      "sourceId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1",
+      "occurredAt": "2026-07-12T12:20:00Z",
+      "title": "30 min practice",
+      "detail": "70 BPM 下连续完成三遍主歌到副歌切换"
+    },
+    {
+      "id": "70000000-0000-0000-0000-000000000006",
+      "projectId": "33333333-3333-3333-3333-333333333333",
+      "type": "statusChange",
+      "sourceId": "99999999-9999-9999-9999-999999999999",
+      "occurredAt": "2026-07-13T12:02:00Z",
+      "title": "Status changed",
+      "detail": "low-frequency"
+    }
+  ]
+}
