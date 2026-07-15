@@ -71,6 +71,17 @@
 		100000000000000000000144 /* PracticeTimerRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000245 /* PracticeTimerRuntime.swift */; };
 		100000000000000000000145 /* PracticeTimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000246 /* PracticeTimerView.swift */; };
 		100000000000000000000146 /* PracticeManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000247 /* PracticeManagerView.swift */; };
+		100000000000000000000147 /* ProjectCommitment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000248 /* ProjectCommitment.swift */; };
+		100000000000000000000148 /* EvidenceContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000249 /* EvidenceContract.swift */; };
+		100000000000000000000149 /* ProofEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000024A /* ProofEvidence.swift */; };
+		10000000000000000000014A /* ProofRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000024B /* ProofRevision.swift */; };
+		10000000000000000000014B /* ReviewDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000024C /* ReviewDecision.swift */; };
+		10000000000000000000014C /* TodayRecommendationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000024D /* TodayRecommendationService.swift */; };
+		10000000000000000000014D /* ProductHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000024E /* ProductHealthService.swift */; };
+		10000000000000000000014E /* ProductConvergenceMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000024F /* ProductConvergenceMigration.swift */; };
+		10000000000000000000014F /* ProjectCommitmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000250 /* ProjectCommitmentView.swift */; };
+		100000000000000000000150 /* MigrationReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000251 /* MigrationReviewView.swift */; };
+		100000000000000000000151 /* ProductHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000252 /* ProductHealthView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -139,6 +150,17 @@
 		100000000000000000000245 /* PracticeTimerRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Practice/PracticeTimerRuntime.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000246 /* PracticeTimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/PracticeTimerView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000247 /* PracticeManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/PracticeManagerView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000248 /* ProjectCommitment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Projects/ProjectCommitment.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000249 /* EvidenceContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Contracts/EvidenceContract.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000024A /* ProofEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Evidence/ProofEvidence.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000024B /* ProofRevision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Evidence/ProofRevision.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000024C /* ReviewDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Reviews/ReviewDecision.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000024D /* TodayRecommendationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Recommendations/TodayRecommendationService.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000024E /* ProductHealthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ProductHealth/ProductHealthService.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000024F /* ProductConvergenceMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Migration/ProductConvergenceMigration.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000250 /* ProjectCommitmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ProjectCommitmentView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000251 /* MigrationReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/MigrationReviewView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000252 /* ProductHealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ProductHealthView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -221,6 +243,17 @@
 				100000000000000000000245 /* PracticeTimerRuntime.swift */,
 				100000000000000000000246 /* PracticeTimerView.swift */,
 				100000000000000000000247 /* PracticeManagerView.swift */,
+				100000000000000000000248 /* ProjectCommitment.swift */,
+				100000000000000000000249 /* EvidenceContract.swift */,
+				10000000000000000000024A /* ProofEvidence.swift */,
+				10000000000000000000024B /* ProofRevision.swift */,
+				10000000000000000000024C /* ReviewDecision.swift */,
+				10000000000000000000024D /* TodayRecommendationService.swift */,
+				10000000000000000000024E /* ProductHealthService.swift */,
+				10000000000000000000024F /* ProductConvergenceMigration.swift */,
+				100000000000000000000250 /* ProjectCommitmentView.swift */,
+				100000000000000000000251 /* MigrationReviewView.swift */,
+				100000000000000000000252 /* ProductHealthView.swift */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -373,6 +406,17 @@
 				100000000000000000000144 /* PracticeTimerRuntime.swift in Sources */,
 				100000000000000000000145 /* PracticeTimerView.swift in Sources */,
 				100000000000000000000146 /* PracticeManagerView.swift in Sources */,
+				100000000000000000000147 /* ProjectCommitment.swift in Sources */,
+				100000000000000000000148 /* EvidenceContract.swift in Sources */,
+				100000000000000000000149 /* ProofEvidence.swift in Sources */,
+				10000000000000000000014A /* ProofRevision.swift in Sources */,
+				10000000000000000000014B /* ReviewDecision.swift in Sources */,
+				10000000000000000000014C /* TodayRecommendationService.swift in Sources */,
+				10000000000000000000014D /* ProductHealthService.swift in Sources */,
+				10000000000000000000014E /* ProductConvergenceMigration.swift in Sources */,
+				10000000000000000000014F /* ProjectCommitmentView.swift in Sources */,
+				100000000000000000000150 /* MigrationReviewView.swift in Sources */,
+				100000000000000000000151 /* ProductHealthView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

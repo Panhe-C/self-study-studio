@@ -36,8 +36,17 @@ public struct TodayView: View {
         viewModel.overduePlannedSessions()
     }
 
-    private var focus: StudioFocus? {
-        StudioPresentation.focus(projects: viewModel.continueCards, planned: todaysPlan)
+    private var recommendations: [TodayRecommendation] {
+        viewModel.todayRecommendations(now: practiceTimer.lastRefreshDate)
+    }
+
+    private var primaryRecommendation: TodayRecommendation? {
+        recommendations.first
+    }
+
+    private var primaryProject: Project? {
+        guard let projectID = primaryRecommendation?.projectId else { return nil }
+        return viewModel.projects.first { $0.id == projectID }
     }
 
     private var weekRhythm: [StudioWeekDay] {
@@ -47,15 +56,14 @@ public struct TodayView: View {
         )
     }
 
-    private var otherContinueProjects: [Project] {
-        viewModel.continueCards.filter { $0.id != focus?.project.id }
+    private var alternativeRecommendations: [TodayRecommendation] {
+        Array(recommendations.dropFirst())
     }
 
     public var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: StudioTheme.sectionSpacing) {
                 todayHeader
-                firstRecordSection
                 rhythmSection
                 focusSection
                 practiceSection
@@ -125,19 +133,23 @@ public struct TodayView: View {
                 }
             }
 
-            if focus == nil || !otherContinueProjects.isEmpty {
-                Section("Continue") {
-                if focus == nil && otherContinueProjects.isEmpty {
+            if primaryRecommendation == nil || !alternativeRecommendations.isEmpty {
+                Section("Alternatives") {
+                if primaryRecommendation == nil && alternativeRecommendations.isEmpty {
                     ContentUnavailableView(
                         "No Active Next Step",
                         systemImage: "figure.walk",
                         description: Text("Add a Next Step to an active project.")
                     )
                 } else {
-                    ForEach(otherContinueProjects) { project in
+                    ForEach(alternativeRecommendations) { recommendation in
+                        if let project = viewModel.projects.first(where: { $0.id == recommendation.projectId }) {
                         VStack(alignment: .leading, spacing: 10) {
                             Text(project.name)
                                 .font(.headline)
+                            Label(reasonText(recommendation.reason), systemImage: "info.circle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                             Text(project.currentNextStep)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -167,6 +179,7 @@ public struct TodayView: View {
                             }
                         }
                         .padding(.vertical, 6)
+                        }
                     }
                 }
                 }
@@ -333,27 +346,30 @@ public struct TodayView: View {
 
     @ViewBuilder
     private var focusSection: some View {
-        if let focus {
+        if let recommendation = primaryRecommendation, let project = primaryProject {
             VStack(alignment: .leading, spacing: 12) {
-                Text("CURRENT FOCUS")
+                Text("PRIMARY RECOMMENDATION")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text(focus.project.name)
+                Text(project.name)
                     .font(.title2.bold())
-                Text(focus.planned?.session.title ?? focus.project.currentNextStep)
+                Label(reasonText(recommendation.reason), systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(project.currentNextStep)
                     .font(.body)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 14) {
                     Button {
-                        if let planned = focus.planned { timerPlan = planned } else { timerProject = focus.project }
+                        timerProject = project
                     } label: {
-                        Label("Start \(focus.planned?.session.durationMinutes ?? focus.project.defaultDurationMinutes) min", systemImage: "play.fill")
+                        Label("Start \(project.defaultDurationMinutes) min", systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(StudioTheme.accent)
 
                     Button {
-                        if let planned = focus.planned { quickLogPlan = planned } else { quickLogProject = focus.project }
+                        quickLogProject = project
                     } label: {
                         Image(systemName: "square.and.pencil")
                     }
@@ -463,6 +479,15 @@ public struct TodayView: View {
 
     private func latestSession(for project: Project) -> LearningSession? {
         viewModel.sessionsForProject(project.id).max { $0.endedAt < $1.endedAt }
+    }
+
+    private func reasonText(_ reason: TodayRecommendationReason) -> String {
+        switch reason {
+        case .userPinned: "Pinned by you"
+        case .contractBoundary: "Evidence Contract boundary is due"
+        case .confirmedSchedule: "Confirmed schedule"
+        case .staleProject: "Oldest meaningful activity"
+        }
     }
 
     @ViewBuilder

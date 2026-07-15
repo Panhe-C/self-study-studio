@@ -22,7 +22,7 @@ public struct TimerSessionView: View {
         self.viewModel = viewModel
         self.project = project
         self.plannedSession = plannedSession
-        _nextStep = State(initialValue: project.currentNextStep)
+        _nextStep = State(initialValue: "")
     }
 
     public var body: some View {
@@ -68,7 +68,8 @@ public struct TimerSessionView: View {
 
                 Section("Finish") {
                     TextField("One sentence", text: $note, axis: .vertical)
-                    TextField("Next Step", text: $nextStep, axis: .vertical)
+                    LabeledContent("Current Next Step", value: project.currentNextStep)
+                    TextField("Replacement (optional)", text: $nextStep, axis: .vertical)
                 }
             }
             .navigationTitle("Timer")
@@ -152,7 +153,10 @@ public struct TimerSessionView: View {
                 startedAt: startedAt,
                 endedAt: endedAt,
                 note: note,
-                nextStep: nextStep,
+                nextStep: QuickLogView.confirmedNextStep(
+                    current: project.currentNextStep,
+                    replacement: nextStep
+                ),
                 plannedSessionId: plannedSession?.id
             )
             if addProof {

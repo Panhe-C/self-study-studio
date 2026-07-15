@@ -179,6 +179,18 @@ public final class JournalViewModel: ObservableObject {
         journalService.todayContinueProjects()
     }
 
+    public func todayRecommendations(
+        now: Date = Date(),
+        pinnedProjectIDs: Set<UUID> = []
+    ) -> [TodayRecommendation] {
+        TodayRecommendationService(pinnedProjectIDs: pinnedProjectIDs)
+            .recommendations(snapshot: snapshot, now: now)
+    }
+
+    public func productHealth(now: Date = Date()) -> ProductHealthReport {
+        ProductHealthService().report(snapshot: snapshot, now: now)
+    }
+
     @discardableResult
     public func onboardProject(
         name: String,

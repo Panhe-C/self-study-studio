@@ -3,6 +3,17 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class StudioPresentationTests: XCTestCase {
+    func testCalendarTabAppearsOnlyWhenSchedulingIsEnabled() {
+        XCTAssertEqual(
+            StudioPresentation.primaryTabs(calendarEnabled: false),
+            [.today, .projects, .library]
+        )
+        XCTAssertEqual(
+            StudioPresentation.primaryTabs(calendarEnabled: true),
+            [.today, .projects, .calendar, .library]
+        )
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "en_US_POSIX")
