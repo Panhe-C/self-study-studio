@@ -5,6 +5,7 @@ public enum ProofPreviewKind: Equatable, Sendable {
     case audio(URL)
     case file(URL)
     case link(URL)
+    case text(String)
     case unavailable
 }
 
@@ -21,6 +22,8 @@ public struct ProofPreviewDescriptor: Equatable, Sendable {
             kind = Self.localKind(for: proof.localPath, as: .file)
         case .link:
             kind = proof.url.map(ProofPreviewKind.link) ?? .unavailable
+        case .text:
+            kind = proof.artifactBody.map(ProofPreviewKind.text) ?? .unavailable
         }
     }
 
@@ -35,6 +38,7 @@ public struct ProofPreviewDescriptor: Equatable, Sendable {
         case .audio: .audio(url)
         case .file: .file(url)
         case .link: .unavailable
+        case .text: .unavailable
         }
     }
 }

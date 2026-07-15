@@ -93,12 +93,13 @@ final class DomainTests: XCTestCase {
         }
     }
 
-    func testActiveProjectRequiresANextStepForContinue() {
+    func testActiveProjectRequiresCommitmentAndNextStepForContinue() {
         let project = Project(
             name: "CS336",
             area: "AI",
             goal: "复现课程",
-            currentNextStep: "整理 perplexity"
+            currentNextStep: "整理 perplexity",
+            activeEvidenceContractId: UUID()
         )
 
         XCTAssertTrue(project.canContinue)

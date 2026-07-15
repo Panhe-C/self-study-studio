@@ -123,6 +123,7 @@ struct AddProofView: View {
         case .audio: "waveform"
         case .file: "doc"
         case .link: "link"
+        case .text: "text.alignleft"
         }
     }
 

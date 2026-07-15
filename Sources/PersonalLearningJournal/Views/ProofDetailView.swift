@@ -79,6 +79,12 @@ struct ProofDetailView: View {
                 Label(url.absoluteString, systemImage: "link")
                     .lineLimit(2)
             }
+        case let .text(markdown):
+            ScrollView {
+                Text(markdown)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
         case .unavailable:
             ContentUnavailableView(
                 "Attachment Unavailable",

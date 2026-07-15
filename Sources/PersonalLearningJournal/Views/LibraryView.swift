@@ -228,6 +228,7 @@ public struct LibraryView: View {
         case .audio: "waveform"
         case .file: "doc.text.fill"
         case .link: "link"
+        case .text: "text.alignleft"
         }
     }
 
@@ -416,6 +417,7 @@ private struct ProofRow: View {
         case .audio: "waveform"
         case .file: "doc"
         case .link: "link"
+        case .text: "text.alignleft"
         }
     }
 }

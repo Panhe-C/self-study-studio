@@ -1,14 +1,17 @@
 import Foundation
 
 public enum JournalSchema {
-    public static let currentVersion = 2
+    public static let currentVersion = 3
 }
 
 public enum ProjectStatus: String, Codable, CaseIterable, Sendable {
+    case idea
     case active
     case lowFrequency = "low-frequency"
     case paused
     case archived
+    case completed
+    case trash
 }
 
 public enum ActionType: String, Codable, CaseIterable, Sendable {
@@ -30,6 +33,7 @@ public enum ProofType: String, Codable, CaseIterable, Sendable {
     case audio
     case file
     case link
+    case text
 }
 
 public enum TrailEventType: String, Codable, CaseIterable, Sendable {
@@ -56,6 +60,14 @@ public enum JournalValidationError: Error, Equatable, Sendable {
     case missingFirstRecord
     case missingReviewRecommendation
     case missingPlannedSession
+    case missingEvidenceContract
+    case missingAcceptanceCriteria
+    case invalidEvidenceInterval
+    case missingProofArtifact
+    case invalidProofURL
+    case missingReviewDecision
+    case missingCapstoneProof
+    case attentionBudgetExceeded
 }
 
 extension JournalValidationError: LocalizedError {
@@ -83,6 +95,22 @@ extension JournalValidationError: LocalizedError {
             "Choose a review recommendation before continuing."
         case .missingPlannedSession:
             "This planned session is no longer available."
+        case .missingEvidenceContract:
+            "Add an Evidence Contract before activating this project."
+        case .missingAcceptanceCriteria:
+            "Describe how this evidence will be accepted."
+        case .invalidEvidenceInterval:
+            "Set an evidence interval greater than zero."
+        case .missingProofArtifact:
+            "Add an inspectable artifact."
+        case .invalidProofURL:
+            "Use a valid HTTP or HTTPS link."
+        case .missingReviewDecision:
+            "Confirm one decision to complete this review."
+        case .missingCapstoneProof:
+            "Choose a qualifying Capstone Proof to complete this project."
+        case .attentionBudgetExceeded:
+            "Confirm that you want more than three active projects."
         }
     }
 }
@@ -102,6 +130,10 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
     public var deletedAt: Date?
     public var schemaVersion: Int
     public var activeCoursePlanId: UUID?
+    public var commitmentState: ProjectCommitmentState
+    public var activeEvidenceContractId: UUID?
+    public var completedAt: Date?
+    public var previousStatusBeforeTrash: ProjectStatus?
 
     public init(
         id: UUID = UUID(),
@@ -117,7 +149,11 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
         archivedAt: Date? = nil,
         deletedAt: Date? = nil,
         schemaVersion: Int = JournalSchema.currentVersion,
-        activeCoursePlanId: UUID? = nil
+        activeCoursePlanId: UUID? = nil,
+        commitmentState: ProjectCommitmentState = .ready,
+        activeEvidenceContractId: UUID? = nil,
+        completedAt: Date? = nil,
+        previousStatusBeforeTrash: ProjectStatus? = nil
     ) {
         self.id = id
         self.name = name
@@ -133,12 +169,18 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
         self.deletedAt = deletedAt
         self.schemaVersion = schemaVersion
         self.activeCoursePlanId = activeCoursePlanId
+        self.commitmentState = commitmentState
+        self.activeEvidenceContractId = activeEvidenceContractId
+        self.completedAt = completedAt
+        self.previousStatusBeforeTrash = previousStatusBeforeTrash
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, area, goal, status, currentNextStep, lastActionType
         case defaultDurationMinutes, createdAt, updatedAt, archivedAt
         case deletedAt, schemaVersion, activeCoursePlanId
+        case commitmentState, activeEvidenceContractId, completedAt
+        case previousStatusBeforeTrash
     }
 
     public init(from decoder: Decoder) throws {
@@ -158,10 +200,25 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
         schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
             ?? JournalSchema.currentVersion
         activeCoursePlanId = try container.decodeIfPresent(UUID.self, forKey: .activeCoursePlanId)
+        commitmentState = try container.decodeIfPresent(
+            ProjectCommitmentState.self,
+            forKey: .commitmentState
+        ) ?? ((status == .active || status == .lowFrequency) ? .needsSetup : .ready)
+        activeEvidenceContractId = try container.decodeIfPresent(
+            UUID.self,
+            forKey: .activeEvidenceContractId
+        )
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        previousStatusBeforeTrash = try container.decodeIfPresent(
+            ProjectStatus.self,
+            forKey: .previousStatusBeforeTrash
+        )
     }
 
     public var canContinue: Bool {
-        status == .active && !currentNextStep.trimmedForJournal.isEmpty
+        status == .active
+            && commitmentState == .ready
+            && !currentNextStep.trimmedForJournal.isEmpty
     }
 }
 
@@ -278,6 +335,9 @@ public struct Proof: Codable, Equatable, Identifiable, Sendable {
     public var updatedAt: Date
     public var deletedAt: Date?
     public var schemaVersion: Int
+    public var artifact: ProofArtifact?
+    public var integrity: ProofIntegrity
+    public var revision: Int
 
     public init(
         id: UUID = UUID(),
@@ -293,7 +353,10 @@ public struct Proof: Codable, Equatable, Identifiable, Sendable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         deletedAt: Date? = nil,
-        schemaVersion: Int = JournalSchema.currentVersion
+        schemaVersion: Int = JournalSchema.currentVersion,
+        artifact: ProofArtifact? = nil,
+        integrity: ProofIntegrity? = nil,
+        revision: Int = 1
     ) throws {
         guard !statement.trimmedForJournal.isEmpty else {
             throw JournalValidationError.emptyProofStatement
@@ -313,11 +376,22 @@ public struct Proof: Codable, Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
         self.schemaVersion = schemaVersion
+        let inferredArtifact = artifact ?? ProofArtifact.infer(
+            type: type,
+            localPath: localPath,
+            url: url,
+            mimeType: mimeType,
+            fileSize: fileSize
+        )
+        self.artifact = inferredArtifact
+        self.integrity = integrity ?? (inferredArtifact == nil ? .needsEvidence : .qualifying)
+        self.revision = revision
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, projectId, sessionId, type, title, statement, localPath, url
         case mimeType, fileSize, createdAt, updatedAt, deletedAt, schemaVersion
+        case artifact, integrity, revision
     }
 
     public init(from decoder: Decoder) throws {
@@ -337,7 +411,44 @@ public struct Proof: Codable, Equatable, Identifiable, Sendable {
             updatedAt: container.decode(Date.self, forKey: .updatedAt),
             deletedAt: container.decodeIfPresent(Date.self, forKey: .deletedAt),
             schemaVersion: container.decodeIfPresent(Int.self, forKey: .schemaVersion)
-                ?? JournalSchema.currentVersion
+                ?? JournalSchema.currentVersion,
+            artifact: container.decodeIfPresent(ProofArtifact.self, forKey: .artifact),
+            integrity: container.decodeIfPresent(ProofIntegrity.self, forKey: .integrity),
+            revision: container.decodeIfPresent(Int.self, forKey: .revision) ?? 1
+        )
+    }
+
+    public var qualifies: Bool {
+        integrity == .qualifying && artifact?.qualifies == true
+    }
+
+    public var artifactBody: String? {
+        guard case let .text(markdown) = artifact else { return nil }
+        return markdown
+    }
+
+    public static func text(
+        id: UUID = UUID(),
+        projectId: UUID,
+        sessionId: UUID? = nil,
+        title: String,
+        artifactBody: String,
+        statement: String,
+        createdAt: Date = Date()
+    ) throws -> Proof {
+        let body = artifactBody.trimmedForJournal
+        guard !body.isEmpty else { throw JournalValidationError.missingProofArtifact }
+        return try Proof(
+            id: id,
+            projectId: projectId,
+            sessionId: sessionId,
+            type: .text,
+            title: title,
+            statement: statement,
+            createdAt: createdAt,
+            updatedAt: createdAt,
+            artifact: .text(markdown: body),
+            integrity: .qualifying
         )
     }
 }
@@ -357,6 +468,8 @@ public struct Review: Codable, Equatable, Identifiable, Sendable {
     public var updatedAt: Date
     public var deletedAt: Date?
     public var schemaVersion: Int
+    public var confirmedDecisionIds: [UUID]
+    public var referencedProofRevisionIds: [UUID]
 
     public init(
         id: UUID = UUID(),
@@ -372,7 +485,9 @@ public struct Review: Codable, Equatable, Identifiable, Sendable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         deletedAt: Date? = nil,
-        schemaVersion: Int = JournalSchema.currentVersion
+        schemaVersion: Int = JournalSchema.currentVersion,
+        confirmedDecisionIds: [UUID] = [],
+        referencedProofRevisionIds: [UUID] = []
     ) {
         self.id = id
         self.periodStart = periodStart
@@ -388,12 +503,15 @@ public struct Review: Codable, Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
         self.schemaVersion = schemaVersion
+        self.confirmedDecisionIds = confirmedDecisionIds
+        self.referencedProofRevisionIds = referencedProofRevisionIds
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, periodStart, periodEnd, facts, patterns, decisions
         case projectRecommendations, nextSteps, aiSourceSummary, sourceReferences
         case createdAt, updatedAt, deletedAt, schemaVersion
+        case confirmedDecisionIds, referencedProofRevisionIds
     }
 
     public init(from decoder: Decoder) throws {
@@ -413,7 +531,15 @@ public struct Review: Codable, Equatable, Identifiable, Sendable {
             updatedAt: try container.decode(Date.self, forKey: .updatedAt),
             deletedAt: try container.decodeIfPresent(Date.self, forKey: .deletedAt),
             schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
-                ?? JournalSchema.currentVersion
+                ?? JournalSchema.currentVersion,
+            confirmedDecisionIds: try container.decodeIfPresent(
+                [UUID].self,
+                forKey: .confirmedDecisionIds
+            ) ?? [],
+            referencedProofRevisionIds: try container.decodeIfPresent(
+                [UUID].self,
+                forKey: .referencedProofRevisionIds
+            ) ?? []
         )
     }
 }
