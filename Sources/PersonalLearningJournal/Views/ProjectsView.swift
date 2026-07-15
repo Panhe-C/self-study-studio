@@ -346,6 +346,7 @@ private struct ProjectDetailView: View {
                 ForEach(viewModel.proofsForProject(currentProject.id)) { proof in
                     NavigationLink {
                         ProofDetailView(
+                            viewModel: viewModel,
                             proof: proof,
                             projectName: currentProject.name,
                             sessionSummary: sessionSummary(for: proof)
@@ -494,6 +495,7 @@ private struct SessionDetailView: View {
                 ForEach(proofs) { proof in
                     NavigationLink {
                         ProofDetailView(
+                            viewModel: viewModel,
                             proof: proof,
                             projectName: project.name,
                             sessionSummary: "\(session.durationMinutes) min · \(session.actionType.rawValue) · \(session.note)"

@@ -575,6 +575,51 @@ public final class JournalService {
     }
 
     @discardableResult
+    public func reviseProof(
+        proofId: UUID,
+        title: String,
+        statement: String,
+        artifactBody: String? = nil
+    ) throws -> Proof {
+        guard let proofIndex = state.proofs.firstIndex(where: { $0.id == proofId }) else {
+            throw JournalValidationError.missingProofArtifact
+        }
+        let original = state.proofs[proofIndex]
+        let revisedStatement = statement.trimmedForJournal
+        guard !revisedStatement.isEmpty else { throw JournalValidationError.emptyProofStatement }
+
+        var revised = original
+        revised.title = title.trimmedForJournal.isEmpty ? original.type.rawValue.capitalized : title.trimmedForJournal
+        revised.statement = revisedStatement
+        if original.type == .text {
+            let body = (artifactBody ?? original.artifactBody ?? "").trimmedForJournal
+            guard !body.isEmpty else { throw JournalValidationError.missingProofArtifact }
+            revised.artifact = .text(markdown: body)
+            revised.integrity = .qualifying
+        }
+        revised.revision = original.revision + 1
+        revised.updatedAt = now()
+
+        var upserts: [JournalEntity] = [.proof(revised)]
+        if !state.proofRevisions.contains(where: {
+            $0.proofId == original.id && $0.revision == original.revision && $0.deletedAt == nil
+        }) {
+            let artifactData = try JSONEncoder.journal.encode(original.artifact)
+            let history = ProofRevision(
+                proof: original,
+                revision: original.revision,
+                artifactChecksum: artifactData.base64EncodedString(),
+                createdAt: revised.updatedAt
+            )
+            state.proofRevisions.append(history)
+            upserts.append(.proofRevision(history))
+        }
+        state.proofs[proofIndex] = revised
+        try persist(upserts: upserts)
+        return revised
+    }
+
+    @discardableResult
     public func acceptProof(
         proofId: UUID,
         contractId: UUID,

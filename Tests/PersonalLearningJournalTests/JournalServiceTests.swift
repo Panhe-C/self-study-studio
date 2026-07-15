@@ -571,6 +571,30 @@ final class JournalServiceTests: XCTestCase {
         XCTAssertEqual(service.snapshot().proofs.map(\.id), [proof.id])
     }
 
+    func testReviseProofPreservesPriorRevisionAndUpdatesTextArtifact() throws {
+        let service = JournalService(store: InMemoryJournalStore())
+        let project = try service.createIdea(name: "Algorithms", area: "CS")
+        let original = try service.addProof(
+            projectId: project.id,
+            type: .text,
+            title: "Invariant",
+            statement: "First explanation",
+            artifactBody: "Original derivation"
+        )
+
+        let revised = try service.reviseProof(
+            proofId: original.id,
+            title: "Loop invariant",
+            statement: "Clearer explanation",
+            artifactBody: "Revised derivation"
+        )
+
+        XCTAssertEqual(revised.revision, 2)
+        XCTAssertEqual(revised.artifactBody, "Revised derivation")
+        XCTAssertEqual(service.snapshot().proofRevisions.map(\.revision), [1])
+        XCTAssertEqual(service.snapshot().proofRevisions.first?.statement, "First explanation")
+    }
+
     func testProjectsNeedingReviewIncludeActiveProjectsIdleForSevenDays() throws {
         let referenceDate = Date(timeIntervalSince1970: 10_000_000)
         let createdAt = referenceDate.addingTimeInterval(-8 * 24 * 60 * 60)

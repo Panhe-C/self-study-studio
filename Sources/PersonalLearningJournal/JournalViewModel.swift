@@ -151,6 +151,10 @@ public final class JournalViewModel: ObservableObject {
         snapshot.proofs
     }
 
+    public var proofRevisions: [ProofRevision] {
+        snapshot.proofRevisions
+    }
+
     public var reviews: [Review] {
         snapshot.reviews
     }
@@ -505,7 +509,8 @@ public final class JournalViewModel: ObservableObject {
         localPath: String? = nil,
         url: URL? = nil,
         mimeType: String? = nil,
-        fileSize: Int? = nil
+        fileSize: Int? = nil,
+        artifactBody: String? = nil
     ) throws -> Proof {
         let proof = try journalService.addProof(
             id: id,
@@ -517,11 +522,35 @@ public final class JournalViewModel: ObservableObject {
             localPath: localPath,
             url: url,
             mimeType: mimeType,
-            fileSize: fileSize
+            fileSize: fileSize,
+            artifactBody: artifactBody
         )
         tryCompleteOnboarding(afterRecording: projectId)
         refresh()
         return proof
+    }
+
+    @discardableResult
+    public func reviseProof(
+        proofId: UUID,
+        title: String,
+        statement: String,
+        artifactBody: String? = nil
+    ) throws -> Proof {
+        let proof = try journalService.reviseProof(
+            proofId: proofId,
+            title: title,
+            statement: statement,
+            artifactBody: artifactBody
+        )
+        refresh()
+        return proof
+    }
+
+    public func proofRevisions(for proofId: UUID) -> [ProofRevision] {
+        snapshot.proofRevisions
+            .filter { $0.proofId == proofId && $0.deletedAt == nil }
+            .sorted { $0.revision > $1.revision }
     }
 
     @discardableResult
