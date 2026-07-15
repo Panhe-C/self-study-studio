@@ -19,10 +19,26 @@
 
 ## 步骤
 
-### 1. 拉这个分支到本地
+### 1. 一键脚本（推荐）
+
+在你的 Mac 终端跑这一行（不需要先 clone）：
 
 ```bash
-git clone https://github.com/panhe-c/self-study-studio.git
+curl -fsSL https://raw.githubusercontent.com/Panhe-C/self-study-studio/cursor/free-apple-id-signing-1b1e/scripts/setup-free-device-install.sh | bash
+```
+
+脚本会自动：
+- 检查 macOS / Xcode / git
+- 检测数据线连上的 iPhone 并打印 UDID
+- clone 这个分支到 `~/self-study-studio`
+- 打开 Xcode
+
+剩下的 5 下点击（在 Xcode GUI 里选 Team、选设备、按 Run，再在 iPhone 上信任证书）必须手动做，是 Apple 强制的 GUI 流程，详见下面"在 Xcode 设置签名"。
+
+### 1'. 手动方式（如果不想用脚本）
+
+```bash
+git clone https://github.com/Panhe-C/self-study-studio.git
 cd self-study-studio
 git checkout cursor/free-apple-id-signing-1b1e
 open SelfStudyStudio.xcodeproj
