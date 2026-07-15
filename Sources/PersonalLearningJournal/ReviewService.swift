@@ -363,7 +363,7 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
                 periodEnd: periodEnd,
                 projects: snapshot.projects,
                 sessions: snapshot.sessions,
-                proofs: snapshot.proofs,
+                proofs: snapshot.proofs.map(HTTPAIProofMetadata.init),
                 practiceSessions: practiceSessions,
                 practiceSources: PracticeReviewContext.sources(
                     for: practiceSessions,
@@ -471,10 +471,28 @@ private struct HTTPAIReviewRequest: Codable {
     var periodEnd: Date
     var projects: [Project]
     var sessions: [LearningSession]
-    var proofs: [Proof]
+    var proofs: [HTTPAIProofMetadata]
     var practiceSessions: [PracticeSession]
     var practiceSources: [String]
     var planProgress: [CoursePlanReviewProgress]
+}
+
+private struct HTTPAIProofMetadata: Codable {
+    var id: UUID
+    var projectId: UUID
+    var sessionId: UUID?
+    var type: ProofType
+    var title: String
+    var statement: String
+
+    init(_ proof: Proof) {
+        id = proof.id
+        projectId = proof.projectId
+        sessionId = proof.sessionId
+        type = proof.type
+        title = proof.title
+        statement = proof.statement
+    }
 }
 
 private struct HTTPAIReviewResponse: Codable {

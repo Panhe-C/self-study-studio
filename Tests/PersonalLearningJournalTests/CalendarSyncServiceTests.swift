@@ -3,6 +3,57 @@ import XCTest
 
 @MainActor
 final class CalendarSyncServiceTests: XCTestCase {
+    func testDetailedPayloadIncludesProjectSessionGoalAndExpectedProof() async throws {
+        let project = Project(name: "CS336", area: "AI", goal: "Build a tokenizer", status: .idea, currentNextStep: "")
+        let planned = try PlannedSession(
+            id: sessionID,
+            planId: UUID(),
+            phaseId: UUID(),
+            projectId: project.id,
+            title: "Implement tokenizer",
+            actionType: .course,
+            expectedProof: "Passing notebook",
+            durationMinutes: 30
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project], plannedSessions: [planned])
+        )
+        try repository.saveTargetCalendarIdentifier("study-calendar")
+        let service = CalendarSyncService(repository: repository, calendarClient: FakeWritableCalendarClient())
+
+        let changes = try await service.previewChanges(for: scheduleDraft)
+        let event = try XCTUnwrap(changes.items.first?.after)
+
+        XCTAssertTrue(event.title.contains("CS336"))
+        XCTAssertTrue(event.title.contains("Implement tokenizer"))
+        XCTAssertTrue(event.details?.contains("Build a tokenizer") == true)
+        XCTAssertTrue(event.details?.contains("Passing notebook") == true)
+    }
+
+    func testSharedDedicatedCalendarRequiresSecondConfirmation() async throws {
+        let repository = InMemoryJournalRepository()
+        let client = FakeWritableCalendarClient(calendars: [
+            CalendarDescriptor(
+                id: "shared-study",
+                title: "Self Study Studio",
+                allowsContentModifications: true,
+                isDefault: false,
+                isShared: true
+            )
+        ])
+        let service = CalendarSyncService(repository: repository, calendarClient: client)
+
+        do {
+            _ = try await service.configureDedicatedCalendar(sharedCalendarConfirmed: false)
+            XCTFail("Expected shared calendar confirmation")
+        } catch let error as CalendarClientError {
+            XCTAssertEqual(error, .sharedCalendarConfirmationRequired)
+        }
+        let selected = try await service.configureDedicatedCalendar(sharedCalendarConfirmed: true)
+        XCTAssertEqual(selected.id, "shared-study")
+        XCTAssertEqual(try repository.targetCalendarIdentifier(), "shared-study")
+    }
+
     func testPreviewDoesNotCallCalendarClientWrites() async throws {
         let repository = InMemoryJournalRepository()
         try repository.saveTargetCalendarIdentifier("study-calendar")
@@ -151,18 +202,24 @@ final class CalendarSyncServiceTests: XCTestCase {
 
 private actor FakeWritableCalendarClient: CalendarClient {
     private var events: [String: CalendarEventSnapshot]
+    private let calendars: [CalendarDescriptor]
     private let failingStarts: Set<Date>
     private(set) var saveCallCount = 0
     private(set) var deleteCallCount = 0
 
-    init(events: [String: CalendarEventSnapshot] = [:], failingStarts: Set<Date> = []) {
+    init(
+        events: [String: CalendarEventSnapshot] = [:],
+        failingStarts: Set<Date> = [],
+        calendars: [CalendarDescriptor] = []
+    ) {
         self.events = events
         self.failingStarts = failingStarts
+        self.calendars = calendars
     }
 
     func authorizationState() async -> CalendarAuthorizationState { .fullAccess }
     func requestFullAccess() async throws -> CalendarAuthorizationState { .fullAccess }
-    func writableCalendars() async throws -> [CalendarDescriptor] { [] }
+    func writableCalendars() async throws -> [CalendarDescriptor] { calendars }
     func busyIntervals(in range: DateInterval) async throws -> [BusyInterval] { [] }
     func event(identifier: String) async throws -> CalendarEventSnapshot? { events[identifier] }
 
@@ -174,6 +231,7 @@ private actor FakeWritableCalendarClient: CalendarClient {
             identifier: identifier,
             calendarIdentifier: event.calendarIdentifier,
             title: event.title,
+            details: event.details,
             start: event.start,
             end: event.end
         )

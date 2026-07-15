@@ -1,5 +1,136 @@
 import Foundation
 
+public struct AIRequestArtifact: Equatable, Sendable {
+    public var proofID: UUID
+    public var mediaType: String?
+    public var data: Data
+
+    public init(proofID: UUID, mediaType: String?, data: Data) {
+        self.proofID = proofID
+        self.mediaType = mediaType
+        self.data = data
+    }
+}
+
+public struct AIRequestPackage: Equatable, Sendable {
+    public var encodedText: String
+    public var artifacts: [AIRequestArtifact]
+    public var model: String
+    public var sourceMetadata: [String: String]
+
+    public init(
+        encodedText: String,
+        artifacts: [AIRequestArtifact],
+        model: String,
+        sourceMetadata: [String: String]
+    ) {
+        self.encodedText = encodedText
+        self.artifacts = artifacts
+        self.model = model
+        self.sourceMetadata = sourceMetadata
+    }
+}
+
+public struct AIRequestPackageBuilder: Sendable {
+    public var model: String
+    public var source: String
+
+    public init(model: String, source: String = "Self Study Studio") {
+        self.model = model
+        self.source = source
+    }
+
+    public func makePackage(
+        snapshot: JournalSnapshot,
+        selectedProofIDs: Set<UUID>
+    ) throws -> AIRequestPackage {
+        let safeInput = SafeJournalAIInput(
+            projects: snapshot.projects.map {
+                .init(id: $0.id, name: $0.name, area: $0.area, goal: $0.goal, status: $0.status, currentNextStep: $0.currentNextStep)
+            },
+            sessions: snapshot.sessions.map {
+                .init(id: $0.id, projectID: $0.projectId, actionType: $0.actionType, durationMinutes: $0.durationMinutes, note: $0.note)
+            },
+            proofs: snapshot.proofs.map {
+                .init(id: $0.id, projectID: $0.projectId, type: $0.type, title: $0.title, statement: $0.statement)
+            },
+            plans: snapshot.coursePlans.map {
+                .init(id: $0.id, projectID: $0.projectId, title: $0.courseTitle, summary: $0.summary)
+            }
+        )
+        let data = try JSONEncoder.journal.encode(safeInput)
+        let artifacts = try snapshot.proofs
+            .filter { selectedProofIDs.contains($0.id) && $0.qualifies }
+            .sorted { $0.id.uuidString < $1.id.uuidString }
+            .compactMap(Self.authorizedArtifact)
+        return AIRequestPackage(
+            encodedText: String(decoding: data, as: UTF8.self),
+            artifacts: artifacts,
+            model: model,
+            sourceMetadata: ["source": source, "authorization": "one-request"]
+        )
+    }
+
+    private static func authorizedArtifact(_ proof: Proof) throws -> AIRequestArtifact? {
+        guard let artifact = proof.artifact else { return nil }
+        switch artifact {
+        case let .text(markdown):
+            return AIRequestArtifact(proofID: proof.id, mediaType: "text/markdown", data: Data(markdown.utf8))
+        case let .attachment(localPath, mimeType, _):
+            guard FileManager.default.isReadableFile(atPath: localPath) else { return nil }
+            return AIRequestArtifact(
+                proofID: proof.id,
+                mediaType: mimeType,
+                data: try Data(contentsOf: URL(fileURLWithPath: localPath))
+            )
+        case let .link(url, _, _, _, _, snapshotPath):
+            if let snapshotPath, FileManager.default.isReadableFile(atPath: snapshotPath) {
+                return AIRequestArtifact(
+                    proofID: proof.id,
+                    mediaType: proof.mimeType,
+                    data: try Data(contentsOf: URL(fileURLWithPath: snapshotPath))
+                )
+            }
+            return AIRequestArtifact(proofID: proof.id, mediaType: "text/uri-list", data: Data(url.absoluteString.utf8))
+        }
+    }
+}
+
+private struct SafeJournalAIInput: Codable {
+    struct ProjectInput: Codable {
+        var id: UUID
+        var name: String
+        var area: String
+        var goal: String
+        var status: ProjectStatus
+        var currentNextStep: String
+    }
+    struct SessionInput: Codable {
+        var id: UUID
+        var projectID: UUID
+        var actionType: ActionType
+        var durationMinutes: Int
+        var note: String
+    }
+    struct ProofInput: Codable {
+        var id: UUID
+        var projectID: UUID
+        var type: ProofType
+        var title: String
+        var statement: String
+    }
+    struct PlanInput: Codable {
+        var id: UUID
+        var projectID: UUID
+        var title: String
+        var summary: String
+    }
+    var projects: [ProjectInput]
+    var sessions: [SessionInput]
+    var proofs: [ProofInput]
+    var plans: [PlanInput]
+}
+
 public protocol AIHTTPTransport: Sendable {
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
 }

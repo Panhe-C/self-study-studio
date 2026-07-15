@@ -199,7 +199,7 @@ public struct OpenAICompatibleReviewProvider: AIReviewProvider {
             periodEnd: periodEnd,
             projects: snapshot.projects,
             sessions: snapshot.sessions,
-            proofs: snapshot.proofs,
+            proofs: snapshot.proofs.map(AIProofMetadata.init),
             practiceSessions: practiceSessions,
             practiceSources: PracticeReviewContext.sources(
                 for: practiceSessions,
@@ -322,10 +322,28 @@ private struct OpenAICompatibleReviewInput: Codable {
     var periodEnd: Date
     var projects: [Project]
     var sessions: [LearningSession]
-    var proofs: [Proof]
+    var proofs: [AIProofMetadata]
     var practiceSessions: [PracticeSession]
     var practiceSources: [String]
     var planProgress: [CoursePlanReviewProgress]
+}
+
+private struct AIProofMetadata: Codable {
+    var id: UUID
+    var projectId: UUID
+    var sessionId: UUID?
+    var type: ProofType
+    var title: String
+    var statement: String
+
+    init(_ proof: Proof) {
+        id = proof.id
+        projectId = proof.projectId
+        sessionId = proof.sessionId
+        type = proof.type
+        title = proof.title
+        statement = proof.statement
+    }
 }
 
 private struct OpenAICompatibleReviewResponse: Decodable {

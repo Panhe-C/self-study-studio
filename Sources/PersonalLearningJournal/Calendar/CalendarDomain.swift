@@ -198,14 +198,16 @@ public struct CalendarEventSnapshot: Codable, Equatable, Sendable {
     public var identifier: String
     public var calendarIdentifier: String
     public var title: String
+    public var details: String?
     public var start: Date
     public var end: Date
     public var lastModifiedAt: Date?
 
-    public init(identifier: String, calendarIdentifier: String, title: String, start: Date, end: Date, lastModifiedAt: Date? = nil) {
+    public init(identifier: String, calendarIdentifier: String, title: String, details: String? = nil, start: Date, end: Date, lastModifiedAt: Date? = nil) {
         self.identifier = identifier
         self.calendarIdentifier = calendarIdentifier
         self.title = title
+        self.details = details
         self.start = start
         self.end = end
         self.lastModifiedAt = lastModifiedAt
@@ -216,13 +218,15 @@ public struct CalendarEventDraft: Codable, Equatable, Sendable {
     public var identifier: String?
     public var calendarIdentifier: String
     public var title: String
+    public var details: String?
     public var start: Date
     public var end: Date
 
-    public init(identifier: String? = nil, calendarIdentifier: String, title: String, start: Date, end: Date) {
+    public init(identifier: String? = nil, calendarIdentifier: String, title: String, details: String? = nil, start: Date, end: Date) {
         self.identifier = identifier
         self.calendarIdentifier = calendarIdentifier
         self.title = title
+        self.details = details
         self.start = start
         self.end = end
     }
@@ -233,6 +237,7 @@ public struct CalendarBinding: Codable, Equatable, Sendable {
     public var eventIdentifier: String
     public var calendarIdentifier: String
     public var lastWrittenTitle: String
+    public var lastWrittenDetails: String?
     public var lastWrittenStart: Date
     public var lastWrittenEnd: Date
     public var lastObservedAt: Date
@@ -243,6 +248,7 @@ public struct CalendarBinding: Codable, Equatable, Sendable {
         eventIdentifier: String,
         calendarIdentifier: String,
         lastWrittenTitle: String,
+        lastWrittenDetails: String? = nil,
         lastWrittenStart: Date,
         lastWrittenEnd: Date,
         lastObservedAt: Date,
@@ -252,6 +258,7 @@ public struct CalendarBinding: Codable, Equatable, Sendable {
         self.eventIdentifier = eventIdentifier
         self.calendarIdentifier = calendarIdentifier
         self.lastWrittenTitle = lastWrittenTitle
+        self.lastWrittenDetails = lastWrittenDetails
         self.lastWrittenStart = lastWrittenStart
         self.lastWrittenEnd = lastWrittenEnd
         self.lastObservedAt = lastObservedAt

@@ -15,6 +15,8 @@ public struct CalendarSettingsView: View {
     @State private var preferenceID = UUID()
     @State private var isRequestingAccess = false
     @State private var errorMessage: String?
+    @State private var isConfirmingSharedCalendar = false
+    @State private var sharedCalendarConfirmed = false
 
     public init(viewModel: CalendarViewModel) {
         self.viewModel = viewModel
@@ -88,6 +90,19 @@ public struct CalendarSettingsView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .confirmationDialog(
+            "Use a shared calendar?",
+            isPresented: $isConfirmingSharedCalendar,
+            titleVisibility: .visible
+        ) {
+            Button("Use Shared Calendar") {
+                sharedCalendarConfirmed = true
+                save()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Project names, session titles, goals, and expected Proof will be visible to everyone who can access this calendar.")
+        }
     }
 
     private var accessTitle: String {
@@ -137,7 +152,8 @@ public struct CalendarSettingsView: View {
             defer { isRequestingAccess = false }
             do {
                 _ = try await viewModel.requestCalendarAccess()
-                try await viewModel.refreshWritableCalendars()
+                let dedicated = try await viewModel.configureDedicatedCalendar()
+                targetCalendarIdentifier = dedicated.id
             } catch {
                 errorMessage = String(describing: error)
             }
@@ -145,6 +161,11 @@ public struct CalendarSettingsView: View {
     }
 
     private func save() {
+        if !sharedCalendarConfirmed,
+           viewModel.writableCalendars.first(where: { $0.id == targetCalendarIdentifier })?.isShared == true {
+            isConfirmingSharedCalendar = true
+            return
+        }
         do {
             let updatedAt = Date()
             let preferences = try SchedulingPreferences(

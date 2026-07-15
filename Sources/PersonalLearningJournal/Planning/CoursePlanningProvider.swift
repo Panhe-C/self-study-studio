@@ -32,6 +32,7 @@ public struct CoursePlanningContext: Codable, Equatable, Sendable {
 public struct OpenAICompatibleCoursePlanningProvider: CoursePlanningProvider {
     private let client: OpenAICompatibleStructuredClient
     private let validator: CoursePlanValidator
+    private let model: String
 
     public init(
         settings: AIReviewSettings,
@@ -45,6 +46,7 @@ public struct OpenAICompatibleCoursePlanningProvider: CoursePlanningProvider {
             transport: transport
         )
         self.validator = validator
+        self.model = settings.model
     }
 
     public func makeDraft(
@@ -54,7 +56,7 @@ public struct OpenAICompatibleCoursePlanningProvider: CoursePlanningProvider {
         do {
             let response: CoursePlanningResponse = try await client.completeJSON(
                 system: Self.systemPrompt,
-                user: try Self.requestBody(input: input, context: context)
+                user: try Self.requestPreview(input: input, context: context, model: model).encodedText
             )
             var draft = response.draft
             let validation = validator.validate(draft, input: input)
@@ -80,6 +82,23 @@ public struct OpenAICompatibleCoursePlanningProvider: CoursePlanningProvider {
     ) throws -> String {
         let request = CoursePlanningRequest(input: input, context: context)
         return String(decoding: try JSONEncoder.journal.encode(request), as: UTF8.self)
+    }
+
+    public static func requestPreview(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext,
+        model: String
+    ) throws -> AIRequestPackage {
+        AIRequestPackage(
+            encodedText: try requestBody(input: input, context: context),
+            artifacts: [],
+            model: model,
+            sourceMetadata: [
+                "source": "course-planning",
+                "courseText": "exact-user-supplied",
+                "authorization": "one-request"
+            ]
+        )
     }
 }
 

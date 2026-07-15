@@ -53,6 +53,7 @@ public struct CalendarReconciliationItem: Equatable, Identifiable, Sendable {
 
 @MainActor
 public final class CalendarSyncService: Sendable {
+    public static let dedicatedCalendarTitle = "Self Study Studio"
     private let repository: any JournalRepository
     private let calendarClient: any CalendarClient
     private let now: () -> Date
@@ -65,6 +66,27 @@ public final class CalendarSyncService: Sendable {
         self.repository = repository
         self.calendarClient = calendarClient
         self.now = now
+    }
+
+    @discardableResult
+    public func configureDedicatedCalendar(
+        sharedCalendarConfirmed: Bool
+    ) async throws -> CalendarDescriptor {
+        let calendars = try await calendarClient.writableCalendars()
+        let existing = calendars.first(where: {
+            $0.title == Self.dedicatedCalendarTitle && $0.allowsContentModifications
+        })
+        let calendar: CalendarDescriptor
+        if let existing {
+            calendar = existing
+        } else {
+            calendar = try await calendarClient.createCalendar(named: Self.dedicatedCalendarTitle)
+        }
+        guard !calendar.isShared || sharedCalendarConfirmed else {
+            throw CalendarClientError.sharedCalendarConfirmationRequired
+        }
+        try repository.saveTargetCalendarIdentifier(calendar.id)
+        return calendar
     }
 
     public func previewChanges(for draft: ScheduleDraft) async throws -> CalendarChangeSet {
@@ -81,6 +103,7 @@ public final class CalendarSyncService: Sendable {
                 identifier: try repository.calendarBinding(for: placement.sessionID)?.eventIdentifier,
                 calendarIdentifier: targetCalendarIdentifier,
                 title: eventTitle(for: placement.sessionID, snapshot: snapshot),
+                details: eventDetails(for: placement.sessionID, snapshot: snapshot),
                 start: placement.start,
                 end: placement.end
             )
@@ -236,6 +259,7 @@ public final class CalendarSyncService: Sendable {
                     identifier: externalEvent.identifier,
                     calendarIdentifier: item.binding.calendarIdentifier,
                     title: item.binding.lastWrittenTitle,
+                    details: item.binding.lastWrittenDetails,
                     start: item.binding.lastWrittenStart,
                     end: item.binding.lastWrittenEnd
                 )
@@ -249,6 +273,7 @@ public final class CalendarSyncService: Sendable {
                 CalendarEventDraft(
                     calendarIdentifier: item.binding.calendarIdentifier,
                     title: item.binding.lastWrittenTitle,
+                    details: item.binding.lastWrittenDetails,
                     start: item.binding.lastWrittenStart,
                     end: item.binding.lastWrittenEnd
                 )
@@ -273,6 +298,10 @@ public final class CalendarSyncService: Sendable {
             return "Study"
         }
 
+        let projectName = snapshot.projects.first(where: { $0.id == session.projectId })?.name
+        if let projectName {
+            return "\(projectName) · \(session.title)"
+        }
         switch titleStyle {
         case .private:
             return "Study"
@@ -283,12 +312,28 @@ public final class CalendarSyncService: Sendable {
         }
     }
 
+    private func eventDetails(for plannedSessionID: UUID, snapshot: JournalSnapshot) -> String? {
+        guard let session = snapshot.plannedSessions.first(where: { $0.id == plannedSessionID }) else {
+            return nil
+        }
+        let project = snapshot.projects.first(where: { $0.id == session.projectId })
+        var lines: [String] = []
+        if let goal = project?.goal.trimmedForJournal, !goal.isEmpty {
+            lines.append("Goal: \(goal)")
+        }
+        if let expectedProof = session.expectedProof?.trimmedForJournal, !expectedProof.isEmpty {
+            lines.append("Expected Proof: \(expectedProof)")
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
     private func binding(for plannedSessionID: UUID, event: CalendarEventSnapshot) -> CalendarBinding {
         CalendarBinding(
             plannedSessionId: plannedSessionID,
             eventIdentifier: event.identifier,
             calendarIdentifier: event.calendarIdentifier,
             lastWrittenTitle: event.title,
+            lastWrittenDetails: event.details,
             lastWrittenStart: event.start,
             lastWrittenEnd: event.end,
             lastObservedAt: now(),
@@ -332,6 +377,7 @@ public final class CalendarSyncService: Sendable {
         event.identifier == binding.eventIdentifier
             && event.calendarIdentifier == binding.calendarIdentifier
             && event.title == binding.lastWrittenTitle
+            && event.details == binding.lastWrittenDetails
             && event.start == binding.lastWrittenStart
             && event.end == binding.lastWrittenEnd
     }
@@ -339,7 +385,7 @@ public final class CalendarSyncService: Sendable {
     private func isRetryable(_ error: Error) -> Bool {
         guard let calendarError = error as? CalendarClientError else { return true }
         switch calendarError {
-        case .accessDenied:
+        case .accessDenied, .sharedCalendarConfirmationRequired:
             return false
         case .calendarUnavailable, .eventUnavailable:
             return true
