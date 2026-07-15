@@ -16,6 +16,16 @@ This record audits the convergence design against implementation evidence. Autom
 | Signed physical device | Pending | Requires the Task 14 capability matrix below |
 | Second-space iCloud recovery | Pending | Requires a second Apple device or clean signed reinstall |
 
+## Physical-device readiness inspection — 2026-07-15
+
+- `xcrun xctrace list devices` reported only the development Mac plus Simulators; no physical iPhone or iPad was connected.
+- `xcrun devicectl list devices` returned `No devices found`.
+- Xcode uses automatic signing, but `DEVELOPMENT_TEAM` is empty and the current Bundle ID is the local placeholder `com.local.selfstudystudio`.
+- `SelfStudyStudio.entitlements` declares the CloudKit container and `aps-environment` through build-setting placeholders; those placeholders have not been backed by a provisioned App ID/container in this checkout.
+- A Debug `iphoneos` build stopped at signing with: `Signing for "SelfStudyStudio" requires a development team.`
+
+Therefore the signed install, device capability matrix, second-space recovery, and four-week start remain blocked. To resume: connect and trust an iPhone, select the intended Apple Developer Team, replace/confirm the App ID and private CloudKit container, enable Push Notifications, then rerun the matrix without changing the automated acceptance baseline.
+
 ## Requirement audit
 
 | Design requirement | Implementation | Automated or Simulator evidence |
