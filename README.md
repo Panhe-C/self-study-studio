@@ -1,6 +1,6 @@
 # Personal Learning Journal
 
-Personal Learning Journal is a SwiftUI-first app core for the v0.1 PRD in `personal-learning-journal-design.md`.
+Personal Learning Journal is a SwiftUI-first, evidence-first learning system. A Project becomes active only with a Goal, one canonical Next Step, and an Evidence Contract; progress is established through qualifying Proof and explicit Review Decisions.
 
 The current implementation focuses on the first product loop:
 
@@ -45,6 +45,11 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 - JSON export plus attachment directory export from Library
 - SwiftUI screens for onboarding, Today, Projects, Library, Quick Log, Timer, Review, Proof detail, and AI Review settings
 - Private personal iCloud sync with account-scoped journal stores, local-first attachments, a retryable outbox, conflict review, automatic upload after local edits, foreground refresh, and a visible iCloud status surface
+- Evidence-first Project activation, accepted Proof revisions, explicit Review Decisions, deterministic Today recommendations, and measurable Product Health
+- Password-protected AES.GCM archive export/import with SHA-256 integrity checks, stable-ID preview, recoverable Trash, 30-day retention candidates, and explicit purge impact
+- Account-space transfer previews with Copy, Move, and Keep Local choices; account switching never automatically merges or deletes another space
+- Optional device-owner App Lock with a foreground unlock gate and background privacy cover
+- English and Simplified Chinese resources for the core evidence loop
 
 ## Current Shape
 
@@ -82,6 +87,8 @@ xcodebuild -project SelfStudyStudio.xcodeproj -target SelfStudyStudio -sdk iphon
 ```
 
 Current verification status:
+
+- 2026-07-15: evidence-first convergence completed `swift test` with 260 tests and 0 failures; `swift build` and the unsigned iOS Simulator build succeeded. A clean iPhone 16 Pro Simulator install launched into onboarding. See `docs/product-health-validation.md` for the requirement audit and the separate physical-device gate.
 
 - 2026-07-10: `swift test` completed 49 tests with 0 failures.
 - 2026-07-10: `swift build` completed successfully.
