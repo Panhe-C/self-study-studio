@@ -1,0 +1,12 @@
+flowchart TD
+  A[首次打开 App] --> B[填写 1–3 个当前学习项目]
+  B --> C{每个项目是否完整}
+  C -->|否| D[提示补充名称·目标·Next Step]
+  D --> B
+  C -->|是| E[一次性创建全部项目]
+  E --> F[自动使用第一个项目]
+  F --> G[记录第一条 Quick Log Session]
+  G --> H{Session 保存成功}
+  H -->|否| G
+  H -->|是| I[Onboarding 完成]
+  I --> J[进入 Today Continue]

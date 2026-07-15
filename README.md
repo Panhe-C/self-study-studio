@@ -2,6 +2,16 @@
 
 Personal Learning Journal is a SwiftUI-first, evidence-first learning system. A Project becomes active only with a Goal, one canonical Next Step, and an Evidence Contract; progress is established through qualifying Proof and explicit Review Decisions.
 
+## Product Documentation
+
+- [产品功能手册](docs/PRODUCT_GUIDE.md)
+- [Canva 可导入演示稿](docs/product-guide/self-study-studio-product-deck.pptx)
+- [Canva 可导入 A4 手册](docs/product-guide/self-study-studio-product-guide-a4.pdf)
+- [产品功能说明图](diagrams/PRODUCT_FUNCTION_DIAGRAMS.md)
+- [产品功能手册设计](docs/superpowers/specs/2026-07-12-product-guide-design.md)
+
+When user-visible behavior changes, update the affected diagram source and regenerate its SVG and PNG exports.
+
 The current implementation focuses on the first product loop:
 
 ```text
@@ -89,7 +99,6 @@ xcodebuild -project SelfStudyStudio.xcodeproj -target SelfStudyStudio -sdk iphon
 Current verification status:
 
 - 2026-07-15: evidence-first convergence completed `swift test` with 260 tests and 0 failures; `swift build` and the unsigned iOS Simulator build succeeded. A clean iPhone 16 Pro Simulator install launched into onboarding. See `docs/product-health-validation.md` for the requirement audit and the separate physical-device gate.
-
 - 2026-07-10: `swift test` completed 49 tests with 0 failures.
 - 2026-07-10: `swift build` completed successfully.
 - 2026-07-10: `xcodebuild -project SelfStudyStudio.xcodeproj -scheme SelfStudyStudio -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build` completed successfully.

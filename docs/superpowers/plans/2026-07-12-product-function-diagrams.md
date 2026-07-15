@@ -25,6 +25,7 @@
 
 - Create `diagrams/product-learning-loop.mmd`: core Project-to-Review product loop.
 - Create `diagrams/product-information-architecture.mmd`: current screen and navigation map.
+- Create `diagrams/product-functional-modules.mmd`: current UI, application rules, local storage, and optional AI boundary.
 - Create `diagrams/product-demo-storyboard.mmd`: 5–10 minute demo sequence.
 - Create `diagrams/product-onboarding-flow.mmd`: first-use project and first Session gate.
 - Create `diagrams/product-session-flow.mmd`: Continue, Quick Log, Timer, Session, and Next Step flow.
@@ -43,11 +44,12 @@
 **Files:**
 - Create: `diagrams/product-learning-loop.mmd`
 - Create: `diagrams/product-information-architecture.mmd`
+- Create: `diagrams/product-functional-modules.mmd`
 - Create: `diagrams/product-demo-storyboard.mmd`
 
 **Interfaces:**
 - Consumes: Current navigation and the domain chain `Project -> Session -> Proof -> Review`.
-- Produces: Three overview sources used by the visual index and final product guide.
+- Produces: Four overview sources used by the visual index and final product guide.
 
 - [ ] **Step 1: Create the learning-loop source**
 
@@ -73,7 +75,7 @@ flowchart LR
 
 - [ ] **Step 2: Create the information-architecture source**
 
-Write `diagrams/product-information-architecture.mmd` with three primary tabs, conditional Review, and toolbar Settings:
+Write `diagrams/product-information-architecture.mmd` with three primary tabs and Settings reachable only from conditional Review areas:
 
 ```mermaid
 flowchart TD
@@ -93,12 +95,63 @@ flowchart TD
   DETAIL --> PROOF[Add Proof]
   DETAIL --> TRAIL[Learning Trail]
   DETAIL --> HISTORY[历史 Review]
+  DETAIL --> PROJECTREVIEW[按条件出现的 Review 区域]
   LIBRARY --> PROOFDETAIL[Proof Detail]
   LIBRARY --> EXPORT[Export]
-  ROOT -.工具栏.-> SETTINGS[AI Review Settings]
+  REVIEW -.配置入口.-> SETTINGS[AI Review Settings]
+  PROJECTREVIEW -.配置入口.-> SETTINGS
 ```
 
-- [ ] **Step 3: Create the demo-storyboard source**
+- [ ] **Step 3: Create the functional-module source**
+
+Write `diagrams/product-functional-modules.mmd` with three explicit layers:
+
+```mermaid
+flowchart TD
+  subgraph UI[用户功能]
+    O[Onboarding]
+    T[Today 与 Projects]
+    S[Quick Log 与 Timer]
+    P[Proof 与 Library]
+    R[Weekly Review]
+  end
+  subgraph CORE[应用协调与规则]
+    VM[界面状态协调]
+    J[项目·Session·Proof·Trail 规则]
+    STORE[Journal Store]
+    RV[复盘生成与显式应用]
+    A[附件管理]
+    E[完整 Bundle 导出]
+  end
+  subgraph DATA[本地数据与外部边界]
+    DB[(SwiftData 正常存储)]
+    JSON[(JSON Store 降级)]
+    FILES[(本地附件)]
+    PREFS[(偏好设置与 Keychain)]
+    EXPORTS[(Exports 目录)]
+    AI[可选 OpenAI-compatible 服务]
+  end
+  O --> VM
+  T --> VM
+  S --> VM
+  P --> VM
+  R --> VM
+  VM --> J
+  VM --> RV
+  VM --> A
+  VM -->|传入当前 Snapshot| E
+  J --> STORE
+  STORE --> DB
+  STORE -.初始化失败时.-> JSON
+  RV --> J
+  RV --> PREFS
+  RV -.配置完整时.-> AI
+  A --> FILES
+  E --> FILES
+  E --> EXPORTS
+```
+
+- [ ] **Step 4: Create the demo-storyboard source**
 
 Write `diagrams/product-demo-storyboard.mmd` as a seven-step horizontal story:
 
@@ -112,21 +165,21 @@ flowchart LR
   D6 --> D7[7 明确应用决定\n继续·降频·暂停]
 ```
 
-- [ ] **Step 4: Validate overview scope and terminology**
+- [ ] **Step 5: Validate overview scope and terminology**
 
 Run:
 
 ```bash
-rg -n "CloudKit|Calendar|Course Plan|成员|排行榜" diagrams/product-learning-loop.mmd diagrams/product-information-architecture.mmd diagrams/product-demo-storyboard.mmd
-rg -n "Project|Next Step|Session|Proof|Review" diagrams/product-learning-loop.mmd diagrams/product-information-architecture.mmd diagrams/product-demo-storyboard.mmd
+rg -n "CloudKit|Calendar|Course Plan|成员|排行榜" diagrams/product-learning-loop.mmd diagrams/product-information-architecture.mmd diagrams/product-functional-modules.mmd diagrams/product-demo-storyboard.mmd
+rg -n "Project|Next Step|Session|Proof|Review" diagrams/product-learning-loop.mmd diagrams/product-information-architecture.mmd diagrams/product-functional-modules.mmd diagrams/product-demo-storyboard.mmd
 ```
 
 Expected: the first command returns no matches; the second finds all five stable concepts across the overview set.
 
-- [ ] **Step 5: Commit the overview sources**
+- [ ] **Step 6: Commit the overview sources**
 
 ```bash
-git add diagrams/product-learning-loop.mmd diagrams/product-information-architecture.mmd diagrams/product-demo-storyboard.mmd
+git add diagrams/product-learning-loop.mmd diagrams/product-information-architecture.mmd diagrams/product-functional-modules.mmd diagrams/product-demo-storyboard.mmd
 git commit -m "docs: add product overview diagram sources"
 ```
 
@@ -149,10 +202,10 @@ git commit -m "docs: add product overview diagram sources"
 flowchart TD
   A[首次打开 App] --> B[填写 1–3 个当前学习项目]
   B --> C{每个项目是否完整}
-  C -->|否| D[提示补充名称·领域·目标·Next Step]
+  C -->|否| D[提示补充名称·目标·Next Step]
   D --> B
   C -->|是| E[一次性创建全部项目]
-  E --> F[选择第一个项目]
+  E --> F[自动使用第一个项目]
   F --> G[记录第一条 Quick Log Session]
   G --> H{Session 保存成功}
   H -->|否| G
@@ -243,17 +296,22 @@ git commit -m "docs: add onboarding session and proof flows"
 flowchart TD
   A[活跃项目 7 天无记录\n或近期证据足够] --> B[Today 显示 Review 提醒]
   B --> C[聚合本周期 Session 与 Proof]
-  C --> D[生成 Facts·Patterns·Decisions·Next Steps]
-  D --> E[显示来源引用]
-  E --> F[用户编辑复盘内容]
-  F --> G[保存 Review]
-  G --> H{是否应用项目建议}
-  H -->|应用状态| I[明确修改 active·low-frequency·paused]
-  H -->|应用 Next Step| J[明确更新唯一下一步]
-  H -->|暂不应用| K[只保留 Review 记录]
-  I --> L[写入 Project Trail]
-  J --> L
+  C --> D[生成并保存 Review\nFacts·Patterns·Decisions·Next Steps]
+  D --> E{是否包含具体项目建议}
+  E -->|是| F[写入关联 Project Trail]
+  E -->|否| G[只保存 Review]
+  F --> H[显示内容与来源引用]
+  G --> H
+  H --> I{是否编辑复盘内容}
+  I -->|是| J[编辑并再次保存]
+  I -->|否| K[保留生成内容]
+  J --> L{是否应用项目建议}
   K --> L
+  L -->|应用状态| M[明确修改 active·low-frequency·paused]
+  L -->|应用 Next Step| N[明确更新唯一下一步]
+  L -->|暂不应用| O[只保留 Review 记录]
+  M --> P[状态变化写入 Trail]
+  N --> Q[Next Step 变化写入 Trail]
 ```
 
 - [ ] **Step 2: Create the AI fallback flow**
@@ -276,17 +334,14 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A[进入 Library Export] --> B{选择导出方式}
-  B -->|仅结构化数据| C[生成带版本号的 journal.json]
-  B -->|仅学习附件| D[按 Project·Session·Proof 复制附件]
-  B -->|完整备份| E[创建 Export Bundle]
-  E --> C
-  E --> D
-  C --> F[写入本地 Exports 目录]
-  D --> F
-  F --> G{导出是否成功}
-  G -->|否| H[显示错误并保留原始数据]
-  G -->|是| I[通过系统分享或文件管理取用]
+  A[在 Library 点击 Export] --> B[创建带时间戳的完整 Export Bundle]
+  B --> C[生成带版本号的 journal.json]
+  B --> D[按 Project·Session·Proof 复制附件]
+  C --> E[写入 Documents／LearningJournal／Exports]
+  D --> E
+  E --> F{导出是否成功}
+  F -->|否| G[显示 Export Failed\n保留原始数据]
+  F -->|是| H[显示 Export Ready\n告知本地保存路径和附件数量]
 ```
 
 - [ ] **Step 4: Validate explicit user control and fallback coverage**
@@ -296,7 +351,7 @@ Run:
 ```bash
 rg -n "用户|明确|暂不应用" diagrams/product-review-flow.mmd
 rg -n "本地规则复盘|请求与 JSON 解析是否成功" diagrams/product-ai-fallback-flow.mmd
-rg -n "journal.json|附件|完整备份|错误" diagrams/product-export-flow.mmd
+rg -n "journal.json|附件|完整 Export Bundle|Export Failed|Export Ready" diagrams/product-export-flow.mmd
 ```
 
 Expected: every command finds all listed terms.
@@ -318,7 +373,7 @@ git commit -m "docs: add review fallback and export flows"
 - Create: `diagrams/product-*.png`
 
 **Interfaces:**
-- Consumes: all nine `diagrams/product-*.mmd` sources from Tasks 1–3.
+- Consumes: all ten `diagrams/product-*.mmd` sources.
 - Produces: reproducible SVG and PNG images suitable for Markdown and presentations.
 
 - [ ] **Step 1: Create the rendering script**
@@ -326,24 +381,56 @@ git commit -m "docs: add review fallback and export flows"
 Write a POSIX-compatible script that resolves repo root, accepts `PNPM_BIN`, and renders every `product-*.mmd`:
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PNPM_BIN="${PNPM_BIN:-pnpm}"
+MERMAID_CLI_PACKAGE="${MERMAID_CLI_PACKAGE:-@mermaid-js/mermaid-cli@11.16.0}"
 
+if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ] && \
+  [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+  export PUPPETEER_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+fi
+
+render_dir="$(mktemp -d "$ROOT/diagrams/.product-render.XXXXXX")"
+trap 'rm -rf "$render_dir"' EXIT HUP INT TERM
+
+render_format() {
+  format="$1"
+  for source in "$ROOT"/diagrams/product-*.mmd; do
+    base="${source%.mmd}"
+    name="$(basename "$base")"
+    "$PNPM_BIN" dlx "$MERMAID_CLI_PACKAGE" \
+      --input "$source" \
+      --output "$render_dir/${name}.${format}" \
+      --theme neutral \
+      --backgroundColor white \
+      --width 1800
+  done
+}
+
+render_format svg &
+svg_pid=$!
+render_format png &
+png_pid=$!
+if wait "$svg_pid"; then svg_status=0; else svg_status=$?; fi
+if wait "$png_pid"; then png_status=0; else png_status=$?; fi
+if [ "$svg_status" -ne 0 ] || [ "$png_status" -ne 0 ]; then exit 1; fi
+
+source_count=0
 for source in "$ROOT"/diagrams/product-*.mmd; do
-  base="${source%.mmd}"
-  "$PNPM_BIN" dlx @mermaid-js/mermaid-cli \
-    --input "$source" \
-    --output "${base}.svg" \
-    --backgroundColor transparent \
-    --width 1800
-  "$PNPM_BIN" dlx @mermaid-js/mermaid-cli \
-    --input "$source" \
-    --output "${base}.png" \
-    --backgroundColor transparent \
-    --width 1800
+  name="$(basename "${source%.mmd}")"
+  source_count=$((source_count + 1))
+  test -s "$render_dir/${name}.svg"
+  test -s "$render_dir/${name}.png"
+  file "$render_dir/${name}.svg" | grep -q "SVG"
+  file "$render_dir/${name}.png" | grep -q "PNG"
+done
+test "$source_count" -eq 10
+
+for output in "$render_dir"/product-*.svg "$render_dir"/product-*.png; do
+  mv -f "$output" "$ROOT/diagrams/$(basename "$output")"
 done
 ```
 
@@ -356,7 +443,7 @@ chmod +x scripts/render-product-diagrams.sh
 PNPM_BIN=/Users/bytedance/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback/pnpm scripts/render-product-diagrams.sh
 ```
 
-Expected: nine SVG files and nine PNG files are created without Mermaid parse errors.
+Expected: ten SVG files and ten PNG files are created without Mermaid parse errors.
 
 - [ ] **Step 3: Validate file count and image integrity**
 
@@ -369,7 +456,7 @@ find diagrams -maxdepth 1 -name 'product-*.png' | wc -l
 file diagrams/product-*.svg diagrams/product-*.png
 ```
 
-Expected: each count is `9`; `file` identifies every export as SVG or PNG image data.
+Expected: each count is `10`; `file` identifies every export as SVG or PNG image data.
 
 - [ ] **Step 4: Visually inspect every PNG**
 
@@ -379,7 +466,7 @@ Open each PNG with the local image viewer and verify:
 - no overlapping edges and labels;
 - Chinese glyphs render correctly;
 - the longest flow remains readable at full width;
-- transparent backgrounds preserve legibility;
+- opaque white backgrounds preserve connector and label contrast;
 - current and fallback paths are visually distinguishable by labels and shapes.
 
 If a diagram fails, edit only its `.mmd` source, rerun the rendering script, and inspect again.
@@ -409,13 +496,14 @@ Write `diagrams/PRODUCT_FUNCTION_DIAGRAMS.md` in this order:
 
 1. Product learning loop
 2. Current information architecture
-3. Standard Demo storyboard
-4. First-use onboarding
-5. Daily Session recording
-6. Proof creation
-7. Weekly Review
-8. AI fallback
-9. Export
+3. Functional module relationships
+4. Standard Demo storyboard
+5. First-use onboarding
+6. Daily Session recording
+7. Proof creation
+8. Weekly Review
+9. AI fallback
+10. Export
 
 For each section embed the SVG with relative Markdown such as:
 
@@ -450,7 +538,7 @@ rg -n "产品功能说明图|user-visible behavior" README.md
 git diff --check
 ```
 
-Expected: the index contains nine SVG links, README contains both required maintenance lines, and `git diff --check` prints no errors.
+Expected: the index contains ten SVG links, README contains both required maintenance lines, and `git diff --check` prints no errors.
 
 - [ ] **Step 4: Re-run the current test baseline without changing product code**
 
@@ -484,6 +572,6 @@ rg -n "CloudKit|iCloud|Calendar|Course Plan" diagrams/product-*.mmd diagrams/PRO
 Expected:
 
 - Only the user's pre-existing `.gitignore` and untracked legacy diagram files remain outside this plan's commits.
-- Nine `.mmd`, nine `.svg`, and nine `.png` product diagram files exist.
+- Ten `.mmd`, ten `.svg`, and ten `.png` product diagram files exist.
 - Designed-only features appear only in the visual index scope note, not inside current product flows.
 - Every PNG has passed visual inspection.

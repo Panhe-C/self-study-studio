@@ -1,0 +1,11 @@
+flowchart TD
+  A[开始 Weekly Review] --> B{AI Endpoint·Model·API Key 是否齐全}
+  B -->|否| C[使用本地规则复盘]
+  B -->|是| D[请求 OpenAI-compatible Chat Completions]
+  D --> E{请求与 JSON 解析是否成功}
+  E -->|否| C
+  E -->|是| F[使用 AI Review 草稿]
+  C --> G[生成可编辑 Review]
+  F --> G
+  G --> H[用户检查来源与结论]
+  H --> I[保存或显式应用建议]

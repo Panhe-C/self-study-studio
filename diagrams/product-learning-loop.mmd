@@ -1,0 +1,15 @@
+flowchart LR
+  P[选择学习项目] --> N[明确唯一 Next Step]
+  N --> C{选择记录方式}
+  C -->|30 秒补记| Q[Quick Log]
+  C -->|专注学习| T[Timer]
+  Q --> S[生成 Session]
+  T --> S
+  S --> E{是否留下学习证据}
+  E -->|是| F[添加 Proof<br/>图片·录音·文件·链接]
+  E -->|暂不| L[写入 Learning Trail]
+  F --> L
+  L --> R[Weekly Review<br/>Facts·Patterns·Decisions]
+  R --> A{用户明确确认}
+  A -->|应用建议| N
+  A -->|降频或暂停| P

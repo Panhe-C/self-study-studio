@@ -1,0 +1,19 @@
+flowchart TD
+  A[从 Session·Project·Library 添加 Proof] --> B{选择类型}
+  B --> C[图片<br/>相机或照片库]
+  B --> D[录音<br/>本地音频]
+  B --> E[文件<br/>系统文件选择器]
+  B --> F[链接<br/>外部 URL]
+  C --> G[准备附件]
+  D --> G
+  E --> G
+  F --> H[填写链接]
+  G --> I[填写标题]
+  H --> I
+  I --> J[填写“这证明了什么”]
+  J --> K{证明说明是否有效}
+  K -->|否| L[提示补充具体学习证据]
+  L --> J
+  K -->|是| M[保存附件与 Proof]
+  M --> N[写入 Learning Trail]
+  N --> O[可在 Library 与 Proof Detail 查看]

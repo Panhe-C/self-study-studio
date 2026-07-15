@@ -1,0 +1,19 @@
+flowchart TD
+  A[活跃项目 7 天无记录<br/>或近期证据足够] --> B[Today 显示 Review 提醒]
+  B --> C[聚合本周期 Session 与 Proof]
+  C --> D[生成并保存 Review<br/>Facts·Patterns·Decisions·Next Steps]
+  D --> E{是否包含具体项目建议}
+  E -->|是| F[写入关联 Project Trail]
+  E -->|否| G[只保存 Review]
+  F --> H[显示内容与来源引用]
+  G --> H
+  H --> I{是否编辑复盘内容}
+  I -->|是| J[编辑并再次保存]
+  I -->|否| K[保留生成内容]
+  J --> L{是否应用项目建议}
+  K --> L
+  L -->|应用状态| M[明确修改 active·low-frequency·paused]
+  L -->|应用 Next Step| N[明确更新唯一下一步]
+  L -->|暂不应用| O[只保留 Review 记录]
+  M --> P[状态变化写入 Trail]
+  N --> Q[Next Step 变化写入 Trail]
