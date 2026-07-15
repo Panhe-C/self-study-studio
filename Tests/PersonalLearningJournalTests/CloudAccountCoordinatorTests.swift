@@ -4,6 +4,39 @@ import XCTest
 
 @MainActor
 final class CloudAccountCoordinatorTests: XCTestCase {
+    func testAccountTransitionNeverMergesBeforeExplicitChoice() async throws {
+        let project = Project(name: "Local", area: "Study", goal: "Keep isolated", currentNextStep: "Choose")
+        let local = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let account = InMemoryJournalRepository()
+        let coordinator = CloudAccountCoordinator(
+            rootDirectory: temporaryDirectory(),
+            repositoryFactory: { $0.path.contains("/local/") ? local : account }
+        )
+
+        let transition = try await coordinator.transition(from: .local, to: .account("A"))
+
+        XCTAssertTrue(transition.requiresTransferChoice)
+        XCTAssertEqual(transition.preview?.sourceRecordCount, 1)
+        XCTAssertTrue(try account.snapshot().projects.isEmpty)
+        XCTAssertTrue(try account.pendingMutations(limit: 10).isEmpty)
+    }
+
+    func testCopyChoicePreservesSourceAndCopiesIntoAccountSpace() async throws {
+        let project = Project(name: "Local", area: "Study", goal: "Copy", currentNextStep: "Choose")
+        let local = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let account = InMemoryJournalRepository()
+        let coordinator = CloudAccountCoordinator(
+            rootDirectory: temporaryDirectory(),
+            repositoryFactory: { $0.path.contains("/local/") ? local : account }
+        )
+        _ = try await coordinator.transition(from: .local, to: .account("A"))
+
+        try coordinator.completeTransfer(choice: .copy)
+
+        XCTAssertEqual(try local.snapshot().projects.map(\.id), [project.id])
+        XCTAssertEqual(try account.snapshot().projects.map(\.id), [project.id])
+    }
+
     func testSystemProviderDoesNotLoadCloudKitWithoutEntitlement() async throws {
         let provider = SystemCloudAccountProvider(
             hasCloudKitEntitlement: { false },

@@ -71,6 +71,31 @@ public struct CloudAccountState: Equatable, Sendable {
     }
 }
 
+public enum AccountSpace: Equatable, Sendable {
+    case local
+    case account(String)
+}
+
+public enum AccountSpaceTransferChoice: Sendable {
+    case move
+    case copy
+    case keepLocal
+}
+
+public struct AccountSpaceTransferPreview: Equatable, Sendable {
+    public var sourceRecordCount: Int
+    public var sourceAttachmentCount: Int
+    public var duplicateIDs: Set<UUID>
+    public var archiveURL: URL
+}
+
+public struct AccountSpaceTransition: Equatable, Sendable {
+    public var source: AccountSpace
+    public var destination: AccountSpace
+    public var preview: AccountSpaceTransferPreview?
+    public var requiresTransferChoice: Bool { preview != nil }
+}
+
 @MainActor
 public final class CloudAccountCoordinator {
     public typealias RepositoryFactoryClosure = (URL) throws -> any JournalRepository
@@ -81,6 +106,11 @@ public final class CloudAccountCoordinator {
     private let rootDirectory: URL
     private let repositoryFactory: RepositoryFactoryClosure
     private var localRepository: (any JournalRepository)?
+    private var pendingTransfer: (
+        source: any JournalRepository,
+        destination: any JournalRepository,
+        snapshot: JournalSnapshot
+    )?
 
     public init(
         rootDirectory: URL,
@@ -107,9 +137,7 @@ public final class CloudAccountCoordinator {
                     setLocalOnly(message: "iCloud account identity is unavailable")
                     return
                 }
-                let accountHash = Self.hash(recordName)
-                try activate(scope: accountHash)
-                state = CloudAccountState(mode: .cloud(accountHash: accountHash), lastCheckedAt: Date())
+                _ = try await transition(from: .local, to: .account(recordName))
             case .noAccount:
                 setLocalOnly(message: nil)
             case .restricted:
@@ -132,7 +160,72 @@ public final class CloudAccountCoordinator {
         entities(from: try localRepository?.snapshot() ?? JournalSnapshot()).count
     }
 
+    public func transition(
+        from sourceSpace: AccountSpace,
+        to destinationSpace: AccountSpace
+    ) async throws -> AccountSpaceTransition {
+        let source = try repository(for: sourceSpace)
+        let sourceSnapshot = try source.snapshot()
+        let destination = try repository(for: destinationSpace)
+        activeRepository = destination
+        switch destinationSpace {
+        case .local:
+            state = CloudAccountState(mode: .localOnly, lastCheckedAt: Date())
+        case let .account(recordName):
+            state = CloudAccountState(mode: .cloud(accountHash: Self.hash(recordName)), lastCheckedAt: Date())
+        }
+
+        let sourceEntities = entities(from: sourceSnapshot)
+        guard !sourceEntities.isEmpty else {
+            pendingTransfer = nil
+            return AccountSpaceTransition(source: sourceSpace, destination: destinationSpace, preview: nil)
+        }
+        let destinationReferences = Set(entities(from: try destination.snapshot()).map(\.reference))
+        let duplicateIDs = Set(sourceEntities.compactMap { entity in
+            destinationReferences.contains(entity.reference) ? entity.reference.id : nil
+        })
+        let archiveURL = try writeTransferArchive(snapshot: sourceSnapshot)
+        pendingTransfer = (source, destination, sourceSnapshot)
+        return AccountSpaceTransition(
+            source: sourceSpace,
+            destination: destinationSpace,
+            preview: AccountSpaceTransferPreview(
+                sourceRecordCount: sourceEntities.count,
+                sourceAttachmentCount: sourceSnapshot.proofs.count { $0.localPath != nil },
+                duplicateIDs: duplicateIDs,
+                archiveURL: archiveURL
+            )
+        )
+    }
+
+    public func completeTransfer(choice: AccountSpaceTransferChoice) throws {
+        guard let pendingTransfer else { return }
+        defer { self.pendingTransfer = nil }
+        switch choice {
+        case .keepLocal:
+            return
+        case .copy, .move:
+            let sourceEntities = entities(from: pendingTransfer.snapshot)
+            try pendingTransfer.destination.commit(
+                JournalTransaction(
+                    upserts: sourceEntities,
+                    origin: .user,
+                    stateMetadata: JournalStateMetadata(snapshot: pendingTransfer.snapshot)
+                )
+            )
+            if case .move = choice {
+                try pendingTransfer.source.commit(
+                    JournalTransaction(deletions: sourceEntities.map(\.reference), origin: .user)
+                )
+            }
+        }
+    }
+
     public func confirmExistingLocalDataUpload() throws {
+        if pendingTransfer != nil {
+            try completeTransfer(choice: .copy)
+            return
+        }
         guard let activeRepository else { return }
         let snapshot = try localRepository?.snapshot() ?? JournalSnapshot()
         try activeRepository.commit(JournalTransaction(
@@ -160,11 +253,43 @@ public final class CloudAccountCoordinator {
         activeRepository = try repositoryFactory(Self.storeURL(rootDirectory: rootDirectory, scope: scope))
     }
 
+    private func repository(for space: AccountSpace) throws -> any JournalRepository {
+        switch space {
+        case .local:
+            if let localRepository { return localRepository }
+            let repository = try repositoryFactory(Self.storeURL(rootDirectory: rootDirectory, scope: "local"))
+            localRepository = repository
+            return repository
+        case let .account(recordName):
+            return try repositoryFactory(Self.storeURL(rootDirectory: rootDirectory, scope: Self.hash(recordName)))
+        }
+    }
+
+    private func writeTransferArchive(snapshot: JournalSnapshot) throws -> URL {
+        let directory = rootDirectory.appendingPathComponent("TransferArchives", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("account-transfer-\(UUID().uuidString).journalarchive")
+        let envelope = try JournalArchiveService().export(
+            snapshot: snapshot,
+            attachments: [:],
+            password: nil,
+            allowUnencrypted: true
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        try encoder.encode(envelope).write(to: url, options: [.atomic])
+        return url
+    }
+
     private func entities(from snapshot: JournalSnapshot) -> [JournalEntity] {
         snapshot.projects.map(JournalEntity.project)
             + snapshot.sessions.map(JournalEntity.session)
             + snapshot.proofs.map(JournalEntity.proof)
             + snapshot.reviews.map(JournalEntity.review)
+            + snapshot.evidenceContracts.map(JournalEntity.evidenceContract)
+            + snapshot.evidenceAcceptances.map(JournalEntity.evidenceAcceptance)
+            + snapshot.proofRevisions.map(JournalEntity.proofRevision)
+            + snapshot.reviewDecisions.map(JournalEntity.reviewDecision)
             + snapshot.trailEvents.map(JournalEntity.trailEvent)
             + snapshot.coursePlans.map(JournalEntity.coursePlan)
             + snapshot.planPhases.map(JournalEntity.planPhase)

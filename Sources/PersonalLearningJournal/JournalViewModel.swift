@@ -116,6 +116,14 @@ public final class JournalViewModel: ObservableObject {
         scheduleAutomaticSyncIfNeeded()
     }
 
+    public func completeAccountSpaceTransfer(choice: AccountSpaceTransferChoice) throws {
+        try accountCoordinator?.completeTransfer(choice: choice)
+        refreshSyncRepositoryDetails()
+        bootstrapEntityCount = 0
+        refresh()
+        scheduleAutomaticSyncIfNeeded()
+    }
+
     public func resolveSyncConflict(id: UUID, using payload: Data) throws {
         guard let syncRepository else { return }
         guard let conflict = syncConflicts.first(where: { $0.id == id }) else { return }
