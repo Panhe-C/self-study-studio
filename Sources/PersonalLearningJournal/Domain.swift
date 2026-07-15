@@ -216,8 +216,7 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
     }
 
     public var canContinue: Bool {
-        status == .active
-            && commitmentState == .ready
+        countsTowardAttentionBudget
             && !currentNextStep.trimmedForJournal.isEmpty
     }
 }

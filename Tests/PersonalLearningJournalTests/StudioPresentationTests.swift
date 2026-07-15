@@ -62,7 +62,8 @@ final class StudioPresentationTests: XCTestCase {
             name: "Fallback",
             area: "Music",
             goal: "Practice",
-            currentNextStep: "Play"
+            currentNextStep: "Play",
+            activeEvidenceContractId: UUID()
         )
         let plannedSession = try PlannedSession(
             planId: UUID(),

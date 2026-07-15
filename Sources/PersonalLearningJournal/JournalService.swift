@@ -1,5 +1,10 @@
 import Foundation
 
+public enum EvidenceContractState: Equatable, Sendable {
+    case onTrack(unresolvedPeriods: Int)
+    case decisionRequired(unresolvedPeriods: Int)
+}
+
 public final class JournalService {
     private let repository: any JournalRepository
     private let now: () -> Date
@@ -48,6 +53,124 @@ public final class JournalService {
 
     public func proofs(sessionId: UUID) -> [Proof] {
         state.proofs.filter { $0.sessionId == sessionId }
+    }
+
+    @discardableResult
+    public func createIdea(name: String, area: String) throws -> Project {
+        let createdAt = now()
+        guard !name.trimmedForJournal.isEmpty else { throw JournalValidationError.emptyName }
+        let project = Project(
+            name: name.trimmedForJournal,
+            area: area.trimmedForJournal,
+            goal: "",
+            status: .idea,
+            currentNextStep: "",
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        try persist(upserts: [.project(project)])
+        state.projects.append(project)
+        return project
+    }
+
+    @discardableResult
+    public func activateProject(
+        projectId: UUID,
+        goal: String,
+        nextStep: String,
+        contract: EvidenceContract?,
+        allowAttentionBudgetOverride: Bool = false
+    ) throws -> Project {
+        guard let index = state.projects.firstIndex(where: { $0.id == projectId }) else {
+            throw JournalValidationError.missingProject
+        }
+        guard !goal.trimmedForJournal.isEmpty else { throw JournalValidationError.emptyGoal }
+        guard !nextStep.trimmedForJournal.isEmpty else { throw JournalValidationError.emptyNextStep }
+        guard let contract, contract.projectId == projectId, contract.isActive else {
+            throw JournalValidationError.missingEvidenceContract
+        }
+        let activeCount = state.projects.filter { $0.id != projectId && $0.countsTowardAttentionBudget }.count
+        guard allowAttentionBudgetOverride || activeCount < 3 else {
+            throw JournalValidationError.attentionBudgetExceeded
+        }
+
+        var project = state.projects[index]
+        let changedAt = now()
+        project.goal = goal.trimmedForJournal
+        project.currentNextStep = nextStep.trimmedForJournal
+        project.status = .active
+        project.commitmentState = .ready
+        project.activeEvidenceContractId = contract.id
+        project.updatedAt = changedAt
+        project.archivedAt = nil
+        try persist(upserts: [.project(project), .evidenceContract(contract)])
+        state.projects[index] = project
+        state.evidenceContracts.removeAll { $0.id == contract.id }
+        state.evidenceContracts.append(contract)
+        return project
+    }
+
+    @discardableResult
+    public func reviseContract(
+        projectId: UUID,
+        contract newContract: EvidenceContract
+    ) throws -> EvidenceContract {
+        guard let projectIndex = state.projects.firstIndex(where: { $0.id == projectId }) else {
+            throw JournalValidationError.missingProject
+        }
+        guard newContract.projectId == projectId, newContract.isActive else {
+            throw JournalValidationError.missingEvidenceContract
+        }
+        let changedAt = now()
+        var upserts: [JournalEntity] = []
+        var endedContract: EvidenceContract?
+        if let currentIndex = state.evidenceContracts.firstIndex(where: {
+            $0.id == state.projects[projectIndex].activeEvidenceContractId && $0.isActive
+        }) {
+            var current = state.evidenceContracts[currentIndex]
+            current.endedAt = changedAt
+            current.updatedAt = changedAt
+            endedContract = current
+            upserts.append(.evidenceContract(current))
+        }
+        var project = state.projects[projectIndex]
+        project.activeEvidenceContractId = newContract.id
+        project.commitmentState = .ready
+        project.updatedAt = changedAt
+        upserts += [.project(project), .evidenceContract(newContract)]
+        try persist(upserts: upserts)
+        state.projects[projectIndex] = project
+        if let endedContract,
+           let currentIndex = state.evidenceContracts.firstIndex(where: { $0.id == endedContract.id }) {
+            state.evidenceContracts[currentIndex] = endedContract
+        }
+        state.evidenceContracts.removeAll { $0.id == newContract.id }
+        state.evidenceContracts.append(newContract)
+        return newContract
+    }
+
+    public func contractState(
+        projectId: UUID,
+        referenceDate: Date = Date()
+    ) -> EvidenceContractState {
+        guard let project = state.projects.first(where: { $0.id == projectId }),
+              let contractID = project.activeEvidenceContractId
+                ?? state.evidenceContracts.first(where: { $0.projectId == projectId && $0.isActive })?.id,
+              let contract = state.evidenceContracts.first(where: { $0.id == contractID }) else {
+            return .decisionRequired(unresolvedPeriods: 0)
+        }
+        let expectedPeriods: Int
+        switch contract.trigger {
+        case let .interval(days):
+            expectedPeriods = max(0, Int(referenceDate.timeIntervalSince(contract.startsAt) / TimeInterval(days * 86_400)))
+        case .milestone:
+            expectedPeriods = 0
+        }
+        let accepted = state.evidenceAcceptances.filter { $0.contractId == contract.id && $0.deletedAt == nil }.count
+        let unresolved = max(0, expectedPeriods - accepted)
+        return unresolved >= 2
+            ? .decisionRequired(unresolvedPeriods: unresolved)
+            : .onTrack(unresolvedPeriods: unresolved)
     }
 
     @discardableResult
@@ -400,7 +523,8 @@ public final class JournalService {
         localPath: String? = nil,
         url: URL? = nil,
         mimeType: String? = nil,
-        fileSize: Int? = nil
+        fileSize: Int? = nil,
+        artifactBody: String? = nil
     ) throws -> Proof {
         guard state.projects.contains(where: { $0.id == projectId }) else {
             throw JournalValidationError.missingProject
@@ -408,20 +532,32 @@ public final class JournalService {
 
         let createdAt = now()
         let trailStartIndex = state.trailEvents.count
-        let proof = try Proof(
-            id: id,
-            projectId: projectId,
-            sessionId: sessionId,
-            type: type,
-            title: title,
-            statement: statement,
-            localPath: localPath,
-            url: url,
-            mimeType: mimeType,
-            fileSize: fileSize,
-            createdAt: createdAt,
-            updatedAt: createdAt
-        )
+        let proof = if type == .text, let artifactBody {
+            try Proof.text(
+                id: id,
+                projectId: projectId,
+                sessionId: sessionId,
+                title: title,
+                artifactBody: artifactBody,
+                statement: statement,
+                createdAt: createdAt
+            )
+        } else {
+            try Proof(
+                id: id,
+                projectId: projectId,
+                sessionId: sessionId,
+                type: type,
+                title: title,
+                statement: statement,
+                localPath: localPath,
+                url: url,
+                mimeType: mimeType,
+                fileSize: fileSize,
+                createdAt: createdAt,
+                updatedAt: createdAt
+            )
+        }
         state.proofs.append(proof)
         appendTrailEvent(
             type: .proof,
@@ -436,6 +572,135 @@ public final class JournalService {
                 + state.trailEvents[trailStartIndex...].map(JournalEntity.trailEvent)
         )
         return proof
+    }
+
+    @discardableResult
+    public func acceptProof(
+        proofId: UUID,
+        contractId: UUID,
+        acceptedCriteria: [String]
+    ) throws -> EvidenceAcceptance {
+        guard let proof = state.proofs.first(where: { $0.id == proofId }), proof.qualifies else {
+            throw JournalValidationError.missingProofArtifact
+        }
+        guard let contract = state.evidenceContracts.first(where: {
+            $0.id == contractId && $0.projectId == proof.projectId && $0.isActive
+        }) else {
+            throw JournalValidationError.missingEvidenceContract
+        }
+        let criteria = acceptedCriteria.map(\.trimmedForJournal).filter { !$0.isEmpty }
+        guard !criteria.isEmpty else { throw JournalValidationError.missingAcceptanceCriteria }
+        let acceptedAt = now()
+        let acceptance = EvidenceAcceptance(
+            contractId: contract.id,
+            proofId: proof.id,
+            acceptedCriteria: criteria,
+            acceptedAt: acceptedAt
+        )
+        let artifactData = try JSONEncoder.journal.encode(proof.artifact)
+        let revision = ProofRevision(
+            proof: proof,
+            revision: proof.revision,
+            artifactChecksum: artifactData.base64EncodedString(),
+            createdAt: acceptedAt
+        )
+        try persist(upserts: [.evidenceAcceptance(acceptance), .proofRevision(revision)])
+        state.evidenceAcceptances.append(acceptance)
+        state.proofRevisions.append(revision)
+        return acceptance
+    }
+
+    @discardableResult
+    public func completeReview(
+        reviewId: UUID,
+        decision: ReviewDecision?
+    ) throws -> ReviewDecision {
+        guard let reviewIndex = state.reviews.firstIndex(where: { $0.id == reviewId }) else {
+            throw JournalValidationError.missingReview
+        }
+        guard let decision, decision.reviewId == reviewId, decision.isValid else {
+            throw JournalValidationError.missingReviewDecision
+        }
+        guard let projectIndex = state.projects.firstIndex(where: { $0.id == decision.projectId }) else {
+            throw JournalValidationError.missingProject
+        }
+        var project = state.projects[projectIndex]
+        var review = state.reviews[reviewIndex]
+        let changedAt = now()
+        switch decision.kind {
+        case .continueUnchanged:
+            break
+        case .changeNextStep:
+            project.currentNextStep = decision.nextStep ?? project.currentNextStep
+        case .reviseContract, .changeFrequency:
+            guard let contractID = decision.contractId,
+                  state.evidenceContracts.contains(where: { $0.id == contractID && $0.projectId == project.id }) else {
+                throw JournalValidationError.missingEvidenceContract
+            }
+            project.activeEvidenceContractId = contractID
+        case .pause:
+            project.status = .paused
+        case .archive:
+            project.status = .archived
+            project.archivedAt = changedAt
+        case .complete:
+            guard let proofID = decision.capstoneProofId,
+                  let proof = state.proofs.first(where: {
+                      $0.id == proofID && $0.projectId == project.id && $0.qualifies
+                  }) else {
+                throw JournalValidationError.missingCapstoneProof
+            }
+            project.status = .completed
+            project.completedAt = changedAt
+            review.referencedProofRevisionIds += state.proofRevisions
+                .filter { $0.proofId == proof.id }
+                .map(\.id)
+        }
+        project.updatedAt = changedAt
+        review.confirmedDecisionIds.append(decision.id)
+        review.updatedAt = changedAt
+        try persist(upserts: [.project(project), .review(review), .reviewDecision(decision)])
+        state.projects[projectIndex] = project
+        state.reviews[reviewIndex] = review
+        state.reviewDecisions.append(decision)
+        return decision
+    }
+
+    @discardableResult
+    public func completeProject(projectId: UUID, decision: ReviewDecision) throws -> Project {
+        guard decision.projectId == projectId, decision.kind == .complete else {
+            throw JournalValidationError.missingReviewDecision
+        }
+        _ = try completeReview(reviewId: decision.reviewId, decision: decision)
+        guard let project = project(id: projectId) else {
+            throw JournalValidationError.missingProject
+        }
+        return project
+    }
+
+    public func moveToTrash(projectId: UUID) throws {
+        guard let index = state.projects.firstIndex(where: { $0.id == projectId }) else {
+            throw JournalValidationError.missingProject
+        }
+        var project = state.projects[index]
+        project.previousStatusBeforeTrash = project.status
+        project.status = .trash
+        project.updatedAt = now()
+        try persist(upserts: [.project(project)])
+        state.projects[index] = project
+    }
+
+    public func restoreFromTrash(projectId: UUID) throws {
+        guard let index = state.projects.firstIndex(where: { $0.id == projectId }),
+              state.projects[index].status == .trash else {
+            throw JournalValidationError.missingProject
+        }
+        var project = state.projects[index]
+        project.status = project.previousStatusBeforeTrash ?? .idea
+        project.previousStatusBeforeTrash = nil
+        project.updatedAt = now()
+        try persist(upserts: [.project(project)])
+        state.projects[index] = project
     }
 
     public func updateProjectStatus(projectId: UUID, status: ProjectStatus) throws {

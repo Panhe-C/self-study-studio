@@ -131,7 +131,7 @@ public final class JournalViewModel: ObservableObject {
     }
 
     public var shouldShowMainTabs: Bool {
-        hasCompletedOnboarding || !projects.isEmpty
+        projects.contains { $0.status != .trash && $0.deletedAt == nil }
     }
 
     public var pendingFirstRecordProject: Project? {
@@ -217,6 +217,78 @@ public final class JournalViewModel: ObservableObject {
         )
         refresh()
         return project
+    }
+
+    @discardableResult
+    public func createIdea(name: String, area: String) throws -> Project {
+        let project = try journalService.createIdea(name: name, area: area)
+        refresh()
+        return project
+    }
+
+    @discardableResult
+    public func activateProject(
+        projectId: UUID,
+        goal: String,
+        nextStep: String,
+        contract: EvidenceContract,
+        allowAttentionBudgetOverride: Bool = false
+    ) throws -> Project {
+        let project = try journalService.activateProject(
+            projectId: projectId,
+            goal: goal,
+            nextStep: nextStep,
+            contract: contract,
+            allowAttentionBudgetOverride: allowAttentionBudgetOverride
+        )
+        refresh()
+        return project
+    }
+
+    @discardableResult
+    public func reviseContract(projectId: UUID, contract: EvidenceContract) throws -> EvidenceContract {
+        let value = try journalService.reviseContract(projectId: projectId, contract: contract)
+        refresh()
+        return value
+    }
+
+    @discardableResult
+    public func acceptProof(
+        proofId: UUID,
+        contractId: UUID,
+        acceptedCriteria: [String]
+    ) throws -> EvidenceAcceptance {
+        let value = try journalService.acceptProof(
+            proofId: proofId,
+            contractId: contractId,
+            acceptedCriteria: acceptedCriteria
+        )
+        refresh()
+        return value
+    }
+
+    @discardableResult
+    public func completeReview(reviewId: UUID, decision: ReviewDecision) throws -> ReviewDecision {
+        let value = try journalService.completeReview(reviewId: reviewId, decision: decision)
+        refresh()
+        return value
+    }
+
+    @discardableResult
+    public func completeProject(projectId: UUID, decision: ReviewDecision) throws -> Project {
+        let value = try journalService.completeProject(projectId: projectId, decision: decision)
+        refresh()
+        return value
+    }
+
+    public func moveToTrash(projectId: UUID) throws {
+        try journalService.moveToTrash(projectId: projectId)
+        refresh()
+    }
+
+    public func restoreFromTrash(projectId: UUID) throws {
+        try journalService.restoreFromTrash(projectId: projectId)
+        refresh()
     }
 
     @discardableResult

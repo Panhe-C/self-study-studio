@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class ReviewServiceTests: XCTestCase {
-    func testRuleBasedReviewAttachesSourcesToGeneratedDecision() async throws {
+    func testRuleBasedReviewIsSourcedButDecisionFree() async throws {
         let service = JournalService(store: InMemoryJournalStore())
         let project = try service.createProject(
             name: "CS336",
@@ -20,9 +20,10 @@ final class ReviewServiceTests: XCTestCase {
             journalService: service,
             provider: RuleBasedReviewProvider()
         ).createWeeklyReview(periodStart: .distantPast, periodEnd: .distantFuture)
-        let decision = try XCTUnwrap(review.decisions.first)
+        let pattern = try XCTUnwrap(review.patterns.first)
 
-        XCTAssertFalse(review.sourceReferences[decision, default: []].isEmpty)
+        XCTAssertTrue(review.decisions.isEmpty)
+        XCTAssertFalse(review.sourceReferences[pattern, default: []].isEmpty)
     }
 
     func testApplyingReviewRecommendationChangesStatusOnlyAfterExplicitAction() async throws {
@@ -95,9 +96,8 @@ final class ReviewServiceTests: XCTestCase {
 
         XCTAssertTrue(review.facts.joined(separator: " ").contains("CS336"))
         XCTAssertTrue(review.patterns.joined(separator: " ").contains("Proof"))
-        XCTAssertTrue(review.decisions.joined(separator: " ").contains("not watch new lecture"))
+        XCTAssertTrue(review.decisions.isEmpty)
         XCTAssertEqual(review.nextSteps[project.id], "Create one output Proof before new input")
-        XCTAssertLessThanOrEqual(review.decisions.count, 3)
         XCTAssertTrue(review.aiSourceSummary.contains { $0.contains("session") })
     }
 
@@ -123,7 +123,7 @@ final class ReviewServiceTests: XCTestCase {
         XCTAssertEqual(draft.projectRecommendations[project.id], .lowFrequency)
         XCTAssertEqual(draft.nextSteps[project.id], "Choose one small Proof or lower this project for the week")
         XCTAssertTrue(draft.facts.joined(separator: " ").contains("no sessions or Proofs"))
-        XCTAssertTrue(draft.decisions.joined(separator: " ").contains("lower to low-frequency"))
+        XCTAssertTrue(draft.decisions.isEmpty)
     }
 
     func testHTTPAIReviewProviderDecodesDraftResponse() throws {
@@ -149,7 +149,7 @@ final class ReviewServiceTests: XCTestCase {
 
         XCTAssertEqual(draft.facts, ["CS336: 3 sessions, 1 Proof."])
         XCTAssertEqual(draft.patterns, ["Input is now paired with output."])
-        XCTAssertEqual(draft.decisions, ["Continue CS336 with one notebook."])
+        XCTAssertTrue(draft.decisions.isEmpty)
         XCTAssertEqual(draft.projectRecommendations[projectId], .active)
         XCTAssertEqual(draft.nextSteps[projectId], "Write the loss note")
         XCTAssertEqual(draft.sourceSummary.count, 2)
@@ -187,10 +187,7 @@ final class ReviewServiceTests: XCTestCase {
 
         XCTAssertEqual(draft.facts, ["CS336: 1 session."])
         XCTAssertEqual(draft.nextSteps[projectId], "Write the loss note")
-        XCTAssertEqual(
-            draft.sourceReferences["Create one notebook."],
-            ["session abc: Lecture 1"]
-        )
+        XCTAssertNil(draft.sourceReferences["Create one notebook."])
     }
 
     func testLinkedPracticeAppearsInProjectHistoryAndRuleBasedReviewSources() async throws {
@@ -360,7 +357,7 @@ final class ReviewServiceTests: XCTestCase {
             periodEnd: .distantFuture
         )
 
-        XCTAssertFalse(draft.decisions.isEmpty)
+        XCTAssertTrue(draft.decisions.isEmpty)
     }
 
     func testReviewServiceFallsBackToManualReviewWhenProviderFails() async throws {
@@ -383,7 +380,7 @@ final class ReviewServiceTests: XCTestCase {
 
         XCTAssertEqual(review.facts, ["AI review unavailable; create a manual weekly review."])
         XCTAssertEqual(review.patterns, ["Manual review needed."])
-        XCTAssertEqual(review.decisions, ["Choose one project to continue, lower, or pause."])
+        XCTAssertTrue(review.decisions.isEmpty)
         XCTAssertTrue(review.nextSteps.isEmpty)
     }
 

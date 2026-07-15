@@ -2,6 +2,206 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class JournalServiceTests: XCTestCase {
+    func testActivatingIdeaRequiresContractAndAttentionBudgetOverride() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let service = JournalService(store: InMemoryJournalStore(), now: { timestamp })
+        let first = try service.createIdea(name: "One", area: "A")
+
+        XCTAssertThrowsError(
+            try service.activateProject(
+                projectId: first.id,
+                goal: "Goal",
+                nextStep: "Next",
+                contract: nil
+            )
+        ) { error in
+            XCTAssertEqual(error as? JournalValidationError, .missingEvidenceContract)
+        }
+
+        for name in ["One", "Two", "Three"] {
+            let idea = name == "One" ? first : try service.createIdea(name: name, area: "A")
+            let contract = try EvidenceContract.weekly(
+                projectId: idea.id,
+                expectedArtifact: .text,
+                acceptanceCriteria: "Explain it",
+                startsAt: timestamp
+            )
+            _ = try service.activateProject(
+                projectId: idea.id,
+                goal: "Goal",
+                nextStep: "Next",
+                contract: contract
+            )
+        }
+
+        let fourth = try service.createIdea(name: "Four", area: "A")
+        let fourthContract = try EvidenceContract.weekly(
+            projectId: fourth.id,
+            expectedArtifact: .text,
+            acceptanceCriteria: "Explain it",
+            startsAt: timestamp
+        )
+        XCTAssertThrowsError(
+            try service.activateProject(
+                projectId: fourth.id,
+                goal: "Goal",
+                nextStep: "Next",
+                contract: fourthContract
+            )
+        ) { error in
+            XCTAssertEqual(error as? JournalValidationError, .attentionBudgetExceeded)
+        }
+        XCTAssertEqual(service.project(id: fourth.id)?.status, .idea)
+
+        _ = try service.activateProject(
+            projectId: fourth.id,
+            goal: "Goal",
+            nextStep: "Next",
+            contract: fourthContract,
+            allowAttentionBudgetOverride: true
+        )
+        XCTAssertEqual(service.snapshot().evidenceContracts.count, 4)
+    }
+
+    func testAcceptProofCreatesAcceptanceAndImmutableRevisionSnapshot() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Explain attention",
+            currentNextStep: "Write notes"
+        )
+        let contract = try EvidenceContract.weekly(
+            projectId: project.id,
+            expectedArtifact: .text,
+            acceptanceCriteria: "Explains attention",
+            startsAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project], evidenceContracts: [contract])
+        )
+        let service = JournalService(repository: repository, now: { timestamp })
+        let proof = try service.addProof(
+            projectId: project.id,
+            type: .text,
+            title: "Attention",
+            statement: "I can explain it",
+            artifactBody: "# Attention\nQKV"
+        )
+
+        let acceptance = try service.acceptProof(
+            proofId: proof.id,
+            contractId: contract.id,
+            acceptedCriteria: ["Explains attention"]
+        )
+
+        XCTAssertEqual(acceptance.proofId, proof.id)
+        XCTAssertEqual(service.snapshot().proofRevisions.first?.statement, proof.statement)
+        XCTAssertEqual(service.snapshot().proofRevisions.first?.revision, proof.revision)
+    }
+
+    func testReviewRequiresExplicitDecisionAndCompletionRequiresQualifyingCapstone() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(
+            name: "CS336",
+            area: "AI",
+            goal: "Ship",
+            currentNextStep: "Demo"
+        )
+        let review = Review(
+            periodStart: timestamp,
+            periodEnd: timestamp,
+            facts: [], patterns: [], decisions: [], projectRecommendations: [:],
+            nextSteps: [:], aiSourceSummary: [], createdAt: timestamp, updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project], reviews: [review])
+        )
+        let service = JournalService(repository: repository, now: { timestamp })
+
+        XCTAssertThrowsError(try service.completeReview(reviewId: review.id, decision: nil)) {
+            XCTAssertEqual($0 as? JournalValidationError, .missingReviewDecision)
+        }
+
+        let invalidDecision = ReviewDecision(
+            reviewId: review.id,
+            projectId: project.id,
+            kind: .complete,
+            capstoneProofId: UUID(),
+            decidedAt: timestamp
+        )
+        XCTAssertThrowsError(try service.completeProject(projectId: project.id, decision: invalidDecision)) {
+            XCTAssertEqual($0 as? JournalValidationError, .missingCapstoneProof)
+        }
+    }
+
+    func testCompleteReviewPersistsDecisionAndCompletesProjectWithCapstone() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(name: "Ship", area: "Product", goal: "Launch", currentNextStep: "Demo")
+        let proof = try Proof.text(
+            projectId: project.id,
+            title: "Capstone",
+            artifactBody: "# Demo\nIt works",
+            statement: "This demonstrates the completed project",
+            createdAt: timestamp
+        )
+        let revision = ProofRevision(
+            proof: proof,
+            revision: proof.revision,
+            artifactChecksum: "sha256:capstone",
+            createdAt: timestamp
+        )
+        let review = Review(
+            periodStart: timestamp,
+            periodEnd: timestamp,
+            facts: [], patterns: [], decisions: [], projectRecommendations: [:],
+            nextSteps: [:], aiSourceSummary: [], createdAt: timestamp, updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(
+            projects: [project], proofs: [proof], reviews: [review], proofRevisions: [revision]
+        ))
+        let service = JournalService(repository: repository, now: { timestamp })
+        let decision = ReviewDecision(
+            reviewId: review.id,
+            projectId: project.id,
+            kind: .complete,
+            capstoneProofId: proof.id,
+            decidedAt: timestamp
+        )
+
+        let completed = try service.completeProject(projectId: project.id, decision: decision)
+
+        XCTAssertEqual(completed.status, .completed)
+        XCTAssertEqual(completed.completedAt, timestamp)
+        XCTAssertEqual(service.snapshot().reviewDecisions, [decision])
+        XCTAssertEqual(service.snapshot().reviews.first?.confirmedDecisionIds, [decision.id])
+        XCTAssertEqual(service.snapshot().reviews.first?.referencedProofRevisionIds, [revision.id])
+    }
+
+    func testTwoUnresolvedContractPeriodsRequireDecision() throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(name: "Guitar", area: "Music", goal: "Play", currentNextStep: "Practice")
+        let contract = try EvidenceContract.weekly(
+            projectId: project.id,
+            expectedArtifact: .audio,
+            acceptanceCriteria: "Clean verse",
+            startsAt: start
+        )
+        let service = JournalService(
+            store: InMemoryJournalStore(snapshot: JournalSnapshot(
+                projects: [project], evidenceContracts: [contract]
+            ))
+        )
+
+        XCTAssertEqual(
+            service.contractState(
+                projectId: project.id,
+                referenceDate: start.addingTimeInterval(14 * 24 * 60 * 60)
+            ),
+            .decisionRequired(unresolvedPeriods: 2)
+        )
+    }
+
     func testQuickLogCommitsOnlyChangedEntities() throws {
         let project = Project(
             name: "CS336",
@@ -83,13 +283,15 @@ final class JournalServiceTests: XCTestCase {
         let base = Date(timeIntervalSince1970: 10_000_000)
         var currentDate = base
         let service = JournalService(store: InMemoryJournalStore(), now: { currentDate })
-        let sessionProject = try service.createProject(
+        let sessionProject = try createActivatedProject(
+            service: service,
             name: "CS336",
             area: "AI",
             goal: "复现课程",
             nextStep: "写 notebook"
         )
-        let proofProject = try service.createProject(
+        let proofProject = try createActivatedProject(
+            service: service,
             name: "Guitar",
             area: "Music",
             goal: "完整弹唱 3 首歌",
@@ -115,10 +317,11 @@ final class JournalServiceTests: XCTestCase {
         )
     }
 
-    func testCreatesOnboardingProjectAndShowsItOnTodayWhenNextStepExists() throws {
+    func testActivatedProjectShowsOnTodayWhenCommitmentIsComplete() throws {
         let service = JournalService(store: InMemoryJournalStore())
 
-        let project = try service.createProject(
+        let project = try createActivatedProject(
+            service: service,
             name: "CS336",
             area: "AI",
             goal: "复现课程",
@@ -137,7 +340,8 @@ final class JournalServiceTests: XCTestCase {
             goal: "Keep learning",
             nextStep: ""
         )
-        let active = try service.createProject(
+        let active = try createActivatedProject(
+            service: service,
             name: "Guitar",
             area: "Music",
             goal: "完整弹唱 3 首歌",
@@ -464,6 +668,28 @@ final class JournalServiceTests: XCTestCase {
         XCTAssertTrue(events[1].detail.contains("整理 perplexity"))
         XCTAssertTrue(events[2].detail.contains("复现了 bigram baseline"))
         XCTAssertTrue(events[3].detail.contains("low-frequency"))
+    }
+
+    private func createActivatedProject(
+        service: JournalService,
+        name: String,
+        area: String,
+        goal: String,
+        nextStep: String
+    ) throws -> Project {
+        let idea = try service.createIdea(name: name, area: area)
+        let contract = try EvidenceContract.weekly(
+            projectId: idea.id,
+            expectedArtifact: .text,
+            acceptanceCriteria: "Explain the result",
+            startsAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        return try service.activateProject(
+            projectId: idea.id,
+            goal: goal,
+            nextStep: nextStep,
+            contract: contract
+        )
     }
 }
 
