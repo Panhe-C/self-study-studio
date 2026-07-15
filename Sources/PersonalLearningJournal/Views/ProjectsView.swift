@@ -23,7 +23,9 @@ public struct ProjectsView: View {
                     Button("Paused (\(count(for: .paused)))") { selectedStatus = .paused }
                     Button("Completed (\(count(for: .completed)))") { selectedStatus = .completed }
                     Button("Archived (\(count(for: .archived)))") { selectedStatus = .archived }
-                    Button("Trash (\(count(for: .trash)))") { selectedStatus = .trash }
+                    NavigationLink("Trash (\(count(for: .trash)))") {
+                        TrashView(viewModel: viewModel)
+                    }
                 } label: {
                     Image(systemName: selectedStatus == .archived ? "archivebox" : "ellipsis.circle")
                         .frame(width: 36, height: 32)

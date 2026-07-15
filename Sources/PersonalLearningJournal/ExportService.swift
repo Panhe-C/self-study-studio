@@ -149,6 +149,21 @@ public struct ExportService {
         return try JSONEncoder.journal.encode(export)
     }
 
+    public func exportArchive(
+        snapshot: JournalSnapshot,
+        attachments: [String: Data],
+        password: String?,
+        allowUnencrypted: Bool = false,
+        derivationRounds: Int = 10_000
+    ) throws -> JournalArchiveEnvelope {
+        try JournalArchiveService(now: now, derivationRounds: derivationRounds).export(
+            snapshot: snapshot,
+            attachments: attachments,
+            password: password,
+            allowUnencrypted: allowUnencrypted
+        )
+    }
+
     public func exportBundle(
         snapshot: JournalSnapshot,
         to exportDirectory: URL

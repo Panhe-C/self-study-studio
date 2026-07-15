@@ -2,6 +2,22 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class ExportServiceTests: XCTestCase {
+    func testExportArchiveUsesRecoverableEncryptedEnvelope() throws {
+        let project = Project(name: "Archive", area: "Learning", goal: "Recover", currentNextStep: "Export")
+        let snapshot = JournalSnapshot(projects: [project])
+        let envelope = try ExportService().exportArchive(
+            snapshot: snapshot,
+            attachments: ["attachments/note.txt": Data("note".utf8)],
+            password: "secret",
+            derivationRounds: 20
+        )
+
+        let preview = try JournalArchiveService(derivationRounds: 20).preview(envelope, password: "secret")
+
+        XCTAssertTrue(envelope.encrypted)
+        XCTAssertEqual(try JournalArchiveService().restore(preview).snapshot, snapshot)
+    }
+
     func testExportContainsDomainSchemaButNoSyncMetadata() throws {
         let project = Project(
             name: "CS336",

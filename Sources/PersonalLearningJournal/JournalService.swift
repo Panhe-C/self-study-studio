@@ -730,7 +730,9 @@ public final class JournalService {
         var project = state.projects[index]
         project.previousStatusBeforeTrash = project.status
         project.status = .trash
-        project.updatedAt = now()
+        let timestamp = now()
+        project.deletedAt = timestamp
+        project.updatedAt = timestamp
         try persist(upserts: [.project(project)])
         state.projects[index] = project
     }
@@ -743,6 +745,7 @@ public final class JournalService {
         var project = state.projects[index]
         project.status = project.previousStatusBeforeTrash ?? .idea
         project.previousStatusBeforeTrash = nil
+        project.deletedAt = nil
         project.updatedAt = now()
         try persist(upserts: [.project(project)])
         state.projects[index] = project
