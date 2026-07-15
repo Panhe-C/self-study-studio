@@ -28,7 +28,7 @@ public struct ProjectCommitmentView: View {
                     TextField("Goal", text: $goal, axis: .vertical)
                     TextField("One canonical Next Step", text: $nextStep, axis: .vertical)
                 }
-                Section("Evidence Contract") {
+                Section("contract.title") {
                     Picker("Trigger", selection: $triggerMode) {
                         Text("Interval").tag(TriggerMode.interval)
                         Text("Milestone").tag(TriggerMode.milestone)
@@ -51,10 +51,10 @@ public struct ProjectCommitmentView: View {
                     Text("Only active projects with a complete commitment count toward the attention budget.")
                 }
             }
-            .navigationTitle("Activate Project")
+            .navigationTitle("project.commitment.title")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("action.cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Activate", action: activate)

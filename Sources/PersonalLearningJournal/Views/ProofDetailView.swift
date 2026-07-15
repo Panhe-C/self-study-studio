@@ -49,7 +49,7 @@ struct ProofDetailView: View {
             }
 
             if !viewModel.proofRevisions(for: proof.id).isEmpty {
-                Section("Revision history") {
+                Section("proof.revision_history") {
                     ForEach(viewModel.proofRevisions(for: proof.id)) { revision in
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Revision \(revision.revision) · \(revision.title)")
@@ -78,7 +78,7 @@ struct ProofDetailView: View {
             NavigationStack {
                 Form {
                     TextField("Title", text: $editTitle)
-                    TextField("What does this prove?", text: $editStatement, axis: .vertical)
+                    TextField("proof.statement", text: $editStatement, axis: .vertical)
                     if currentProof.type == .text {
                         TextEditor(text: $editArtifactBody)
                             .frame(minHeight: 180)
@@ -91,10 +91,10 @@ struct ProofDetailView: View {
                 .navigationTitle("Revise Proof")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { isEditing = false }
+                        Button("action.cancel") { isEditing = false }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") { saveRevision() }
+                        Button("action.save") { saveRevision() }
                     }
                 }
             }

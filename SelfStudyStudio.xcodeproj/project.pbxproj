@@ -87,6 +87,7 @@
 		100000000000000000000154 /* JournalArchiveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000255 /* JournalArchiveService.swift */; };
 		100000000000000000000155 /* TrashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000256 /* TrashView.swift */; };
 		100000000000000000000156 /* AppLockController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000257 /* AppLockController.swift */; };
+		100000000000000000000157 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025A /* Localizable.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -171,6 +172,8 @@
 		100000000000000000000255 /* JournalArchiveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Archive/JournalArchiveService.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000256 /* TrashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/TrashView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000257 /* AppLockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Security/AppLockController.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000258 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		100000000000000000000259 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -269,6 +272,7 @@
 				100000000000000000000255 /* JournalArchiveService.swift */,
 				100000000000000000000256 /* TrashView.swift */,
 				100000000000000000000257 /* AppLockController.swift */,
+				10000000000000000000025A /* Localizable.strings */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
 				10000000000000000000020D /* ReviewService.swift */,
@@ -330,6 +334,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				"zh-Hans",
 				Base,
 			);
 			mainGroup = 100000000000000000000501;
@@ -347,6 +352,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				100000000000000000000157 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -441,6 +447,19 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		10000000000000000000025A /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				100000000000000000000258 /* Localizable.strings */,
+				100000000000000000000259 /* Localizable.strings */,
+			);
+			name = Localizable.strings;
+			path = Sources/PersonalLearningJournal/Resources;
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		100000000000000000000A01 /* Debug */ = {

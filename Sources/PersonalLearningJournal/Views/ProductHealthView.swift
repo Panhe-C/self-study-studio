@@ -22,6 +22,6 @@ public struct ProductHealthView: View {
                 LabeledContent("Projects with Proof sequences", value: "\(report.projectsWithProofSequences)")
             }
         }
-        .navigationTitle("Product Health")
+        .navigationTitle("product_health.title")
     }
 }

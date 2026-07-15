@@ -23,7 +23,7 @@ public struct MigrationReviewView: View {
 
     public var body: some View {
         List {
-            Section("Migration review") {
+            Section("migration.title") {
                 Text("Review every ambiguous Proof and Practice link before changing your journal.")
                     .foregroundStyle(.secondary)
             }
@@ -33,9 +33,9 @@ public struct MigrationReviewView: View {
                         Label(label(for: issue), systemImage: "exclamationmark.triangle")
                         if case let .proofNeedsEvidence(proofID) = issue {
                             HStack {
-                                Button("Attach") { onAttachEvidence?(proofID) }
+                                Button("migration.attach_evidence") { onAttachEvidence?(proofID) }
                                     .disabled(onAttachEvidence == nil)
-                                Button("Make Session Note") { onConvertToSessionNote?(proofID) }
+                                Button("migration.convert_note") { onConvertToSessionNote?(proofID) }
                                     .disabled(onConvertToSessionNote == nil)
                                 Button("Trash", role: .destructive) { onMoveProofToTrash?(proofID) }
                                     .disabled(onMoveProofToTrash == nil)

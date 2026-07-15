@@ -38,7 +38,7 @@ struct AddProofView: View {
                         }
                     }
                     TextField("Title", text: $title)
-                    TextField("What does this prove?", text: $statement, axis: .vertical)
+                    TextField("proof.statement", text: $statement, axis: .vertical)
                 }
 
                 Section("Attach") {
@@ -95,10 +95,10 @@ struct AddProofView: View {
                     }
                 }
             }
-            .navigationTitle("Add Proof")
+            .navigationTitle("proof.add")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("action.save") {
                         saveProof()
                     }
                 }

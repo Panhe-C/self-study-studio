@@ -74,7 +74,7 @@ public struct ReviewView: View {
                 }
             }
         }
-        .navigationTitle("Weekly Review")
+        .navigationTitle("review.title")
         .alert(item: $notice) { notice in
             Alert(
                 title: Text(notice.title),
@@ -144,13 +144,13 @@ public struct ReviewView: View {
 
     private func title(for kind: ReviewDecisionKind) -> String {
         switch kind {
-        case .continueUnchanged: "Continue unchanged"
-        case .changeNextStep: "Change Next Step"
-        case .reviseContract: "Revise Contract"
+        case .continueUnchanged: String(localized: "review.decision.continue")
+        case .changeNextStep: String(localized: "review.decision.change_next_step")
+        case .reviseContract: String(localized: "review.decision.revise_contract")
         case .changeFrequency: "Change frequency"
-        case .pause: "Pause"
-        case .archive: "Archive"
-        case .complete: "Complete"
+        case .pause: String(localized: "review.decision.pause")
+        case .archive: String(localized: "review.decision.archive")
+        case .complete: String(localized: "review.decision.complete")
         }
     }
 }

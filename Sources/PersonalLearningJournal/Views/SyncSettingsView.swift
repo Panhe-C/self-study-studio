@@ -69,11 +69,11 @@ public struct SyncSettingsView: View {
                 }
 
                 Section("Privacy") {
-                    Toggle("Require Device Unlock", isOn: Binding(
+                    Toggle("privacy.app_lock", isOn: Binding(
                         get: { appLock.isEnabled },
                         set: { appLock.setEnabled($0) }
                     ))
-                    Text("When enabled, protected screens are covered whenever the app leaves the foreground.")
+                    Text("privacy.app_lock_detail")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

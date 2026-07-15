@@ -13,8 +13,8 @@ public struct ProjectsView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Picker("Project status", selection: $selectedStatus) {
-                    Text("Active  \(count(for: .active))").tag(ProjectStatus.active)
-                    Text("Ideas  \(count(for: .idea))").tag(ProjectStatus.idea)
+                    (Text("project.status.active") + Text("  \(count(for: .active))")).tag(ProjectStatus.active)
+                    (Text("project.status.idea") + Text("  \(count(for: .idea))")).tag(ProjectStatus.idea)
                 }
                 .pickerStyle(.segmented)
 
@@ -51,18 +51,18 @@ public struct ProjectsView: View {
             }
         }
         .background(StudioTheme.pageBackground.ignoresSafeArea())
-        .navigationTitle("Projects")
+        .navigationTitle("nav.projects")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 NavigationLink {
                     ProductHealthView(report: viewModel.productHealth())
                 } label: {
-                    Label("Product Health", systemImage: "waveform.path.ecg")
+                    Label("nav.product_health", systemImage: "waveform.path.ecg")
                 }
                 Button {
                     showingCreate = true
                 } label: {
-                    Label("Add Project", systemImage: "plus")
+                    Label("project.add", systemImage: "plus")
                 }
             }
         }

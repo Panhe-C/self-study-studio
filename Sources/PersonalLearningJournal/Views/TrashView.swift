@@ -20,7 +20,7 @@ public struct TrashView: View {
     public var body: some View {
         List {
             Section {
-                Text("Projects remain recoverable for 30 days. Permanent deletion also removes the Sessions, Proof, and attachment references listed before confirmation.")
+                Text("trash.retention_notice")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -32,18 +32,18 @@ public struct TrashView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     HStack {
-                        Button("Restore") { restore(project) }
+                        Button("trash.restore") { restore(project) }
                         Spacer()
-                        Button("Delete Permanently", role: .destructive) { pendingImpact = impact }
+                        Button("trash.delete_permanently", role: .destructive) { pendingImpact = impact }
                             .disabled(onPermanentDelete == nil)
                     }
                 }
                 .padding(.vertical, 4)
             }
         }
-        .navigationTitle("Trash")
+        .navigationTitle("nav.trash")
         .overlay {
-            if trashedProjects.isEmpty { ContentUnavailableView("Trash is empty", systemImage: "trash") }
+            if trashedProjects.isEmpty { ContentUnavailableView("trash.empty", systemImage: "trash") }
         }
         .alert("Delete permanently?", isPresented: Binding(
             get: { pendingImpact != nil },

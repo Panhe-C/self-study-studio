@@ -31,24 +31,24 @@ public struct RootView: View {
                     NavigationStack {
                         TodayView(viewModel: viewModel)
                     }
-                    .tabItem { Label("Today", systemImage: "play.circle") }
+                    .tabItem { Label("nav.today", systemImage: "play.circle") }
 
                     NavigationStack {
                         ProjectsView(viewModel: viewModel)
                     }
-                    .tabItem { Label("Projects", systemImage: "folder") }
+                    .tabItem { Label("nav.projects", systemImage: "folder") }
 
                     if calendarEnabled {
                         NavigationStack {
                             StudyCalendarView(viewModel: calendarViewModel)
                         }
-                        .tabItem { Label("Calendar", systemImage: "calendar") }
+                        .tabItem { Label("nav.calendar", systemImage: "calendar") }
                     }
 
                     NavigationStack {
                         LibraryView(viewModel: viewModel)
                     }
-                    .tabItem { Label("Library", systemImage: "paperclip") }
+                    .tabItem { Label("nav.library", systemImage: "paperclip") }
                 }
                 .environmentObject(calendarViewModel)
                 .tint(StudioTheme.accent)
