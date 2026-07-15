@@ -5,6 +5,10 @@ public enum JournalEntityKind: String, Codable, CaseIterable, Sendable {
     case session
     case proof
     case review
+    case evidenceContract
+    case evidenceAcceptance
+    case proofRevision
+    case reviewDecision
     case trailEvent
     case coursePlan
     case planPhase
@@ -30,6 +34,10 @@ public enum JournalEntity: Codable, Equatable, Sendable {
     case session(LearningSession)
     case proof(Proof)
     case review(Review)
+    case evidenceContract(EvidenceContract)
+    case evidenceAcceptance(EvidenceAcceptance)
+    case proofRevision(ProofRevision)
+    case reviewDecision(ReviewDecision)
     case trailEvent(TrailEvent)
     case coursePlan(CoursePlan)
     case planPhase(PlanPhase)
@@ -45,6 +53,10 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .session(value): .init(.session, value.id)
         case let .proof(value): .init(.proof, value.id)
         case let .review(value): .init(.review, value.id)
+        case let .evidenceContract(value): .init(.evidenceContract, value.id)
+        case let .evidenceAcceptance(value): .init(.evidenceAcceptance, value.id)
+        case let .proofRevision(value): .init(.proofRevision, value.id)
+        case let .reviewDecision(value): .init(.reviewDecision, value.id)
         case let .trailEvent(value): .init(.trailEvent, value.id)
         case let .coursePlan(value): .init(.coursePlan, value.id)
         case let .planPhase(value): .init(.planPhase, value.id)
@@ -62,6 +74,10 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .session(value): value.deletedAt != nil
         case let .proof(value): value.deletedAt != nil
         case let .review(value): value.deletedAt != nil
+        case let .evidenceContract(value): value.deletedAt != nil
+        case let .evidenceAcceptance(value): value.deletedAt != nil
+        case let .proofRevision(value): value.deletedAt != nil
+        case let .reviewDecision(value): value.deletedAt != nil
         case let .trailEvent(value): value.deletedAt != nil
         case let .coursePlan(value): value.deletedAt != nil
         case let .planPhase(value): value.deletedAt != nil
@@ -91,6 +107,19 @@ public enum JournalEntity: Codable, Equatable, Sendable {
             value.deletedAt = date
             value.updatedAt = date
             return .review(value)
+        case var .evidenceContract(value):
+            value.deletedAt = date
+            value.updatedAt = date
+            return .evidenceContract(value)
+        case var .evidenceAcceptance(value):
+            value.deletedAt = date
+            return .evidenceAcceptance(value)
+        case var .proofRevision(value):
+            value.deletedAt = date
+            return .proofRevision(value)
+        case var .reviewDecision(value):
+            value.deletedAt = date
+            return .reviewDecision(value)
         case var .trailEvent(value):
             value.deletedAt = date
             return .trailEvent(value)

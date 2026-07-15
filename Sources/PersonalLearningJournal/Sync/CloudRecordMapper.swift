@@ -29,6 +29,10 @@ public struct CloudRecordMapper {
         case let .session(value): encode(value, into: record)
         case let .proof(value): try encode(value, into: record)
         case let .review(value): encode(value, into: record)
+        case let .evidenceContract(value): try encodePayload(value, into: record)
+        case let .evidenceAcceptance(value): try encodePayload(value, into: record)
+        case let .proofRevision(value): try encodePayload(value, into: record)
+        case let .reviewDecision(value): try encodePayload(value, into: record)
         case let .trailEvent(value): encode(value, into: record)
         case let .coursePlan(value): encode(value, into: record)
         case let .planPhase(value): encode(value, into: record)
@@ -50,6 +54,10 @@ public struct CloudRecordMapper {
         case "LearningSession": return .session(try decodeSession(record, id: id))
         case "Proof": return .proof(try decodeProof(record, id: id))
         case "Review": return .review(try decodeReview(record, id: id))
+        case "EvidenceContract": return .evidenceContract(try decodePayload(EvidenceContract.self, from: record, id: id))
+        case "EvidenceAcceptance": return .evidenceAcceptance(try decodePayload(EvidenceAcceptance.self, from: record, id: id))
+        case "ProofRevision": return .proofRevision(try decodePayload(ProofRevision.self, from: record, id: id))
+        case "ReviewDecision": return .reviewDecision(try decodePayload(ReviewDecision.self, from: record, id: id))
         case "TrailEvent": return .trailEvent(try decodeTrailEvent(record, id: id))
         case "CoursePlan": return .coursePlan(try decodeCoursePlan(record, id: id))
         case "PlanPhase": return .planPhase(try decodePlanPhase(record, id: id))
@@ -76,6 +84,10 @@ public struct CloudRecordMapper {
         case .session: "LearningSession"
         case .proof: "Proof"
         case .review: "Review"
+        case .evidenceContract: "EvidenceContract"
+        case .evidenceAcceptance: "EvidenceAcceptance"
+        case .proofRevision: "ProofRevision"
+        case .reviewDecision: "ReviewDecision"
         case .trailEvent: "TrailEvent"
         case .coursePlan: "CoursePlan"
         case .planPhase: "PlanPhase"
@@ -96,6 +108,10 @@ public struct CloudRecordMapper {
         record["lastActionType"] = value.lastActionType.rawValue
         record["defaultDurationMinutes"] = value.defaultDurationMinutes
         record["activeCoursePlanId"] = value.activeCoursePlanId?.uuidString
+        record["commitmentState"] = value.commitmentState.rawValue
+        record["activeEvidenceContractId"] = value.activeEvidenceContractId?.uuidString
+        record["completedAt"] = value.completedAt
+        record["previousStatusBeforeTrash"] = value.previousStatusBeforeTrash?.rawValue
         encodeDates(value.createdAt, value.updatedAt, value.archivedAt, value.deletedAt, value.schemaVersion, into: record)
     }
 
@@ -294,8 +310,38 @@ public struct CloudRecordMapper {
             archivedAt: optionalDate("archivedAt", from: record),
             deletedAt: optionalDate("deletedAt", from: record),
             schemaVersion: try integer("schemaVersion", from: record),
-            activeCoursePlanId: try optionalUUID("activeCoursePlanId", from: record)
+            activeCoursePlanId: try optionalUUID("activeCoursePlanId", from: record),
+            commitmentState: optionalString("commitmentState", from: record)
+                .flatMap(ProjectCommitmentState.init(rawValue:)) ?? .needsSetup,
+            activeEvidenceContractId: try optionalUUID("activeEvidenceContractId", from: record),
+            completedAt: optionalDate("completedAt", from: record),
+            previousStatusBeforeTrash: optionalString("previousStatusBeforeTrash", from: record)
+                .flatMap(ProjectStatus.init(rawValue:))
         )
+    }
+
+    private func encodePayload<Value: Encodable>(_ value: Value, into record: CKRecord) throws {
+        record["payload"] = try JSONEncoder.journal.encode(value)
+    }
+
+    private func decodePayload<Value: Decodable & Identifiable>(
+        _ type: Value.Type,
+        from record: CKRecord,
+        id: UUID
+    ) throws -> Value where Value.ID == UUID {
+        guard let payload = record["payload"] as? Data else {
+            throw CloudRecordMapperError.missingField("payload")
+        }
+        let value: Value
+        do {
+            value = try JSONDecoder.journal.decode(Value.self, from: payload)
+        } catch {
+            throw CloudRecordMapperError.invalidField("payload")
+        }
+        guard value.id == id else {
+            throw CloudRecordMapperError.mismatchedRecordIdentifier
+        }
+        return value
     }
 
     private func decodeSession(_ record: CKRecord, id: UUID) throws -> LearningSession {

@@ -884,6 +884,14 @@ public final class JournalViewModel: ObservableObject {
             return .proof(try JSONDecoder.journal.decode(Proof.self, from: payload))
         case .review:
             return .review(try JSONDecoder.journal.decode(Review.self, from: payload))
+        case .evidenceContract:
+            return .evidenceContract(try JSONDecoder.journal.decode(EvidenceContract.self, from: payload))
+        case .evidenceAcceptance:
+            return .evidenceAcceptance(try JSONDecoder.journal.decode(EvidenceAcceptance.self, from: payload))
+        case .proofRevision:
+            return .proofRevision(try JSONDecoder.journal.decode(ProofRevision.self, from: payload))
+        case .reviewDecision:
+            return .reviewDecision(try JSONDecoder.journal.decode(ReviewDecision.self, from: payload))
         case .trailEvent:
             return .trailEvent(try JSONDecoder.journal.decode(TrailEvent.self, from: payload))
         case .coursePlan:
