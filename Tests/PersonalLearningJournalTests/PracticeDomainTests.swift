@@ -3,12 +3,13 @@ import XCTest
 
 final class PracticeDomainTests: XCTestCase {
     func testRoutineRequiresNameTargetAndWeekday() throws {
-        let valid = PracticeRoutine(name: "Guitar", symbolName: "guitars", color: .coral, targetMinutes: 30, weekdays: [2, 4, 6])
+        let projectID = UUID()
+        let valid = PracticeRoutine(projectId: projectID, name: "Guitar", symbolName: "guitars", color: .coral, targetMinutes: 30, weekdays: [2, 4, 6])
         XCTAssertNoThrow(try valid.validated())
-        XCTAssertThrowsError(try PracticeRoutine(name: " ", symbolName: "guitars", color: .coral, targetMinutes: 30, weekdays: [2]).validated())
-        XCTAssertThrowsError(try PracticeRoutine(name: "Guitar", symbolName: "guitars", color: .coral, targetMinutes: 0, weekdays: [2]).validated())
-        XCTAssertThrowsError(try PracticeRoutine(name: "Guitar", symbolName: "guitars", color: .coral, targetMinutes: 30, weekdays: []).validated())
-        XCTAssertThrowsError(try PracticeRoutine(name: "Guitar", symbolName: "guitars", color: .coral, targetMinutes: 30, weekdays: [8]).validated())
+        XCTAssertThrowsError(try PracticeRoutine(projectId: projectID, name: " ", symbolName: "guitars", color: .coral, targetMinutes: 30, weekdays: [2]).validated())
+        XCTAssertThrowsError(try PracticeRoutine(projectId: projectID, name: "Guitar", symbolName: "guitars", color: .coral, targetMinutes: 0, weekdays: [2]).validated())
+        XCTAssertThrowsError(try PracticeRoutine(projectId: projectID, name: "Guitar", symbolName: "guitars", color: .coral, targetMinutes: 30, weekdays: []).validated())
+        XCTAssertThrowsError(try PracticeRoutine(projectId: projectID, name: "Guitar", symbolName: "guitars", color: .coral, targetMinutes: 30, weekdays: [8]).validated())
     }
 
     func testSessionRejectsImpossibleDuration() {

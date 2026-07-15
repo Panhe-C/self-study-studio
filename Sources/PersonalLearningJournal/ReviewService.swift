@@ -147,9 +147,11 @@ enum PracticeReviewContext {
         periodStart: Date,
         periodEnd: Date
     ) -> [PracticeSession] {
-        snapshot.practiceSessions.filter {
+        let mirroredLearningSessionIDs = Set(snapshot.sessions.map(\.id))
+        return snapshot.practiceSessions.filter {
             $0.deletedAt == nil
                 && $0.linkedProjectId != nil
+                && !mirroredLearningSessionIDs.contains($0.id)
                 && $0.endedAt >= periodStart
                 && $0.endedAt <= periodEnd
         }

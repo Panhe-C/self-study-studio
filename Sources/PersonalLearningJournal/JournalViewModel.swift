@@ -13,6 +13,7 @@ public final class JournalViewModel: ObservableObject {
     @Published public private(set) var draftCoursePlan: CoursePlan?
     @Published public private(set) var coursePlanGenerationState: CoursePlanGenerationState
     @Published public private(set) var coursePlanValidationErrors: [CoursePlanningValidationError]
+    @Published public private(set) var pendingCanonicalNextStepProposal: CanonicalNextStepProposal?
     @Published private var rememberedCoursePlanningInputs: [UUID: CoursePlanningInput]
 
     private let journalService: JournalService
@@ -59,6 +60,7 @@ public final class JournalViewModel: ObservableObject {
         self.draftCoursePlan = nil
         self.coursePlanGenerationState = .idle
         self.coursePlanValidationErrors = []
+        self.pendingCanonicalNextStepProposal = nil
         self.rememberedCoursePlanningInputs = [:]
     }
 
@@ -326,6 +328,7 @@ public final class JournalViewModel: ObservableObject {
         )
         tryCompleteOnboarding(afterRecording: projectId)
         refresh()
+        captureNextStepProposal(after: plannedSessionId)
         return session
     }
 
@@ -412,16 +415,35 @@ public final class JournalViewModel: ObservableObject {
         }
     }
 
-    public func activateCoursePlan(draftPlanID: UUID) throws {
+    @discardableResult
+    public func activateCoursePlan(draftPlanID: UUID) throws -> CanonicalNextStepProposal? {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
-        _ = try coursePlanningService.activate(draftPlanID: draftPlanID)
+        let proposal = try coursePlanningService.activate(draftPlanID: draftPlanID)
+        pendingCanonicalNextStepProposal = proposal
         if draftCoursePlan?.id == draftPlanID {
             draftCoursePlan = nil
         }
         coursePlanGenerationState = .idle
         refresh()
+        return proposal
+    }
+
+    @discardableResult
+    public func confirmCanonicalNextStep(
+        _ proposal: CanonicalNextStepProposal,
+        title: String? = nil
+    ) throws -> Project {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        let project = try coursePlanningService.confirmNextStep(proposal, title: title)
+        if pendingCanonicalNextStepProposal == proposal {
+            pendingCanonicalNextStepProposal = nil
+        }
+        refresh()
+        return project
     }
 
     @discardableResult
@@ -495,6 +517,7 @@ public final class JournalViewModel: ObservableObject {
         )
         tryCompleteOnboarding(afterRecording: projectId)
         refresh()
+        captureNextStepProposal(after: plannedSessionId)
         return session
     }
 
@@ -724,6 +747,7 @@ public final class JournalViewModel: ObservableObject {
 
         return PracticeRoutine(
             id: routineId,
+            projectId: syncedRoutine?.projectId,
             name: presentation?.name ?? syncedRoutine?.name ?? "Practice",
             symbolName: presentation?.symbolName ?? syncedRoutine?.symbolName ?? "timer",
             color: presentation?.color ?? syncedRoutine?.color ?? .teal,
@@ -747,7 +771,31 @@ public final class JournalViewModel: ObservableObject {
         weekdays: Set<Int>,
         reminderTime: PracticeReminderTime? = nil
     ) throws -> PracticeRoutine {
+        let projects = snapshot.projects.filter { $0.deletedAt == nil && $0.status != .trash }
+        guard projects.count == 1 else { throw PracticeValidationError.missingProject }
+        return try createPracticeRoutine(
+            projectId: projects[0].id,
+            name: name,
+            symbolName: symbolName,
+            color: color,
+            targetMinutes: targetMinutes,
+            weekdays: weekdays,
+            reminderTime: reminderTime
+        )
+    }
+
+    @discardableResult
+    public func createPracticeRoutine(
+        projectId: UUID,
+        name: String,
+        symbolName: String,
+        color: PracticeSemanticColor,
+        targetMinutes: Int,
+        weekdays: Set<Int>,
+        reminderTime: PracticeReminderTime? = nil
+    ) throws -> PracticeRoutine {
         let routine = try practiceService.createRoutine(
+            projectId: projectId,
             name: name,
             symbolName: symbolName,
             color: color,
@@ -1027,6 +1075,13 @@ public final class JournalViewModel: ObservableObject {
     private func tryCompleteOnboarding(afterRecording projectId: UUID) {
         guard snapshot.pendingFirstRecordProjectId == projectId else { return }
         try? journalService.completeOnboarding()
+    }
+
+    private func captureNextStepProposal(after plannedSessionId: UUID?) {
+        guard let plannedSessionId, let coursePlanningService else { return }
+        pendingCanonicalNextStepProposal = try? coursePlanningService.nextStepProposal(
+            after: plannedSessionId
+        )
     }
 
     private func coursePlanningContext(for projectId: UUID) -> CoursePlanningContext {

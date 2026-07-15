@@ -67,11 +67,8 @@ public struct ProductConvergenceMigration {
             .filter { $0.deletedAt == nil && !$0.qualifies }
             .map { .proofNeedsEvidence($0.id) }
 
-        let ambiguousRoutineIDs = Set(snapshot.practiceSessions.compactMap { session -> UUID? in
-            session.deletedAt == nil && session.linkedProjectId == nil ? session.routineId : nil
-        })
         issues += snapshot.practiceRoutines
-            .filter { ambiguousRoutineIDs.contains($0.id) && $0.deletedAt == nil }
+            .filter { $0.projectId == nil && $0.deletedAt == nil }
             .map { .practiceNeedsProject($0.id) }
 
         issues += snapshot.projects
@@ -191,6 +188,17 @@ public struct ProductConvergenceMigration {
             }
             migrated.practiceSessions[index].updatedAt = now()
         }
+        for index in migrated.practiceRoutines.indices {
+            guard let resolution = practiceResolutions[migrated.practiceRoutines[index].id] else { continue }
+            switch resolution {
+            case .keepUnlinked:
+                migrated.practiceRoutines[index].projectId = nil
+                migrated.practiceRoutines[index].isArchived = true
+            case let .linkToProject(projectID):
+                migrated.practiceRoutines[index].projectId = projectID
+            }
+            migrated.practiceRoutines[index].updatedAt = now()
+        }
         return migrated
     }
 
@@ -231,6 +239,12 @@ public struct ProductConvergenceMigration {
                 throw ProductConvergenceMigrationError.invalidRelationship
             }
             relationships += 1 + (session.linkedProjectId == nil ? 0 : 1)
+        }
+        for routine in snapshot.practiceRoutines where routine.deletedAt == nil && !routine.isArchived {
+            guard let projectID = routine.projectId, projectIDs.contains(projectID) else {
+                throw ProductConvergenceMigrationError.invalidRelationship
+            }
+            relationships += 1
         }
         for contract in snapshot.evidenceContracts where contract.deletedAt == nil {
             guard projectIDs.contains(contract.projectId) else {

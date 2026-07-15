@@ -482,7 +482,9 @@ final class JournalViewModelTests: XCTestCase {
             practiceService: practiceService,
             practiceTimer: runtime
         )
+        let project = try viewModel.createIdea(name: "Guitar Project", area: "Music")
         let routine = try viewModel.createPracticeRoutine(
+            projectId: project.id,
             name: "Guitar",
             symbolName: "guitars",
             color: .coral,
@@ -503,8 +505,9 @@ final class JournalViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.practiceSessions.map(\.id), [result.session.id])
+        XCTAssertEqual(viewModel.sessions.map(\.id), [result.learningSession.id])
         XCTAssertTrue(result.didDropMissingProjectLink)
-        XCTAssertNil(result.session.linkedProjectId)
+        XCTAssertEqual(result.session.linkedProjectId, project.id)
     }
 
     func testPracticeFacadeUsesInjectedRuntimeAndRefreshesRoutineMutations() throws {
@@ -518,7 +521,9 @@ final class JournalViewModelTests: XCTestCase {
             practiceService: PracticeService(repository: repository),
             practiceTimer: runtime
         )
+        let project = try viewModel.createIdea(name: "Guitar Project", area: "Music")
         let routine = try viewModel.createPracticeRoutine(
+            projectId: project.id,
             name: "Guitar",
             symbolName: "guitars",
             color: .coral,

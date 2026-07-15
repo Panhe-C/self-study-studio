@@ -208,6 +208,7 @@ final class ReviewServiceTests: XCTestCase {
             nextStep: "Practice scales"
         )
         let routine = try viewModel.createPracticeRoutine(
+            projectId: project.id,
             name: "Guitar",
             symbolName: "guitars",
             color: .coral,
@@ -236,13 +237,14 @@ final class ReviewServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.practiceSessionsForProject(project.id).map(\.id), [saved.session.id])
-        XCTAssertTrue(viewModel.sessions.isEmpty)
-        XCTAssertTrue(review.facts.contains { $0.contains("0 min") })
+        XCTAssertEqual(viewModel.sessions.map(\.id), [saved.learningSession.id])
+        XCTAssertTrue(review.facts.contains { $0.contains("30 min") })
         XCTAssertTrue(
             review.aiSourceSummary.contains(
-                "practice \(saved.session.id.uuidString.prefix(8)): 30 min - Scales"
+                "session \(saved.learningSession.id.uuidString.prefix(8)): Scales"
             )
         )
+        XCTAssertFalse(review.aiSourceSummary.contains { $0.hasPrefix("practice \(saved.session.id.uuidString.prefix(8))") })
     }
 
     func testStructuredReviewInputIncludesOnlyLinkedPracticeInPeriod() async throws {

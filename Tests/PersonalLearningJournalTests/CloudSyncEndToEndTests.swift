@@ -45,7 +45,9 @@ final class CloudSyncEndToEndTests: XCTestCase {
 
     func testPracticeEntitiesUploadDownloadAndRemoteDeletion() async throws {
         let timestamp = Date(timeIntervalSince1970: 10_000)
+        let projectID = UUID()
         let routine = PracticeRoutine(
+            projectId: projectID,
             name: "Guitar",
             symbolName: "guitars",
             color: .coral,
@@ -56,7 +58,7 @@ final class CloudSyncEndToEndTests: XCTestCase {
         )
         let session = PracticeSession(
             routineId: routine.id,
-            linkedProjectId: UUID(),
+            linkedProjectId: projectID,
             startedAt: timestamp,
             endedAt: timestamp.addingTimeInterval(120),
             activeDurationSeconds: 120,

@@ -111,7 +111,7 @@ public final class CoursePlanningService {
     }
 
     @discardableResult
-    public func activate(draftPlanID: UUID) throws -> CoursePlan {
+    public func activate(draftPlanID: UUID) throws -> CanonicalNextStepProposal? {
         let snapshot = try repository.snapshot()
         guard let planIndex = snapshot.coursePlans.firstIndex(where: { $0.id == draftPlanID }) else {
             throw JournalValidationError.missingProject
@@ -135,9 +135,6 @@ public final class CoursePlanningService {
             }
             .first
         project.activeCoursePlanId = activatedPlan.id
-        if let nextSession {
-            project.currentNextStep = nextSession.title
-        }
         project.updatedAt = activatedAt
 
         var upserts: [JournalEntity] = [.coursePlan(activatedPlan), .project(project)]
@@ -159,7 +156,14 @@ public final class CoursePlanningService {
         )
         upserts.append(.trailEvent(trailEvent))
         try repository.commit(JournalTransaction(upserts: upserts, origin: .user))
-        return activatedPlan
+        return nextSession.map {
+            CanonicalNextStepProposal(
+                projectId: project.id,
+                plannedSessionId: $0.id,
+                title: $0.title,
+                reason: "First session in the activated course plan"
+            )
+        }
     }
 
     @discardableResult
@@ -211,7 +215,11 @@ public final class CoursePlanningService {
         )
     }
 
-    public func complete(plannedSessionID: UUID, with sessionID: UUID) throws {
+    @discardableResult
+    public func complete(
+        plannedSessionID: UUID,
+        with sessionID: UUID
+    ) throws -> CanonicalNextStepProposal? {
         let snapshot = try repository.snapshot()
         guard let index = snapshot.plannedSessions.firstIndex(where: { $0.id == plannedSessionID }) else {
             throw JournalValidationError.missingProject
@@ -221,5 +229,89 @@ public final class CoursePlanningService {
         session.completedSessionId = sessionID
         session.updatedAt = now()
         try repository.commit(JournalTransaction(upserts: [.plannedSession(session)], origin: .user))
+        var sessions = snapshot.plannedSessions
+        sessions[index] = session
+        return nextStepProposal(
+            projectID: session.projectId,
+            planID: session.planId,
+            sessions: sessions,
+            phases: snapshot.planPhases,
+            reason: "Next incomplete session after completing \(session.title)"
+        )
+    }
+
+    public func nextStepProposal(after plannedSessionID: UUID) throws -> CanonicalNextStepProposal? {
+        let snapshot = try repository.snapshot()
+        guard let completed = snapshot.plannedSessions.first(where: { $0.id == plannedSessionID }) else {
+            throw JournalValidationError.missingPlannedSession
+        }
+        return nextStepProposal(
+            projectID: completed.projectId,
+            planID: completed.planId,
+            sessions: snapshot.plannedSessions,
+            phases: snapshot.planPhases,
+            reason: "Next incomplete session after completing \(completed.title)"
+        )
+    }
+
+    @discardableResult
+    public func confirmNextStep(
+        _ proposal: CanonicalNextStepProposal,
+        title: String? = nil
+    ) throws -> Project {
+        let snapshot = try repository.snapshot()
+        guard let projectIndex = snapshot.projects.firstIndex(where: { $0.id == proposal.projectId }),
+              snapshot.plannedSessions.contains(where: {
+                  $0.id == proposal.plannedSessionId && $0.projectId == proposal.projectId
+              }) else {
+            throw JournalValidationError.missingPlannedSession
+        }
+        let confirmedTitle = (title ?? proposal.title).trimmedForJournal
+        guard !confirmedTitle.isEmpty else { throw JournalValidationError.emptyNextStep }
+        var project = snapshot.projects[projectIndex]
+        project.currentNextStep = confirmedTitle
+        project.updatedAt = now()
+        let event = TrailEvent(
+            projectId: project.id,
+            type: .nextStepChange,
+            sourceId: proposal.plannedSessionId,
+            occurredAt: project.updatedAt,
+            title: "Next Step confirmed",
+            detail: confirmedTitle
+        )
+        try repository.commit(
+            JournalTransaction(upserts: [.project(project), .trailEvent(event)], origin: .user)
+        )
+        return project
+    }
+
+    private func nextStepProposal(
+        projectID: UUID,
+        planID: UUID,
+        sessions: [PlannedSession],
+        phases: [PlanPhase],
+        reason: String
+    ) -> CanonicalNextStepProposal? {
+        let phaseOrder = Dictionary(uniqueKeysWithValues: phases.map { ($0.id, $0.ordinal) })
+        let next = sessions
+            .filter {
+                $0.planId == planID
+                    && $0.projectId == projectID
+                    && ($0.status == .unscheduled || $0.status == .scheduled)
+            }
+            .sorted {
+                let lhs = (phaseOrder[$0.phaseId] ?? .max, $0.deadline ?? .distantFuture, $0.createdAt, $0.title, $0.id.uuidString)
+                let rhs = (phaseOrder[$1.phaseId] ?? .max, $1.deadline ?? .distantFuture, $1.createdAt, $1.title, $1.id.uuidString)
+                return lhs < rhs
+            }
+            .first
+        return next.map {
+            CanonicalNextStepProposal(
+                projectId: projectID,
+                plannedSessionId: $0.id,
+                title: $0.title,
+                reason: reason
+            )
+        }
     }
 }

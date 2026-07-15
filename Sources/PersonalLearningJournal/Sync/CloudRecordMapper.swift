@@ -255,6 +255,7 @@ public struct CloudRecordMapper {
     }
 
     private func encode(_ value: PracticeRoutine, into record: CKRecord) {
+        record["projectId"] = value.projectId?.uuidString
         record["name"] = value.name
         record["symbolName"] = value.symbolName
         record["color"] = value.color.rawValue
@@ -535,8 +536,10 @@ public struct CloudRecordMapper {
         guard (reminderHour == nil) == (reminderMinute == nil) else {
             throw CloudRecordMapperError.invalidField("reminderTime")
         }
+        let projectId = try optionalUUID("projectId", from: record)
         return try PracticeRoutine(
             id: id,
+            projectId: projectId,
             name: try string("name", from: record),
             symbolName: try string("symbolName", from: record),
             color: color,
@@ -548,7 +551,7 @@ public struct CloudRecordMapper {
             updatedAt: try date("updatedAt", from: record),
             deletedAt: optionalDate("deletedAt", from: record),
             schemaVersion: try integer("schemaVersion", from: record)
-        ).validated()
+        ).validated(requireProject: projectId != nil)
     }
 
     private func decodePracticeSession(_ record: CKRecord, id: UUID) throws -> PracticeSession {

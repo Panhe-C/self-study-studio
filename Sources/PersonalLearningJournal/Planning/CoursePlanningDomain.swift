@@ -1,5 +1,19 @@
 import Foundation
 
+public struct CanonicalNextStepProposal: Equatable, Sendable {
+    public var projectId: UUID
+    public var plannedSessionId: UUID
+    public var title: String
+    public var reason: String
+
+    public init(projectId: UUID, plannedSessionId: UUID, title: String, reason: String) {
+        self.projectId = projectId
+        self.plannedSessionId = plannedSessionId
+        self.title = title
+        self.reason = reason
+    }
+}
+
 public enum CoursePlanStatus: String, Codable, CaseIterable, Sendable {
     case draft
     case active

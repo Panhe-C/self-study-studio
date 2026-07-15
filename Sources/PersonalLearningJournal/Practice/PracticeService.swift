@@ -9,10 +9,16 @@ public enum PracticeServiceError: Error, Equatable, Sendable {
 
 public struct PracticeSessionSaveResult: Equatable, Sendable {
     public let session: PracticeSession
+    public let learningSession: LearningSession
     public let didDropMissingProjectLink: Bool
 
-    public init(session: PracticeSession, didDropMissingProjectLink: Bool) {
+    public init(
+        session: PracticeSession,
+        learningSession: LearningSession,
+        didDropMissingProjectLink: Bool
+    ) {
         self.session = session
+        self.learningSession = learningSession
         self.didDropMissingProjectLink = didDropMissingProjectLink
     }
 }
@@ -38,8 +44,37 @@ public final class PracticeService {
         weekdays: Set<Int>,
         reminderTime: PracticeReminderTime? = nil
     ) throws -> PracticeRoutine {
+        let projects = try repository.snapshot().projects.filter { $0.deletedAt == nil && $0.status != .trash }
+        guard projects.count == 1 else { throw PracticeValidationError.missingProject }
+        return try createRoutine(
+            projectId: projects[0].id,
+            name: name,
+            symbolName: symbolName,
+            color: color,
+            targetMinutes: targetMinutes,
+            weekdays: weekdays,
+            reminderTime: reminderTime
+        )
+    }
+
+    @discardableResult
+    public func createRoutine(
+        projectId: UUID?,
+        name: String,
+        symbolName: String,
+        color: PracticeSemanticColor,
+        targetMinutes: Int,
+        weekdays: Set<Int>,
+        reminderTime: PracticeReminderTime? = nil
+    ) throws -> PracticeRoutine {
+        let snapshot = try repository.snapshot()
+        guard let projectId,
+              snapshot.projects.contains(where: { $0.id == projectId && $0.deletedAt == nil }) else {
+            throw PracticeValidationError.missingProject
+        }
         let timestamp = now()
         let routine = try PracticeRoutine(
+            projectId: projectId,
             name: name,
             symbolName: symbolName,
             color: color,
@@ -49,7 +84,6 @@ public final class PracticeService {
             createdAt: timestamp,
             updatedAt: timestamp
         ).validated()
-        let snapshot = try repository.snapshot()
         guard !hasDuplicateActiveName(routine.name, in: snapshot) else {
             throw PracticeServiceError.duplicateActiveRoutineName
         }
@@ -77,6 +111,7 @@ public final class PracticeService {
 
         let updated = try PracticeRoutine(
             id: existing.id,
+            projectId: existing.projectId,
             name: name,
             symbolName: symbolName,
             color: color,
@@ -146,10 +181,14 @@ public final class PracticeService {
             throw PracticeServiceError.missingRoutine
         }
 
-        let hasLiveProject = linkedProjectId.map { id in
-            snapshot.projects.contains { $0.id == id && $0.deletedAt == nil }
-        } ?? true
-        let storedProjectID = hasLiveProject ? linkedProjectId : nil
+        let routine = liveRoutine ?? recoveredRoutine
+        guard let storedProjectID = routine?.projectId,
+              let projectIndex = snapshot.projects.firstIndex(where: {
+                  $0.id == storedProjectID && $0.deletedAt == nil
+              }) else {
+            throw PracticeValidationError.missingProject
+        }
+        let requestedDifferentProject = linkedProjectId != nil && linkedProjectId != storedProjectID
         let timestamp = now()
         let session = try PracticeSession(
             id: sessionId,
@@ -163,15 +202,51 @@ public final class PracticeService {
             updatedAt: timestamp
         ).validated()
 
+        let project = snapshot.projects[projectIndex]
+        let durationMinutes = max(1, (activeDurationSeconds + 59) / 60)
+        let sessionNote = note?.trimmedForJournal.nilIfEmpty ?? routine?.name ?? "Practice"
+        let learningSession = try LearningSession(
+            id: sessionId,
+            projectId: storedProjectID,
+            source: .timer,
+            actionType: .practice,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationMinutes: durationMinutes,
+            note: sessionNote,
+            nextStepBefore: project.currentNextStep,
+            nextStepAfter: project.currentNextStep,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        var updatedProject = project
+        updatedProject.lastActionType = .practice
+        updatedProject.defaultDurationMinutes = durationMinutes
+        updatedProject.updatedAt = timestamp
+        let trailEvent = TrailEvent(
+            projectId: storedProjectID,
+            type: .session,
+            sourceId: learningSession.id,
+            occurredAt: timestamp,
+            title: "Practice session",
+            detail: sessionNote
+        )
+
         var upserts: [JournalEntity] = []
         if let recoveredRoutine {
             upserts.append(.practiceRoutine(try recoveredRoutine.validated()))
         }
-        upserts.append(.practiceSession(session))
+        upserts += [
+            .practiceSession(session),
+            .session(learningSession),
+            .project(updatedProject),
+            .trailEvent(trailEvent)
+        ]
         try repository.commit(JournalTransaction(upserts: upserts, origin: .user))
         return PracticeSessionSaveResult(
             session: session,
-            didDropMissingProjectLink: linkedProjectId != nil && !hasLiveProject
+            learningSession: learningSession,
+            didDropMissingProjectLink: requestedDifferentProject
         )
     }
 
@@ -218,4 +293,8 @@ public final class PracticeService {
             locale: Locale(identifier: "en_US_POSIX")
         )
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

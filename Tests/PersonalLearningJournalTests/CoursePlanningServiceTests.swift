@@ -22,13 +22,29 @@ final class CoursePlanningServiceTests: XCTestCase {
         _ = try service.activate(draftPlanID: firstDraft.id)
         let secondDraft = try service.saveDraft(input: input, draft: draft)
 
-        let activated = try service.activate(draftPlanID: secondDraft.id)
+        let proposal = try service.activate(draftPlanID: secondDraft.id)
         let snapshot = try repository.snapshot()
+        let activated = try XCTUnwrap(snapshot.coursePlans.first { $0.id == secondDraft.id })
 
         XCTAssertEqual(activated.status, .active)
+        XCTAssertEqual(proposal?.title, "Implement tokenizer")
+        XCTAssertEqual(snapshot.projects.first?.currentNextStep, "Read lecture 1")
         XCTAssertEqual(snapshot.projects.first?.activeCoursePlanId, secondDraft.id)
         XCTAssertEqual(snapshot.coursePlans.first { $0.id == firstDraft.id }?.status, .archived)
         XCTAssertEqual(snapshot.trailEvents.filter { $0.type == .planActivated }.count, 2)
+    }
+
+    func testCompletingPlannedSessionProposesButDoesNotReplaceCanonicalNextStep() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = CoursePlanningService(repository: repository, now: { self.timestamp })
+        let draftPlan = try service.saveDraft(input: input, draft: draftWithTwoSessions)
+        _ = try service.activate(draftPlanID: draftPlan.id)
+        let first = try XCTUnwrap(try repository.snapshot().plannedSessions.first { $0.title == "Implement tokenizer" })
+
+        let proposal = try service.complete(plannedSessionID: first.id, with: UUID())
+
+        XCTAssertEqual(proposal?.title, "Review tokenizer")
+        XCTAssertEqual(try repository.snapshot().projects.first?.currentNextStep, "Read lecture 1")
     }
 
     func testGenerationFailureLeavesJournalUnchanged() async throws {
@@ -101,6 +117,20 @@ final class CoursePlanningServiceTests: XCTestCase {
                 )
             ]
         )
+    }
+
+    private var draftWithTwoSessions: CoursePlanDraft {
+        var value = draft
+        value.sessions.append(
+            CoursePlanDraftSession(
+                id: "review",
+                phaseID: "foundations",
+                title: "Review tokenizer",
+                actionType: .review,
+                durationMinutes: 30
+            )
+        )
+        return value
     }
 }
 

@@ -2,8 +2,28 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class PracticeServiceTests: XCTestCase {
+    private let project = Project(name: "Practice Project", area: "Learning", goal: "Improve", status: .idea, currentNextStep: "")
+
+    func testPersistentRoutineRequiresExistingProject() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = PracticeService(repository: repository)
+
+        XCTAssertThrowsError(
+            try service.createRoutine(
+                projectId: nil,
+                name: "Guitar",
+                symbolName: "guitars",
+                color: .coral,
+                targetMinutes: 30,
+                weekdays: [2]
+            )
+        ) { error in
+            XCTAssertEqual(error as? PracticeValidationError, .missingProject)
+        }
+    }
+
     func testServiceValidatesAndCommitsRoutine() throws {
-        let repository = InMemoryJournalRepository()
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let timestamp = Date(timeIntervalSince1970: 1_000)
         let service = PracticeService(repository: repository, now: { timestamp })
 
@@ -21,7 +41,7 @@ final class PracticeServiceTests: XCTestCase {
     }
 
     func testServiceRejectsDuplicateActiveNameCaseInsensitively() throws {
-        let repository = InMemoryJournalRepository()
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = PracticeService(repository: repository)
         _ = try service.createRoutine(
             name: "Guitar",
@@ -43,7 +63,7 @@ final class PracticeServiceTests: XCTestCase {
     }
 
     func testArchivedRoutineDoesNotBlockDuplicateName() throws {
-        let repository = InMemoryJournalRepository()
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = PracticeService(repository: repository)
         let archived = try service.createRoutine(
             name: "Guitar",
@@ -66,7 +86,7 @@ final class PracticeServiceTests: XCTestCase {
     }
 
     func testUpdateAndArchiveRoutineRefreshUpdatedAt() throws {
-        let repository = InMemoryJournalRepository()
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         var timestamp = Date(timeIntervalSince1970: 1_000)
         let service = PracticeService(repository: repository, now: { timestamp })
         let routine = try service.createRoutine(
@@ -96,7 +116,7 @@ final class PracticeServiceTests: XCTestCase {
     }
 
     func testSaveSessionRequiresExistingNonDeletedRoutine() throws {
-        let repository = InMemoryJournalRepository()
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = PracticeService(repository: repository)
 
         XCTAssertThrowsError(
@@ -111,8 +131,8 @@ final class PracticeServiceTests: XCTestCase {
         )
     }
 
-    func testMissingLinkedProjectFallsBackToNil() throws {
-        let repository = InMemoryJournalRepository()
+    func testRoutineProjectWinsOverMissingCompletionOverrideAndCreatesLearningSession() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = PracticeService(repository: repository)
         let routine = try service.createRoutine(
             name: "Guitar",
@@ -131,13 +151,16 @@ final class PracticeServiceTests: XCTestCase {
             note: nil
         )
 
-        XCTAssertNil(result.session.linkedProjectId)
+        XCTAssertEqual(result.session.linkedProjectId, project.id)
         XCTAssertTrue(result.didDropMissingProjectLink)
         XCTAssertEqual(try repository.snapshot().practiceSessions, [result.session])
+        XCTAssertEqual(try repository.snapshot().sessions, [result.learningSession])
+        XCTAssertEqual(result.learningSession.id, result.session.id)
+        XCTAssertEqual(result.learningSession.projectId, project.id)
     }
 
     func testDeleteRoutineRejectsLiveSessionsAndSoftDeletesUnusedRoutine() throws {
-        let repository = InMemoryJournalRepository()
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = PracticeService(repository: repository)
         let routine = try service.createRoutine(
             name: "Guitar",
