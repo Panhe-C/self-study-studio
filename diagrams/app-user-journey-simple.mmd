@@ -1,0 +1,49 @@
+graph LR
+  U((用户))
+
+  subgraph F1[首次使用]
+    A1[Onboarding 建立项目]
+    A2[进入 Today]
+  end
+
+  subgraph F2[日常记录]
+    B1[Start 或 Quick Log]
+    B2[记录 Session]
+    B3[可选添加 Proof]
+  end
+
+  subgraph F3[周复盘]
+    C1[触发 Weekly Review]
+    C2[生成并编辑结论]
+    C3[确认下一步行动]
+  end
+
+  subgraph F4[导出留档]
+    D1[Library 浏览证据]
+    D2[Export 导出]
+  end
+
+  subgraph V[核心价值输出]
+    V1[学习持续推进\nNext Step 清晰]
+    V2[证据可回看\n成长可追溯]
+    V3[周度复盘闭环\n行动更聚焦]
+    V4[数据可携带\nJSON 与附件留存]
+  end
+
+  U --> A1 --> A2
+  A2 --> B1 --> B2 --> B3
+  B3 --> C1 --> C2 --> C3
+  C3 --> D1 --> D2
+
+  B2 --> V1
+  B3 --> V2
+  C2 --> V3
+  D2 --> V4
+
+  classDef flow fill:#EEF5FF,stroke:#4A78C2,stroke-width:1.2px,color:#1E2B45;
+  classDef value fill:#EEFBEF,stroke:#2E8B57,stroke-width:1.2px,color:#153824;
+  classDef user fill:#FFF4E5,stroke:#D48806,stroke-width:1.2px,color:#5C3B00;
+
+  class A1,A2,B1,B2,B3,C1,C2,C3,D1,D2 flow;
+  class V1,V2,V3,V4 value;
+  class U user;

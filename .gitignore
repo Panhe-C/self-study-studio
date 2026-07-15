@@ -3,3 +3,4 @@
 build/
 .worktrees/
 .DS_Store
+.gstack/

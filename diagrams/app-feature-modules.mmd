@@ -1,0 +1,67 @@
+graph LR
+  U[User]
+
+  subgraph UI[App 功能模块]
+    O[Onboarding]
+    T[Today]
+    S[Session 记录]
+    P[Proof 证据]
+    PR[Projects 项目]
+    R[Weekly Review]
+    L[Library 与 Export]
+  end
+
+  subgraph AppCore[应用核心]
+    VM[JournalViewModel]
+    JS[JournalService]
+    RS[ReviewService]
+    ES[ExportService]
+    AS[AttachmentStore]
+  end
+
+  subgraph Data[数据层]
+    ST[JournalStore]
+    JSON[(journal.json)]
+    ATT[(Attachments 文件)]
+    EXP[(Exports 目录)]
+  end
+
+  U --> O
+  O -->|创建 1 到 3 个项目| VM
+
+  U --> T
+  T -->|Start 或 Quick Log| S
+  T -->|触发周复盘| R
+
+  U --> PR
+  PR -->|编辑项目 状态 轨迹| VM
+  PR -->|发起记录与证据| S
+  PR -->|发起记录与证据| P
+
+  U --> S
+  S -->|Quick Log 或 Timer 保存| VM
+  S -->|保存后可继续加证据| P
+
+  U --> P
+  P -->|图片 音频 文件 链接| VM
+  P -->|附件写入| AS
+
+  U --> R
+  R -->|生成与编辑复盘| VM
+
+  U --> L
+  L -->|浏览证据 分组查看| VM
+  L -->|导出 JSON 与附件| ES
+
+  VM --> JS
+  VM --> RS
+  VM --> ES
+  VM --> AS
+
+  JS --> ST
+  RS --> JS
+  ES --> ST
+  AS --> ATT
+
+  ST --> JSON
+  ES --> EXP

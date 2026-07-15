@@ -1,0 +1,81 @@
+graph TD
+  U[用户]
+
+  subgraph Flow1[首次使用流程]
+    A1[打开 App]
+    A2[Onboarding 填写 1 到 3 个项目]
+    A3[进入 Today]
+    A4[完成第一次 Quick Log]
+    A5[形成首条 Session 与 Trail]
+    A1 --> A2 --> A3 --> A4 --> A5
+  end
+
+  subgraph Flow2[日常记录流程]
+    B1[Today 看到 Continue 卡片]
+    B2{选择记录方式}
+    B3[Quick Log]
+    B4[Timer]
+    B5[可选 Add Proof]
+    B6[更新 Next Step 与项目进展]
+    B1 --> B2
+    B2 --> B3
+    B2 --> B4
+    B3 --> B5
+    B4 --> B5
+    B5 --> B6
+  end
+
+  subgraph Flow3[周复盘流程]
+    C1[Today 出现 Weekly Review 提示]
+    C2[生成 Review]
+    C3[查看 Facts Patterns Decisions Next Steps]
+    C4[用户编辑并保存]
+    C5[必要时手动应用项目调整]
+    C1 --> C2 --> C3 --> C4 --> C5
+  end
+
+  subgraph Flow4[导出流程]
+    D1[进入 Library]
+    D2[按时间 项目 类型浏览 Proof]
+    D3[触发 Export]
+    D4[生成 journal.json 与附件目录]
+    D1 --> D2 --> D3 --> D4
+  end
+
+  subgraph Modules[对应功能模块]
+    M1[Onboarding 模块]
+    M2[Today 模块]
+    M3[Session 模块]
+    M4[Proof 模块]
+    M5[Projects 模块]
+    M6[Weekly Review 模块]
+    M7[Library Export 模块]
+    M8[Data 层]
+  end
+
+  U --> A1
+  U --> B1
+  U --> C1
+  U --> D1
+
+  A2 -.关联.-> M1
+  A3 -.关联.-> M2
+  A4 -.关联.-> M3
+  A5 -.写入.-> M8
+
+  B1 -.关联.-> M2
+  B3 -.关联.-> M3
+  B4 -.关联.-> M3
+  B5 -.关联.-> M4
+  B6 -.关联.-> M5
+  B6 -.写入.-> M8
+
+  C2 -.关联.-> M6
+  C3 -.依赖项目上下文.-> M5
+  C4 -.写入.-> M8
+  C5 -.回写项目状态与建议.-> M5
+
+  D1 -.关联.-> M7
+  D2 -.读取.-> M8
+  D3 -.关联.-> M7
+  D4 -.输出.-> M8
