@@ -224,6 +224,17 @@ public final class CalendarViewModel: ObservableObject {
         writableCalendars = try await calendarClient.writableCalendars()
     }
 
+    @discardableResult
+    public func configureDedicatedCalendar(
+        sharedCalendarConfirmed: Bool = false
+    ) async throws -> CalendarDescriptor {
+        let calendar = try await syncService.configureDedicatedCalendar(
+            sharedCalendarConfirmed: sharedCalendarConfirmed
+        )
+        writableCalendars = try await calendarClient.writableCalendars()
+        return calendar
+    }
+
     public func selectTargetCalendar(_ identifier: String?) throws {
         try repository.saveTargetCalendarIdentifier(identifier)
     }

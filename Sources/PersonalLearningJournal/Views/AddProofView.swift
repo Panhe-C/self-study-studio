@@ -18,6 +18,7 @@ struct AddProofView: View {
     @State private var title = ""
     @State private var statement = ""
     @State private var linkText = ""
+    @State private var artifactBody = ""
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedAttachmentData: Data?
     @State private var selectedFileURL: URL?
@@ -37,7 +38,7 @@ struct AddProofView: View {
                         }
                     }
                     TextField("Title", text: $title)
-                    TextField("What does this prove?", text: $statement, axis: .vertical)
+                    TextField("proof.statement", text: $statement, axis: .vertical)
                 }
 
                 Section("Attach") {
@@ -83,11 +84,21 @@ struct AddProofView: View {
                             .textContentType(.URL)
                     }
                 }
+
+                if type == .text {
+                    Section("Artifact") {
+                        TextEditor(text: $artifactBody)
+                            .frame(minHeight: 180)
+                        Text("Write or paste the inspectable result. This is separate from what you claim it proves.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            .navigationTitle("Add Proof")
+            .navigationTitle("proof.add")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("action.save") {
                         saveProof()
                     }
                 }
@@ -123,6 +134,7 @@ struct AddProofView: View {
         case .audio: "waveform"
         case .file: "doc"
         case .link: "link"
+        case .text: "text.alignleft"
         }
     }
 
@@ -173,6 +185,7 @@ struct AddProofView: View {
 
     private func saveProof() {
         do {
+            try validateDraft()
             if type == .link {
                 _ = try viewModel.addProof(
                     projectId: project.id,
@@ -181,6 +194,15 @@ struct AddProofView: View {
                     title: title,
                     statement: statement,
                     url: URL(string: linkText.trimmedForJournal)
+                )
+            } else if type == .text {
+                _ = try viewModel.addProof(
+                    projectId: project.id,
+                    sessionId: session?.id,
+                    type: .text,
+                    title: title,
+                    statement: statement,
+                    artifactBody: artifactBody
                 )
             } else if let data = selectedAttachmentData {
                 _ = try viewModel.addProofFromAttachmentData(
@@ -221,6 +243,31 @@ struct AddProofView: View {
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func validateDraft() throws {
+        guard !statement.trimmedForJournal.isEmpty else {
+            throw JournalValidationError.emptyProofStatement
+        }
+        switch type {
+        case .text:
+            guard !artifactBody.trimmedForJournal.isEmpty else {
+                throw JournalValidationError.missingProofArtifact
+            }
+        case .link:
+            guard let url = URL(string: linkText.trimmedForJournal),
+                  ProofArtifact.isValidWebURL(url) else {
+                throw JournalValidationError.invalidProofURL
+            }
+        case .image, .audio, .file:
+            let hasReadableData = selectedAttachmentData?.isEmpty == false
+            let hasReadableFile = selectedFileURL.map {
+                FileManager.default.isReadableFile(atPath: $0.path)
+            } ?? false
+            guard hasReadableData || hasReadableFile else {
+                throw JournalValidationError.missingProofArtifact
+            }
         }
     }
 

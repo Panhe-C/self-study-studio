@@ -13,6 +13,7 @@ public final class JournalViewModel: ObservableObject {
     @Published public private(set) var draftCoursePlan: CoursePlan?
     @Published public private(set) var coursePlanGenerationState: CoursePlanGenerationState
     @Published public private(set) var coursePlanValidationErrors: [CoursePlanningValidationError]
+    @Published public private(set) var pendingCanonicalNextStepProposal: CanonicalNextStepProposal?
     @Published private var rememberedCoursePlanningInputs: [UUID: CoursePlanningInput]
 
     private let journalService: JournalService
@@ -59,6 +60,7 @@ public final class JournalViewModel: ObservableObject {
         self.draftCoursePlan = nil
         self.coursePlanGenerationState = .idle
         self.coursePlanValidationErrors = []
+        self.pendingCanonicalNextStepProposal = nil
         self.rememberedCoursePlanningInputs = [:]
     }
 
@@ -114,6 +116,14 @@ public final class JournalViewModel: ObservableObject {
         scheduleAutomaticSyncIfNeeded()
     }
 
+    public func completeAccountSpaceTransfer(choice: AccountSpaceTransferChoice) throws {
+        try accountCoordinator?.completeTransfer(choice: choice)
+        refreshSyncRepositoryDetails()
+        bootstrapEntityCount = 0
+        refresh()
+        scheduleAutomaticSyncIfNeeded()
+    }
+
     public func resolveSyncConflict(id: UUID, using payload: Data) throws {
         guard let syncRepository else { return }
         guard let conflict = syncConflicts.first(where: { $0.id == id }) else { return }
@@ -131,7 +141,7 @@ public final class JournalViewModel: ObservableObject {
     }
 
     public var shouldShowMainTabs: Bool {
-        hasCompletedOnboarding || !projects.isEmpty
+        projects.contains { $0.status != .trash && $0.deletedAt == nil }
     }
 
     public var pendingFirstRecordProject: Project? {
@@ -149,6 +159,10 @@ public final class JournalViewModel: ObservableObject {
 
     public var proofs: [Proof] {
         snapshot.proofs
+    }
+
+    public var proofRevisions: [ProofRevision] {
+        snapshot.proofRevisions
     }
 
     public var reviews: [Review] {
@@ -177,6 +191,18 @@ public final class JournalViewModel: ObservableObject {
 
     public var continueCards: [Project] {
         journalService.todayContinueProjects()
+    }
+
+    public func todayRecommendations(
+        now: Date = Date(),
+        pinnedProjectIDs: Set<UUID> = []
+    ) -> [TodayRecommendation] {
+        TodayRecommendationService(pinnedProjectIDs: pinnedProjectIDs)
+            .recommendations(snapshot: snapshot, now: now)
+    }
+
+    public func productHealth(now: Date = Date()) -> ProductHealthReport {
+        ProductHealthService().report(snapshot: snapshot, now: now)
     }
 
     @discardableResult
@@ -220,6 +246,78 @@ public final class JournalViewModel: ObservableObject {
     }
 
     @discardableResult
+    public func createIdea(name: String, area: String) throws -> Project {
+        let project = try journalService.createIdea(name: name, area: area)
+        refresh()
+        return project
+    }
+
+    @discardableResult
+    public func activateProject(
+        projectId: UUID,
+        goal: String,
+        nextStep: String,
+        contract: EvidenceContract,
+        allowAttentionBudgetOverride: Bool = false
+    ) throws -> Project {
+        let project = try journalService.activateProject(
+            projectId: projectId,
+            goal: goal,
+            nextStep: nextStep,
+            contract: contract,
+            allowAttentionBudgetOverride: allowAttentionBudgetOverride
+        )
+        refresh()
+        return project
+    }
+
+    @discardableResult
+    public func reviseContract(projectId: UUID, contract: EvidenceContract) throws -> EvidenceContract {
+        let value = try journalService.reviseContract(projectId: projectId, contract: contract)
+        refresh()
+        return value
+    }
+
+    @discardableResult
+    public func acceptProof(
+        proofId: UUID,
+        contractId: UUID,
+        acceptedCriteria: [String]
+    ) throws -> EvidenceAcceptance {
+        let value = try journalService.acceptProof(
+            proofId: proofId,
+            contractId: contractId,
+            acceptedCriteria: acceptedCriteria
+        )
+        refresh()
+        return value
+    }
+
+    @discardableResult
+    public func completeReview(reviewId: UUID, decision: ReviewDecision) throws -> ReviewDecision {
+        let value = try journalService.completeReview(reviewId: reviewId, decision: decision)
+        refresh()
+        return value
+    }
+
+    @discardableResult
+    public func completeProject(projectId: UUID, decision: ReviewDecision) throws -> Project {
+        let value = try journalService.completeProject(projectId: projectId, decision: decision)
+        refresh()
+        return value
+    }
+
+    public func moveToTrash(projectId: UUID) throws {
+        try journalService.moveToTrash(projectId: projectId)
+        refresh()
+    }
+
+    public func restoreFromTrash(projectId: UUID) throws {
+        try journalService.restoreFromTrash(projectId: projectId)
+        refresh()
+    }
+
+    @discardableResult
     public func quickLog(
         projectId: UUID,
         actionType: ActionType? = nil,
@@ -238,6 +336,7 @@ public final class JournalViewModel: ObservableObject {
         )
         tryCompleteOnboarding(afterRecording: projectId)
         refresh()
+        captureNextStepProposal(after: plannedSessionId)
         return session
     }
 
@@ -324,16 +423,35 @@ public final class JournalViewModel: ObservableObject {
         }
     }
 
-    public func activateCoursePlan(draftPlanID: UUID) throws {
+    @discardableResult
+    public func activateCoursePlan(draftPlanID: UUID) throws -> CanonicalNextStepProposal? {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
-        _ = try coursePlanningService.activate(draftPlanID: draftPlanID)
+        let proposal = try coursePlanningService.activate(draftPlanID: draftPlanID)
+        pendingCanonicalNextStepProposal = proposal
         if draftCoursePlan?.id == draftPlanID {
             draftCoursePlan = nil
         }
         coursePlanGenerationState = .idle
         refresh()
+        return proposal
+    }
+
+    @discardableResult
+    public func confirmCanonicalNextStep(
+        _ proposal: CanonicalNextStepProposal,
+        title: String? = nil
+    ) throws -> Project {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        let project = try coursePlanningService.confirmNextStep(proposal, title: title)
+        if pendingCanonicalNextStepProposal == proposal {
+            pendingCanonicalNextStepProposal = nil
+        }
+        refresh()
+        return project
     }
 
     @discardableResult
@@ -407,6 +525,7 @@ public final class JournalViewModel: ObservableObject {
         )
         tryCompleteOnboarding(afterRecording: projectId)
         refresh()
+        captureNextStepProposal(after: plannedSessionId)
         return session
     }
 
@@ -421,7 +540,8 @@ public final class JournalViewModel: ObservableObject {
         localPath: String? = nil,
         url: URL? = nil,
         mimeType: String? = nil,
-        fileSize: Int? = nil
+        fileSize: Int? = nil,
+        artifactBody: String? = nil
     ) throws -> Proof {
         let proof = try journalService.addProof(
             id: id,
@@ -433,11 +553,35 @@ public final class JournalViewModel: ObservableObject {
             localPath: localPath,
             url: url,
             mimeType: mimeType,
-            fileSize: fileSize
+            fileSize: fileSize,
+            artifactBody: artifactBody
         )
         tryCompleteOnboarding(afterRecording: projectId)
         refresh()
         return proof
+    }
+
+    @discardableResult
+    public func reviseProof(
+        proofId: UUID,
+        title: String,
+        statement: String,
+        artifactBody: String? = nil
+    ) throws -> Proof {
+        let proof = try journalService.reviseProof(
+            proofId: proofId,
+            title: title,
+            statement: statement,
+            artifactBody: artifactBody
+        )
+        refresh()
+        return proof
+    }
+
+    public func proofRevisions(for proofId: UUID) -> [ProofRevision] {
+        snapshot.proofRevisions
+            .filter { $0.proofId == proofId && $0.deletedAt == nil }
+            .sorted { $0.revision > $1.revision }
     }
 
     @discardableResult
@@ -611,6 +755,7 @@ public final class JournalViewModel: ObservableObject {
 
         return PracticeRoutine(
             id: routineId,
+            projectId: syncedRoutine?.projectId,
             name: presentation?.name ?? syncedRoutine?.name ?? "Practice",
             symbolName: presentation?.symbolName ?? syncedRoutine?.symbolName ?? "timer",
             color: presentation?.color ?? syncedRoutine?.color ?? .teal,
@@ -634,7 +779,31 @@ public final class JournalViewModel: ObservableObject {
         weekdays: Set<Int>,
         reminderTime: PracticeReminderTime? = nil
     ) throws -> PracticeRoutine {
+        let projects = snapshot.projects.filter { $0.deletedAt == nil && $0.status != .trash }
+        guard projects.count == 1 else { throw PracticeValidationError.missingProject }
+        return try createPracticeRoutine(
+            projectId: projects[0].id,
+            name: name,
+            symbolName: symbolName,
+            color: color,
+            targetMinutes: targetMinutes,
+            weekdays: weekdays,
+            reminderTime: reminderTime
+        )
+    }
+
+    @discardableResult
+    public func createPracticeRoutine(
+        projectId: UUID,
+        name: String,
+        symbolName: String,
+        color: PracticeSemanticColor,
+        targetMinutes: Int,
+        weekdays: Set<Int>,
+        reminderTime: PracticeReminderTime? = nil
+    ) throws -> PracticeRoutine {
         let routine = try practiceService.createRoutine(
+            projectId: projectId,
             name: name,
             symbolName: symbolName,
             color: color,
@@ -884,6 +1053,14 @@ public final class JournalViewModel: ObservableObject {
             return .proof(try JSONDecoder.journal.decode(Proof.self, from: payload))
         case .review:
             return .review(try JSONDecoder.journal.decode(Review.self, from: payload))
+        case .evidenceContract:
+            return .evidenceContract(try JSONDecoder.journal.decode(EvidenceContract.self, from: payload))
+        case .evidenceAcceptance:
+            return .evidenceAcceptance(try JSONDecoder.journal.decode(EvidenceAcceptance.self, from: payload))
+        case .proofRevision:
+            return .proofRevision(try JSONDecoder.journal.decode(ProofRevision.self, from: payload))
+        case .reviewDecision:
+            return .reviewDecision(try JSONDecoder.journal.decode(ReviewDecision.self, from: payload))
         case .trailEvent:
             return .trailEvent(try JSONDecoder.journal.decode(TrailEvent.self, from: payload))
         case .coursePlan:
@@ -906,6 +1083,13 @@ public final class JournalViewModel: ObservableObject {
     private func tryCompleteOnboarding(afterRecording projectId: UUID) {
         guard snapshot.pendingFirstRecordProjectId == projectId else { return }
         try? journalService.completeOnboarding()
+    }
+
+    private func captureNextStepProposal(after plannedSessionId: UUID?) {
+        guard let plannedSessionId, let coursePlanningService else { return }
+        pendingCanonicalNextStepProposal = try? coursePlanningService.nextStepProposal(
+            after: plannedSessionId
+        )
     }
 
     private func coursePlanningContext(for projectId: UUID) -> CoursePlanningContext {

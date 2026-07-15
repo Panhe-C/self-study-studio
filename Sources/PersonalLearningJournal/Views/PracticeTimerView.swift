@@ -198,16 +198,10 @@ public struct PracticeTimerView: View {
             Section("Optional Details") {
                 TextField("Note", text: noteBinding, axis: .vertical)
                     .lineLimit(3...6)
-
-                Picker("Related Project", selection: projectBinding) {
-                    Text("None").tag(Optional<UUID>.none)
-                    if let missingProjectID = missingSelectedProjectID {
-                        Text("Unavailable Project").tag(Optional(missingProjectID))
-                    }
-                    ForEach(availableProjects) { project in
-                        Text(project.name).tag(Optional(project.id))
-                    }
-                }
+                LabeledContent(
+                    "Project",
+                    value: availableProjects.first(where: { $0.id == routine.projectId })?.name ?? "Unavailable"
+                )
             }
 
             Section {
@@ -250,27 +244,11 @@ public struct PracticeTimerView: View {
         return timer.pendingCompletion
     }
 
-    private var missingSelectedProjectID: UUID? {
-        guard let projectID = pendingDraft?.linkedProjectId,
-              !availableProjects.contains(where: { $0.id == projectID }) else {
-            return nil
-        }
-        return projectID
-    }
-
     private var noteBinding: Binding<String> {
         Binding {
             pendingDraft?.note ?? ""
         } set: { newValue in
             updatePendingDraft(note: newValue, linkedProjectId: pendingDraft?.linkedProjectId)
-        }
-    }
-
-    private var projectBinding: Binding<UUID?> {
-        Binding {
-            pendingDraft?.linkedProjectId
-        } set: { newValue in
-            updatePendingDraft(note: pendingDraft?.note ?? "", linkedProjectId: newValue)
         }
     }
 
@@ -355,7 +333,7 @@ public struct PracticeTimerView: View {
         do {
             let result = try viewModel.savePracticeCompletion(
                 draft.completion,
-                linkedProjectId: draft.linkedProjectId,
+                linkedProjectId: routine.projectId,
                 note: draft.note.trimmedForJournal.nilIfEmpty
             )
             if result.didDropMissingProjectLink {

@@ -5,6 +5,7 @@ public enum ProofPreviewKind: Equatable, Sendable {
     case audio(URL)
     case file(URL)
     case link(URL)
+    case text(String)
     case unavailable
 }
 
@@ -20,7 +21,17 @@ public struct ProofPreviewDescriptor: Equatable, Sendable {
         case .file:
             kind = Self.localKind(for: proof.localPath, as: .file)
         case .link:
-            kind = proof.url.map(ProofPreviewKind.link) ?? .unavailable
+            if let url = proof.url, ProofArtifact.isValidWebURL(url) {
+                kind = .link(url)
+            } else {
+                kind = .unavailable
+            }
+        case .text:
+            if let body = proof.artifactBody, !body.trimmedForJournal.isEmpty {
+                kind = .text(body)
+            } else {
+                kind = .unavailable
+            }
         }
     }
 
@@ -28,13 +39,18 @@ public struct ProofPreviewDescriptor: Equatable, Sendable {
         for localPath: String?,
         as type: ProofType
     ) -> ProofPreviewKind {
-        guard let localPath, !localPath.isEmpty else { return .unavailable }
+        guard let localPath,
+              !localPath.isEmpty,
+              FileManager.default.isReadableFile(atPath: localPath) else {
+            return .unavailable
+        }
         let url = URL(fileURLWithPath: localPath)
         return switch type {
         case .image: .image(url)
         case .audio: .audio(url)
         case .file: .file(url)
         case .link: .unavailable
+        case .text: .unavailable
         }
     }
 }

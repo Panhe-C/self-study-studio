@@ -2,6 +2,65 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class SwiftDataJournalRepositoryTests: XCTestCase {
+    func testEvidenceFirstEntitiesRoundTripWithOutboxAcrossRestart() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("evidence-first.store")
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let projectID = UUID()
+        let proofID = UUID()
+        let reviewID = UUID()
+        let contract = try EvidenceContract.weekly(
+            projectId: projectID,
+            expectedArtifact: .text,
+            acceptanceCriteria: "Explains the result",
+            startsAt: timestamp
+        )
+        let acceptance = EvidenceAcceptance(
+            contractId: contract.id,
+            proofId: proofID,
+            acceptedCriteria: ["Explains the result"],
+            acceptedAt: timestamp
+        )
+        let revision = ProofRevision(
+            proofId: proofID,
+            revision: 1,
+            title: "Week one notes",
+            statement: "I can explain the result.",
+            artifactChecksum: "sha256:notes",
+            createdAt: timestamp
+        )
+        let decision = ReviewDecision(
+            reviewId: reviewID,
+            projectId: projectID,
+            kind: .continueUnchanged,
+            decidedAt: timestamp
+        )
+
+        try autoreleasepool {
+            let repository = try SwiftDataJournalRepository(url: url)
+            try repository.commit(
+                JournalTransaction(
+                    upserts: [
+                        .evidenceContract(contract),
+                        .evidenceAcceptance(acceptance),
+                        .proofRevision(revision),
+                        .reviewDecision(decision)
+                    ],
+                    origin: .user
+                )
+            )
+        }
+
+        let reopened = try SwiftDataJournalRepository(url: url)
+        let snapshot = try reopened.snapshot()
+        XCTAssertEqual(snapshot.evidenceContracts, [contract])
+        XCTAssertEqual(snapshot.evidenceAcceptances, [acceptance])
+        XCTAssertEqual(snapshot.proofRevisions, [revision])
+        XCTAssertEqual(snapshot.reviewDecisions, [decision])
+        XCTAssertEqual(try reopened.pendingMutations(limit: 10).count, 4)
+    }
+
     func testPracticeEntitiesSurviveSwiftDataRestartAndSoftDeletion() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

@@ -100,9 +100,9 @@ public struct LibraryView: View {
     }
 
     private var filteredProofs: [Proof] {
-        viewModel.proofs
-            .filter { StudioPresentation.proofMatches(query: searchText, proof: $0, projectName: projectName(for: $0)) }
-            .sorted { $0.createdAt > $1.createdAt }
+        ProofSearchIndex(snapshot: viewModel.snapshot)
+            .search(searchText)
+            .map(\.proof)
     }
 
     private var evidenceGrid: some View {
@@ -112,7 +112,7 @@ public struct LibraryView: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 16) {
                     ForEach(section.proofs) { proof in
                         NavigationLink {
-                            ProofDetailView(proof: proof, projectName: projectName(for: proof), sessionSummary: sessionSummary(for: proof))
+                            ProofDetailView(viewModel: viewModel, proof: proof, projectName: projectName(for: proof), sessionSummary: sessionSummary(for: proof))
                         } label: {
                             evidenceCard(proof)
                         }
@@ -228,6 +228,7 @@ public struct LibraryView: View {
         case .audio: "waveform"
         case .file: "doc.text.fill"
         case .link: "link"
+        case .text: "text.alignleft"
         }
     }
 
@@ -243,7 +244,7 @@ public struct LibraryView: View {
     }
 
     private var timeSections: [ProofSection] {
-        let grouped = Dictionary(grouping: viewModel.proofs) { proof in
+        let grouped = Dictionary(grouping: viewModel.proofs.filter(\.qualifies)) { proof in
             Calendar.current.startOfDay(for: proof.createdAt)
         }
 
@@ -260,7 +261,7 @@ public struct LibraryView: View {
     private func groupedSections(
         by title: (Proof) -> String
     ) -> [ProofSection] {
-        let grouped = Dictionary(grouping: viewModel.proofs, by: title)
+        let grouped = Dictionary(grouping: viewModel.proofs.filter(\.qualifies), by: title)
 
         return grouped.keys
             .sorted()
@@ -416,6 +417,7 @@ private struct ProofRow: View {
         case .audio: "waveform"
         case .file: "doc"
         case .link: "link"
+        case .text: "text.alignleft"
         }
     }
 }

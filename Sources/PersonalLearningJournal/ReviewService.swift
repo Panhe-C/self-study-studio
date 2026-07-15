@@ -147,9 +147,11 @@ enum PracticeReviewContext {
         periodStart: Date,
         periodEnd: Date
     ) -> [PracticeSession] {
-        snapshot.practiceSessions.filter {
+        let mirroredLearningSessionIDs = Set(snapshot.sessions.map(\.id))
+        return snapshot.practiceSessions.filter {
             $0.deletedAt == nil
                 && $0.linkedProjectId != nil
+                && !mirroredLearningSessionIDs.contains($0.id)
                 && $0.endedAt >= periodStart
                 && $0.endedAt <= periodEnd
         }
@@ -285,13 +287,12 @@ public struct RuleBasedReviewProvider: AIReviewProvider {
 
         let selectedFacts = Array(facts.prefix(3))
         let selectedPatterns = Array(patterns.prefix(3))
-        let selectedDecisions = Array(decisions.prefix(3))
-        let selectedInsights = Set(selectedFacts + selectedPatterns + selectedDecisions)
+        let selectedInsights = Set(selectedFacts + selectedPatterns)
 
         return ReviewDraft(
             facts: selectedFacts,
             patterns: selectedPatterns,
-            decisions: selectedDecisions,
+            decisions: [],
             projectRecommendations: recommendations,
             nextSteps: nextSteps,
             sourceSummary: Array(sources.prefix(12)),
@@ -362,7 +363,7 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
                 periodEnd: periodEnd,
                 projects: snapshot.projects,
                 sessions: snapshot.sessions,
-                proofs: snapshot.proofs,
+                proofs: snapshot.proofs.map(HTTPAIProofMetadata.init),
                 practiceSessions: practiceSessions,
                 practiceSources: PracticeReviewContext.sources(
                     for: practiceSessions,
@@ -386,7 +387,7 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
         let response = try JSONDecoder.journal.decode(HTTPAIReviewResponse.self, from: data)
         var sourceReferences = response.sourceReferences ?? [:]
         if !response.sourceSummary.isEmpty {
-            for insight in response.facts + response.patterns + response.decisions
+            for insight in response.facts + response.patterns
             where sourceReferences[insight, default: []].isEmpty {
                 sourceReferences[insight] = response.sourceSummary
             }
@@ -394,7 +395,7 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
         return ReviewDraft(
             facts: response.facts,
             patterns: response.patterns,
-            decisions: response.decisions,
+            decisions: [],
             projectRecommendations: response.projectRecommendations.compactMapKeys(UUID.init)
                 .compactMapValues(ProjectStatus.init(rawValue:)),
             nextSteps: response.nextSteps.compactMapKeys(UUID.init),
@@ -437,7 +438,7 @@ public final class ReviewService {
             draft = ReviewDraft(
                 facts: ["AI review unavailable; create a manual weekly review."],
                 patterns: ["Manual review needed."],
-                decisions: ["Choose one project to continue, lower, or pause."],
+                decisions: [],
                 projectRecommendations: [:],
                 nextSteps: [:],
                 sourceSummary: [],
@@ -451,7 +452,7 @@ public final class ReviewService {
             periodEnd: periodEnd,
             facts: draft.facts,
             patterns: draft.patterns,
-            decisions: draft.decisions,
+            decisions: [],
             projectRecommendations: draft.projectRecommendations,
             nextSteps: draft.nextSteps,
             aiSourceSummary: draft.sourceSummary,
@@ -470,10 +471,28 @@ private struct HTTPAIReviewRequest: Codable {
     var periodEnd: Date
     var projects: [Project]
     var sessions: [LearningSession]
-    var proofs: [Proof]
+    var proofs: [HTTPAIProofMetadata]
     var practiceSessions: [PracticeSession]
     var practiceSources: [String]
     var planProgress: [CoursePlanReviewProgress]
+}
+
+private struct HTTPAIProofMetadata: Codable {
+    var id: UUID
+    var projectId: UUID
+    var sessionId: UUID?
+    var type: ProofType
+    var title: String
+    var statement: String
+
+    init(_ proof: Proof) {
+        id = proof.id
+        projectId = proof.projectId
+        sessionId = proof.sessionId
+        type = proof.type
+        title = proof.title
+        statement = proof.statement
+    }
 }
 
 private struct HTTPAIReviewResponse: Codable {

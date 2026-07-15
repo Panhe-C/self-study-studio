@@ -5,6 +5,8 @@ struct CoursePlanDetailView: View {
     private let project: Project
     private let plan: CoursePlan
     @State private var showingRevision = false
+    @State private var proposedNextStep = ""
+    @State private var errorMessage: String?
 
     init(viewModel: JournalViewModel, project: Project, plan: CoursePlan) {
         self.viewModel = viewModel
@@ -14,6 +16,27 @@ struct CoursePlanDetailView: View {
 
     var body: some View {
         List {
+            if let proposal = viewModel.pendingCanonicalNextStepProposal,
+               proposal.projectId == project.id {
+                Section("Canonical Next Step proposal") {
+                    Text(proposal.reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Next Step", text: $proposedNextStep)
+                    Button("Confirm Next Step") {
+                        do {
+                            _ = try viewModel.confirmCanonicalNextStep(
+                                proposal,
+                                title: proposedNextStep
+                            )
+                        } catch {
+                            errorMessage = error.localizedDescription
+                        }
+                    }
+                    .disabled(proposedNextStep.trimmedForJournal.isEmpty)
+                }
+            }
+
             Section("Revision \(plan.revision)") {
                 LabeledContent("Status", value: plan.status.rawValue.capitalized)
                 LabeledContent("Weekly budget", value: "\(plan.weeklyBudgetMinutes) min")
@@ -75,6 +98,17 @@ struct CoursePlanDetailView: View {
             }
         }
         .navigationTitle(plan.courseTitle)
+        .onAppear {
+            if let proposal = viewModel.pendingCanonicalNextStepProposal,
+               proposal.projectId == project.id {
+                proposedNextStep = proposal.title
+            }
+        }
+        .onChange(of: viewModel.pendingCanonicalNextStepProposal) { _, proposal in
+            if proposal?.projectId == project.id {
+                proposedNextStep = proposal?.title ?? ""
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -86,6 +120,11 @@ struct CoursePlanDetailView: View {
         }
         .sheet(isPresented: $showingRevision) {
             CoursePlanWizardView(viewModel: viewModel, project: project, revisionSource: plan)
+        }
+        .alert("Could not update Next Step", isPresented: .constant(errorMessage != nil)) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 }

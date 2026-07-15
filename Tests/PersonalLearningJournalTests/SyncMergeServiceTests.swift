@@ -2,6 +2,65 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class SyncMergeServiceTests: XCTestCase {
+    func testDisjointEvidenceContractEditsMergeAndKeepBothCommitments() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_000)
+        let base = try EvidenceContract(
+            projectId: UUID(),
+            trigger: .interval(days: 7),
+            expectedArtifact: .text,
+            acceptanceCriteria: "Explain the result",
+            startsAt: timestamp,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        var local = base
+        local.acceptanceCriteria = "Explain and demonstrate the result"
+        local.updatedAt = timestamp.addingTimeInterval(60)
+        var server = base
+        server.trigger = .interval(days: 14)
+        server.updatedAt = timestamp.addingTimeInterval(120)
+
+        let result = try SyncMergeService().merge(
+            base: .evidenceContract(base),
+            local: .evidenceContract(local),
+            server: .evidenceContract(server)
+        )
+
+        guard case let .merged(.evidenceContract(merged)) = result else {
+            return XCTFail("Expected merged Evidence Contract")
+        }
+        XCTAssertEqual(merged.acceptanceCriteria, local.acceptanceCriteria)
+        XCTAssertEqual(merged.trigger, server.trigger)
+        XCTAssertEqual(merged.updatedAt, server.updatedAt)
+    }
+
+    func testDivergentAppendOnlyDecisionsCreateConflictWithoutDroppingEitherPayload() throws {
+        let projectID = UUID()
+        let reviewID = UUID()
+        let base = ReviewDecision(
+            reviewId: reviewID,
+            projectId: projectID,
+            kind: .continueUnchanged
+        )
+        var local = base
+        local.kind = .pause
+        var server = base
+        server.kind = .archive
+
+        let result = try SyncMergeService().merge(
+            base: .reviewDecision(base),
+            local: .reviewDecision(local),
+            server: .reviewDecision(server)
+        )
+
+        guard case let .conflict(conflict) = result else {
+            return XCTFail("Expected append-only conflict")
+        }
+        XCTAssertEqual(conflict.conflictingFields, ["kind"])
+        XCTAssertFalse(conflict.localPayload.isEmpty)
+        XCTAssertFalse(conflict.serverPayload.isEmpty)
+    }
+
     func testDisjointProjectEditsMergeWithoutConflict() throws {
         let base = Project(
             id: UUID(),

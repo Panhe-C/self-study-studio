@@ -22,7 +22,7 @@ public struct QuickLogView: View {
         self.plannedSession = plannedSession
         _actionType = State(initialValue: plannedSession?.actionType ?? project.lastActionType)
         _durationMinutes = State(initialValue: plannedSession?.durationMinutes ?? project.defaultDurationMinutes)
-        _nextStep = State(initialValue: project.currentNextStep)
+        _nextStep = State(initialValue: "")
     }
 
     public var body: some View {
@@ -53,7 +53,11 @@ public struct QuickLogView: View {
 
                     Stepper("Duration: \(durationMinutes) min", value: $durationMinutes, in: 1...480, step: 5)
                     TextField("One sentence", text: $note, axis: .vertical)
-                    TextField("Next Step", text: $nextStep, axis: .vertical)
+                }
+
+                Section("Confirm Next Step") {
+                    LabeledContent("Current", value: project.currentNextStep)
+                    TextField("Replacement (optional)", text: $nextStep, axis: .vertical)
                 }
             }
             .navigationTitle("Quick Log")
@@ -92,6 +96,11 @@ public struct QuickLogView: View {
         !note.trimmedForJournal.isEmpty
     }
 
+    static func confirmedNextStep(current: String, replacement: String) -> String {
+        let replacement = replacement.trimmedForJournal
+        return replacement.isEmpty ? current : replacement
+    }
+
     private func save(addProof: Bool) {
         do {
             let session = try viewModel.quickLog(
@@ -99,7 +108,10 @@ public struct QuickLogView: View {
                 actionType: actionType,
                 durationMinutes: durationMinutes,
                 note: note,
-                nextStep: nextStep,
+                nextStep: Self.confirmedNextStep(
+                    current: project.currentNextStep,
+                    replacement: nextStep
+                ),
                 plannedSessionId: plannedSession?.id
             )
             if addProof {

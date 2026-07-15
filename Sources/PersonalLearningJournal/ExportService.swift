@@ -7,6 +7,11 @@ public struct JournalExport: Codable, Equatable, Sendable {
     public var sessions: [LearningSession]
     public var proofs: [Proof]
     public var reviews: [Review]
+    public var evidenceContracts: [EvidenceContract]
+    public var evidenceAcceptances: [EvidenceAcceptance]
+    public var proofRevisions: [ProofRevision]
+    public var reviewDecisions: [ReviewDecision]
+    public var trailEvents: [TrailEvent]
     public var coursePlans: [CoursePlan]
     public var planPhases: [PlanPhase]
     public var plannedSessions: [PlannedSession]
@@ -22,6 +27,11 @@ public struct JournalExport: Codable, Equatable, Sendable {
         sessions: [LearningSession],
         proofs: [Proof],
         reviews: [Review],
+        evidenceContracts: [EvidenceContract] = [],
+        evidenceAcceptances: [EvidenceAcceptance] = [],
+        proofRevisions: [ProofRevision] = [],
+        reviewDecisions: [ReviewDecision] = [],
+        trailEvents: [TrailEvent] = [],
         coursePlans: [CoursePlan] = [],
         planPhases: [PlanPhase] = [],
         plannedSessions: [PlannedSession] = [],
@@ -36,6 +46,11 @@ public struct JournalExport: Codable, Equatable, Sendable {
         self.sessions = sessions
         self.proofs = proofs
         self.reviews = reviews
+        self.evidenceContracts = evidenceContracts
+        self.evidenceAcceptances = evidenceAcceptances
+        self.proofRevisions = proofRevisions
+        self.reviewDecisions = reviewDecisions
+        self.trailEvents = trailEvents
         self.coursePlans = coursePlans
         self.planPhases = planPhases
         self.plannedSessions = plannedSessions
@@ -52,6 +67,11 @@ public struct JournalExport: Codable, Equatable, Sendable {
         case sessions
         case proofs
         case reviews
+        case evidenceContracts
+        case evidenceAcceptances
+        case proofRevisions
+        case reviewDecisions
+        case trailEvents
         case coursePlans
         case planPhases
         case plannedSessions
@@ -69,6 +89,11 @@ public struct JournalExport: Codable, Equatable, Sendable {
         sessions = try container.decode([LearningSession].self, forKey: .sessions)
         proofs = try container.decode([Proof].self, forKey: .proofs)
         reviews = try container.decode([Review].self, forKey: .reviews)
+        evidenceContracts = try container.decodeIfPresent([EvidenceContract].self, forKey: .evidenceContracts) ?? []
+        evidenceAcceptances = try container.decodeIfPresent([EvidenceAcceptance].self, forKey: .evidenceAcceptances) ?? []
+        proofRevisions = try container.decodeIfPresent([ProofRevision].self, forKey: .proofRevisions) ?? []
+        reviewDecisions = try container.decodeIfPresent([ReviewDecision].self, forKey: .reviewDecisions) ?? []
+        trailEvents = try container.decodeIfPresent([TrailEvent].self, forKey: .trailEvents) ?? []
         coursePlans = try container.decode([CoursePlan].self, forKey: .coursePlans)
         planPhases = try container.decode([PlanPhase].self, forKey: .planPhases)
         plannedSessions = try container.decode([PlannedSession].self, forKey: .plannedSessions)
@@ -108,6 +133,11 @@ public struct ExportService {
             sessions: snapshot.sessions,
             proofs: exportProofs,
             reviews: snapshot.reviews,
+            evidenceContracts: snapshot.evidenceContracts,
+            evidenceAcceptances: snapshot.evidenceAcceptances,
+            proofRevisions: snapshot.proofRevisions,
+            reviewDecisions: snapshot.reviewDecisions,
+            trailEvents: snapshot.trailEvents,
             coursePlans: snapshot.coursePlans,
             planPhases: snapshot.planPhases,
             plannedSessions: snapshot.plannedSessions,
@@ -117,6 +147,21 @@ public struct ExportService {
             practiceSessions: snapshot.practiceSessions
         )
         return try JSONEncoder.journal.encode(export)
+    }
+
+    public func exportArchive(
+        snapshot: JournalSnapshot,
+        attachments: [String: Data],
+        password: String?,
+        allowUnencrypted: Bool = false,
+        derivationRounds: Int = 10_000
+    ) throws -> JournalArchiveEnvelope {
+        try JournalArchiveService(now: now, derivationRounds: derivationRounds).export(
+            snapshot: snapshot,
+            attachments: attachments,
+            password: password,
+            allowUnencrypted: allowUnencrypted
+        )
     }
 
     public func exportBundle(

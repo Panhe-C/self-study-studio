@@ -6,6 +6,10 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
     public var sessions: [LearningSession]
     public var proofs: [Proof]
     public var reviews: [Review]
+    public var evidenceContracts: [EvidenceContract]
+    public var evidenceAcceptances: [EvidenceAcceptance]
+    public var proofRevisions: [ProofRevision]
+    public var reviewDecisions: [ReviewDecision]
     public var trailEvents: [TrailEvent]
     public var coursePlans: [CoursePlan]
     public var planPhases: [PlanPhase]
@@ -22,6 +26,10 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         sessions: [LearningSession] = [],
         proofs: [Proof] = [],
         reviews: [Review] = [],
+        evidenceContracts: [EvidenceContract] = [],
+        evidenceAcceptances: [EvidenceAcceptance] = [],
+        proofRevisions: [ProofRevision] = [],
+        reviewDecisions: [ReviewDecision] = [],
         trailEvents: [TrailEvent] = [],
         coursePlans: [CoursePlan] = [],
         planPhases: [PlanPhase] = [],
@@ -37,6 +45,10 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         self.sessions = sessions
         self.proofs = proofs
         self.reviews = reviews
+        self.evidenceContracts = evidenceContracts
+        self.evidenceAcceptances = evidenceAcceptances
+        self.proofRevisions = proofRevisions
+        self.reviewDecisions = reviewDecisions
         self.trailEvents = trailEvents
         self.coursePlans = coursePlans
         self.planPhases = planPhases
@@ -54,6 +66,10 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         case sessions
         case proofs
         case reviews
+        case evidenceContracts
+        case evidenceAcceptances
+        case proofRevisions
+        case reviewDecisions
         case trailEvents
         case coursePlans
         case planPhases
@@ -72,6 +88,10 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         sessions = try container.decodeIfPresent([LearningSession].self, forKey: .sessions) ?? []
         proofs = try container.decodeIfPresent([Proof].self, forKey: .proofs) ?? []
         reviews = try container.decodeIfPresent([Review].self, forKey: .reviews) ?? []
+        evidenceContracts = try container.decodeIfPresent([EvidenceContract].self, forKey: .evidenceContracts) ?? []
+        evidenceAcceptances = try container.decodeIfPresent([EvidenceAcceptance].self, forKey: .evidenceAcceptances) ?? []
+        proofRevisions = try container.decodeIfPresent([ProofRevision].self, forKey: .proofRevisions) ?? []
+        reviewDecisions = try container.decodeIfPresent([ReviewDecision].self, forKey: .reviewDecisions) ?? []
         trailEvents = try container.decodeIfPresent([TrailEvent].self, forKey: .trailEvents) ?? []
         coursePlans = try container.decodeIfPresent([CoursePlan].self, forKey: .coursePlans) ?? []
         planPhases = try container.decodeIfPresent([PlanPhase].self, forKey: .planPhases) ?? []

@@ -11,6 +11,7 @@ public enum CalendarClientError: Error, Equatable, Sendable {
     case accessDenied
     case calendarUnavailable
     case eventUnavailable
+    case sharedCalendarConfirmationRequired
 }
 
 public struct CalendarDescriptor: Equatable, Identifiable, Sendable {
@@ -18,12 +19,20 @@ public struct CalendarDescriptor: Equatable, Identifiable, Sendable {
     public var title: String
     public var allowsContentModifications: Bool
     public var isDefault: Bool
+    public var isShared: Bool
 
-    public init(id: String, title: String, allowsContentModifications: Bool, isDefault: Bool) {
+    public init(
+        id: String,
+        title: String,
+        allowsContentModifications: Bool,
+        isDefault: Bool,
+        isShared: Bool = false
+    ) {
         self.id = id
         self.title = title
         self.allowsContentModifications = allowsContentModifications
         self.isDefault = isDefault
+        self.isShared = isShared
     }
 }
 
@@ -31,8 +40,15 @@ public protocol CalendarClient: Sendable {
     func authorizationState() async -> CalendarAuthorizationState
     func requestFullAccess() async throws -> CalendarAuthorizationState
     func writableCalendars() async throws -> [CalendarDescriptor]
+    func createCalendar(named title: String) async throws -> CalendarDescriptor
     func busyIntervals(in range: DateInterval) async throws -> [BusyInterval]
     func event(identifier: String) async throws -> CalendarEventSnapshot?
     func save(_ event: CalendarEventDraft) async throws -> CalendarEventSnapshot
     func delete(identifier: String) async throws
+}
+
+public extension CalendarClient {
+    func createCalendar(named title: String) async throws -> CalendarDescriptor {
+        throw CalendarClientError.calendarUnavailable
+    }
 }

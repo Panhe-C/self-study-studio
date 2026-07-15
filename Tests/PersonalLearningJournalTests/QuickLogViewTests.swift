@@ -15,4 +15,15 @@ final class QuickLogViewTests: XCTestCase {
             "Add one sentence about what you worked on."
         )
     }
+
+    func testBlankReplacementKeepsCanonicalNextStep() {
+        XCTAssertEqual(
+            QuickLogView.confirmedNextStep(current: "Write the demo", replacement: "  "),
+            "Write the demo"
+        )
+        XCTAssertEqual(
+            QuickLogView.confirmedNextStep(current: "Write the demo", replacement: "Ship it"),
+            "Ship it"
+        )
+    }
 }

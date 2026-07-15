@@ -66,7 +66,7 @@ final class PracticeTimerEndToEndTests: XCTestCase {
         )
 
         XCTAssertEqual(result.session.id, pendingID)
-        XCTAssertNil(result.session.linkedProjectId)
+        XCTAssertEqual(result.session.linkedProjectId, routine.projectId)
         XCTAssertTrue(result.didDropMissingProjectLink)
         XCTAssertNil(fixture.viewModel.practiceTimer.pendingCompletion)
     }
@@ -122,6 +122,7 @@ final class PracticeTimerEndToEndTests: XCTestCase {
 
     func testRoutineDraftValidationUsesTrimmedCaseInsensitiveActiveNames() {
         let existing = PracticeRoutine(
+            projectId: UUID(),
             name: "Guitar",
             symbolName: "guitars",
             color: .coral,
@@ -129,6 +130,7 @@ final class PracticeTimerEndToEndTests: XCTestCase {
             weekdays: [2]
         )
         var draft = PracticeRoutineDraft()
+        draft.projectId = UUID()
         draft.name = "  guitar  "
 
         XCTAssertFalse(draft.canSave(comparedWith: [existing]))
@@ -235,6 +237,7 @@ final class PracticeTimerEndToEndTests: XCTestCase {
 
     func testActiveRoutineCannotPassEditorValidation() {
         let routine = PracticeRoutine(
+            projectId: UUID(),
             name: "Guitar",
             symbolName: "guitars",
             color: .coral,
@@ -374,8 +377,11 @@ final class PracticeTimerEndToEndTests: XCTestCase {
             fixture.viewModel.practiceCards(now: fixture.clock.now(), calendar: fixture.calendar).isEmpty
         )
         let recoveryMutations = try fixture.repository.pendingMutations(limit: 10)
-        XCTAssertEqual(recoveryMutations.count, 2)
-        XCTAssertEqual(Set(recoveryMutations.map(\.entity.kind)), [.practiceRoutine, .practiceSession])
+        XCTAssertEqual(recoveryMutations.count, 5)
+        XCTAssertEqual(
+            Set(recoveryMutations.map(\.entity.kind)),
+            [.practiceRoutine, .practiceSession, .session, .project, .trailEvent]
+        )
     }
 
     private func assertActiveCardUsesLocalTimerPresentation(
@@ -397,7 +403,11 @@ final class PracticeTimerEndToEndTests: XCTestCase {
 
     private func makeEndToEndFixture(now: Date) -> EndToEndFixture {
         let clock = EndToEndClock(now: now)
-        let repository = InMemoryJournalRepository(now: clock.now)
+        let project = Project(name: "Practice Project", area: "Learning", goal: "Improve", status: .idea, currentNextStep: "")
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project]),
+            now: clock.now
+        )
         let journalService = JournalService(repository: repository, now: clock.now)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -464,7 +474,11 @@ private final class FailingPracticeSessionRepository: JournalRepository {
     var failPracticeSessionCommits = false
 
     init(now: @escaping () -> Date) {
-        backing = InMemoryJournalRepository(now: now)
+        let project = Project(name: "Practice Project", area: "Learning", goal: "Improve", status: .idea, currentNextStep: "")
+        backing = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project]),
+            now: now
+        )
     }
 
     func snapshot() throws -> JournalSnapshot { try backing.snapshot() }

@@ -5,6 +5,7 @@ public enum PracticeSemanticColor: String, Codable, CaseIterable, Sendable {
 }
 
 public enum PracticeValidationError: Error, Equatable, Sendable {
+    case missingProject
     case blankName
     case invalidTargetMinutes
     case invalidWeekdays
@@ -24,6 +25,7 @@ public struct PracticeReminderTime: Codable, Equatable, Sendable {
 
 public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
+    public var projectId: UUID?
     public var name: String
     public var symbolName: String
     public var color: PracticeSemanticColor
@@ -38,6 +40,7 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
 
     public init(
         id: UUID = UUID(),
+        projectId: UUID? = nil,
         name: String,
         symbolName: String,
         color: PracticeSemanticColor,
@@ -51,6 +54,7 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
         schemaVersion: Int = 1
     ) {
         self.id = id
+        self.projectId = projectId
         self.name = name.trimmedForJournal
         self.symbolName = symbolName.trimmedForJournal
         self.color = color
@@ -64,7 +68,10 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
         self.schemaVersion = schemaVersion
     }
 
-    public func validated() throws -> PracticeRoutine {
+    public func validated(requireProject: Bool = true) throws -> PracticeRoutine {
+        guard !requireProject || projectId != nil else {
+            throw PracticeValidationError.missingProject
+        }
         guard !name.trimmedForJournal.isEmpty else {
             throw PracticeValidationError.blankName
         }
@@ -86,7 +93,7 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, symbolName, color, targetMinutes, weekdays, reminderTime
+        case id, projectId, name, symbolName, color, targetMinutes, weekdays, reminderTime
         case isArchived, createdAt, updatedAt, deletedAt, schemaVersion
     }
 
@@ -94,6 +101,7 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             id: try container.decode(UUID.self, forKey: .id),
+            projectId: try container.decodeIfPresent(UUID.self, forKey: .projectId),
             name: try container.decode(String.self, forKey: .name),
             symbolName: try container.decode(String.self, forKey: .symbolName),
             color: try container.decode(PracticeSemanticColor.self, forKey: .color),

@@ -40,6 +40,10 @@ public final class SwiftDataJournalRepository: JournalRepository {
             sessions: try decodedRecords(StoredSessionV2.self, as: LearningSession.self),
             proofs: try decodedRecords(StoredProofV2.self, as: Proof.self),
             reviews: try decodedRecords(StoredReviewV2.self, as: Review.self),
+            evidenceContracts: try decodedRecords(StoredEvidenceContractV2.self, as: EvidenceContract.self),
+            evidenceAcceptances: try decodedRecords(StoredEvidenceAcceptanceV2.self, as: EvidenceAcceptance.self),
+            proofRevisions: try decodedRecords(StoredProofRevisionV2.self, as: ProofRevision.self),
+            reviewDecisions: try decodedRecords(StoredReviewDecisionV2.self, as: ReviewDecision.self),
             trailEvents: try decodedRecords(StoredTrailEventV2.self, as: TrailEvent.self),
             coursePlans: try decodedRecords(StoredCoursePlanV2.self, as: CoursePlan.self),
             planPhases: try decodedRecords(StoredPlanPhaseV2.self, as: PlanPhase.self),
@@ -154,6 +158,10 @@ public final class SwiftDataJournalRepository: JournalRepository {
         case .session: return try entity(reference.id, in: StoredSessionV2.self, as: LearningSession.self).map(JournalEntity.session)
         case .proof: return try entity(reference.id, in: StoredProofV2.self, as: Proof.self).map(JournalEntity.proof)
         case .review: return try entity(reference.id, in: StoredReviewV2.self, as: Review.self).map(JournalEntity.review)
+        case .evidenceContract: return try entity(reference.id, in: StoredEvidenceContractV2.self, as: EvidenceContract.self).map(JournalEntity.evidenceContract)
+        case .evidenceAcceptance: return try entity(reference.id, in: StoredEvidenceAcceptanceV2.self, as: EvidenceAcceptance.self).map(JournalEntity.evidenceAcceptance)
+        case .proofRevision: return try entity(reference.id, in: StoredProofRevisionV2.self, as: ProofRevision.self).map(JournalEntity.proofRevision)
+        case .reviewDecision: return try entity(reference.id, in: StoredReviewDecisionV2.self, as: ReviewDecision.self).map(JournalEntity.reviewDecision)
         case .trailEvent: return try entity(reference.id, in: StoredTrailEventV2.self, as: TrailEvent.self).map(JournalEntity.trailEvent)
         case .coursePlan: return try entity(reference.id, in: StoredCoursePlanV2.self, as: CoursePlan.self).map(JournalEntity.coursePlan)
         case .planPhase: return try entity(reference.id, in: StoredPlanPhaseV2.self, as: PlanPhase.self).map(JournalEntity.planPhase)
@@ -323,6 +331,14 @@ public final class SwiftDataJournalRepository: JournalRepository {
             try upsert(value, in: StoredProofV2.self)
         case let .review(value):
             try upsert(value, in: StoredReviewV2.self)
+        case let .evidenceContract(value):
+            try upsert(value, in: StoredEvidenceContractV2.self)
+        case let .evidenceAcceptance(value):
+            try upsert(value, in: StoredEvidenceAcceptanceV2.self)
+        case let .proofRevision(value):
+            try upsert(value, in: StoredProofRevisionV2.self)
+        case let .reviewDecision(value):
+            try upsert(value, in: StoredReviewDecisionV2.self)
         case let .trailEvent(value):
             try upsert(value, in: StoredTrailEventV2.self)
         case let .coursePlan(value):
@@ -382,6 +398,31 @@ public final class SwiftDataJournalRepository: JournalRepository {
                 var value = $0
                 value.deletedAt = now()
                 value.updatedAt = value.deletedAt!
+                return value
+            }
+        case .evidenceContract:
+            try markDeleted(reference.id, in: StoredEvidenceContractV2.self, as: EvidenceContract.self) {
+                var value = $0
+                value.deletedAt = now()
+                value.updatedAt = value.deletedAt!
+                return value
+            }
+        case .evidenceAcceptance:
+            try markDeleted(reference.id, in: StoredEvidenceAcceptanceV2.self, as: EvidenceAcceptance.self) {
+                var value = $0
+                value.deletedAt = now()
+                return value
+            }
+        case .proofRevision:
+            try markDeleted(reference.id, in: StoredProofRevisionV2.self, as: ProofRevision.self) {
+                var value = $0
+                value.deletedAt = now()
+                return value
+            }
+        case .reviewDecision:
+            try markDeleted(reference.id, in: StoredReviewDecisionV2.self, as: ReviewDecision.self) {
+                var value = $0
+                value.deletedAt = now()
                 return value
             }
         case .trailEvent:
@@ -533,6 +574,10 @@ public final class SwiftDataJournalRepository: JournalRepository {
             StoredSessionV2.self,
             StoredProofV2.self,
             StoredReviewV2.self,
+            StoredEvidenceContractV2.self,
+            StoredEvidenceAcceptanceV2.self,
+            StoredProofRevisionV2.self,
+            StoredReviewDecisionV2.self,
             StoredTrailEventV2.self,
             StoredCoursePlanV2.self,
             StoredPlanPhaseV2.self,
@@ -566,6 +611,10 @@ extension Project: DeletionDated { fileprivate var journalDeletedAt: Date? { del
 extension LearningSession: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension Proof: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension Review: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension EvidenceContract: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension EvidenceAcceptance: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension ProofRevision: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension ReviewDecision: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension TrailEvent: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension CoursePlan: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension PlanPhase: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
@@ -632,6 +681,46 @@ private protocol StoredEntityV2: PersistentModel {
         self.ordinal = ordinal
         self.payload = payload
         self.deletedAt = deletedAt
+    }
+}
+
+@Model private final class StoredEvidenceContractV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id; self.ordinal = ordinal; self.payload = payload; self.deletedAt = deletedAt
+    }
+}
+
+@Model private final class StoredEvidenceAcceptanceV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id; self.ordinal = ordinal; self.payload = payload; self.deletedAt = deletedAt
+    }
+}
+
+@Model private final class StoredProofRevisionV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id; self.ordinal = ordinal; self.payload = payload; self.deletedAt = deletedAt
+    }
+}
+
+@Model private final class StoredReviewDecisionV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id; self.ordinal = ordinal; self.payload = payload; self.deletedAt = deletedAt
     }
 }
 

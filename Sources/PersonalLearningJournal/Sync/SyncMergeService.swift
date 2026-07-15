@@ -33,6 +33,14 @@ public struct SyncMergeService {
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.proof, now: now)
         case let (.review(base), .review(local), .review(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.review, now: now)
+        case let (.evidenceContract(base), .evidenceContract(local), .evidenceContract(server)):
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.evidenceContract, now: now)
+        case let (.evidenceAcceptance(base), .evidenceAcceptance(local), .evidenceAcceptance(server)):
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.evidenceAcceptance, now: now)
+        case let (.proofRevision(base), .proofRevision(local), .proofRevision(server)):
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.proofRevision, now: now)
+        case let (.reviewDecision(base), .reviewDecision(local), .reviewDecision(server)):
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.reviewDecision, now: now)
         case let (.trailEvent(base), .trailEvent(local), .trailEvent(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.trailEvent, now: now)
         case let (.coursePlan(base), .coursePlan(local), .coursePlan(server)):

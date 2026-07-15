@@ -3,12 +3,14 @@ import SwiftUI
 public struct SyncSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var viewModel: JournalViewModel
+    @ObservedObject private var appLock: AppLockController
     @State private var notice: SyncSettingsNotice?
     @State private var isSyncing = false
     @State private var showingBootstrapConfirmation = false
 
-    public init(viewModel: JournalViewModel) {
+    public init(viewModel: JournalViewModel, appLock: AppLockController = .shared) {
         self.viewModel = viewModel
+        self.appLock = appLock
     }
 
     public var body: some View {
@@ -39,7 +41,7 @@ public struct SyncSettingsView: View {
                         Text("\(viewModel.bootstrapEntityCount) existing item\(viewModel.bootstrapEntityCount == 1 ? "" : "s") can be added to your personal iCloud journal.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                        Button("Upload Existing Data") {
+                        Button("Choose Transfer") {
                             showingBootstrapConfirmation = true
                         }
                     }
@@ -65,6 +67,16 @@ public struct SyncSettingsView: View {
                         }
                     }
                 }
+
+                Section("Privacy") {
+                    Toggle("privacy.app_lock", isOn: Binding(
+                        get: { appLock.isEnabled },
+                        set: { appLock.setEnabled($0) }
+                    ))
+                    Text("privacy.app_lock_detail")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .navigationTitle("iCloud Sync")
             .toolbar {
@@ -74,15 +86,15 @@ public struct SyncSettingsView: View {
             }
             .task { await viewModel.refreshSyncSummary() }
             .confirmationDialog(
-                "Upload existing learning data?",
+                "Transfer existing learning data?",
                 isPresented: $showingBootstrapConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Upload \(viewModel.bootstrapEntityCount) Items") {
-                    uploadExistingData()
-                }
+                Button("Copy \(viewModel.bootstrapEntityCount) Items") { transferExistingData(.copy) }
+                Button("Move \(viewModel.bootstrapEntityCount) Items", role: .destructive) { transferExistingData(.move) }
+                Button("Keep Local") { transferExistingData(.keepLocal) }
             } message: {
-                Text("This queues a private iCloud copy of the learning records currently stored on this device.")
+                Text("A recovery archive is created first. Copy preserves the local space; Move removes it only after the account copy is committed.")
             }
             .alert(item: $notice) { notice in
                 Alert(
@@ -128,12 +140,12 @@ public struct SyncSettingsView: View {
         }
     }
 
-    private func uploadExistingData() {
+    private func transferExistingData(_ choice: AccountSpaceTransferChoice) {
         do {
-            try viewModel.confirmExistingLocalDataUpload()
+            try viewModel.completeAccountSpaceTransfer(choice: choice)
             Task { await viewModel.refreshSyncSummary() }
         } catch {
-            notice = SyncSettingsNotice(title: "Upload Not Queued", message: error.localizedDescription)
+            notice = SyncSettingsNotice(title: "Transfer Not Completed", message: error.localizedDescription)
         }
     }
 }

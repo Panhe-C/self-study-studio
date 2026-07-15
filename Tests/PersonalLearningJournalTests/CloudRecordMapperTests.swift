@@ -9,6 +9,55 @@ final class CloudRecordMapperTests: XCTestCase {
         ownerName: CKCurrentUserDefaultName
     )
 
+    func testEvidenceFirstEntitiesRoundTripAsStablePayloadRecords() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let projectID = UUID()
+        let proofID = UUID()
+        let reviewID = UUID()
+        let contract = try EvidenceContract(
+            id: fixedID,
+            projectId: projectID,
+            trigger: .milestone("Ship a demo"),
+            expectedArtifact: .link,
+            acceptanceCriteria: "Demo opens",
+            startsAt: timestamp,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let entities: [JournalEntity] = [
+            .evidenceContract(contract),
+            .evidenceAcceptance(EvidenceAcceptance(
+                id: fixedID,
+                contractId: contract.id,
+                proofId: proofID,
+                acceptedCriteria: ["Demo opens"],
+                acceptedAt: timestamp
+            )),
+            .proofRevision(ProofRevision(
+                id: fixedID,
+                proofId: proofID,
+                revision: 2,
+                title: "Demo",
+                statement: "It opens.",
+                artifactChecksum: "sha256:demo",
+                createdAt: timestamp
+            )),
+            .reviewDecision(ReviewDecision(
+                id: fixedID,
+                reviewId: reviewID,
+                projectId: projectID,
+                kind: .continueUnchanged,
+                decidedAt: timestamp
+            ))
+        ]
+
+        for entity in entities {
+            let record = try CloudRecordMapper().record(for: entity, zoneID: zoneID)
+            XCTAssertNotNil(record["payload"] as? Data)
+            XCTAssertEqual(try CloudRecordMapper().entity(from: record), entity)
+        }
+    }
+
     func testProjectMapsToStablePrivateZoneRecord() throws {
         let project = Project(
             id: fixedID,

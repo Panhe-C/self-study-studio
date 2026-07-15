@@ -9,27 +9,37 @@ import AppKit
 #endif
 
 struct ProofDetailView: View {
+    @ObservedObject var viewModel: JournalViewModel
     let proof: Proof
     let projectName: String
     let sessionSummary: String
 
     @StateObject private var audioPlayer = ProofAudioPlayer()
     @State private var isShowingFilePreview = false
+    @State private var isEditing = false
+    @State private var editTitle = ""
+    @State private var editStatement = ""
+    @State private var editArtifactBody = ""
+    @State private var errorMessage: String?
+
+    private var currentProof: Proof {
+        viewModel.proofs.first(where: { $0.id == proof.id }) ?? proof
+    }
 
     private var preview: ProofPreviewDescriptor {
-        ProofPreviewDescriptor(proof: proof)
+        ProofPreviewDescriptor(proof: currentProof)
     }
 
     var body: some View {
         List {
             Section("Proof") {
-                Text(proof.title)
+                Text(currentProof.title)
                     .font(.headline)
-                Text(proof.statement)
+                Text(currentProof.statement)
                 Label(projectName, systemImage: "folder")
                 Label(sessionSummary, systemImage: "clock")
                 Label(
-                    proof.createdAt.formatted(date: .abbreviated, time: .shortened),
+                    currentProof.createdAt.formatted(date: .abbreviated, time: .shortened),
                     systemImage: "calendar"
                 )
             }
@@ -37,8 +47,63 @@ struct ProofDetailView: View {
             Section("Attachment") {
                 attachmentView
             }
+
+            if !viewModel.proofRevisions(for: proof.id).isEmpty {
+                Section("proof.revision_history") {
+                    ForEach(viewModel.proofRevisions(for: proof.id)) { revision in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Revision \(revision.revision) · \(revision.title)")
+                                .font(.subheadline.bold())
+                            Text(revision.statement)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(revision.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+            }
         }
         .navigationTitle("Proof")
+        .toolbar {
+            Button("Revise") {
+                editTitle = currentProof.title
+                editStatement = currentProof.statement
+                editArtifactBody = currentProof.artifactBody ?? ""
+                isEditing = true
+            }
+        }
+        .sheet(isPresented: $isEditing) {
+            NavigationStack {
+                Form {
+                    TextField("Title", text: $editTitle)
+                    TextField("proof.statement", text: $editStatement, axis: .vertical)
+                    if currentProof.type == .text {
+                        TextEditor(text: $editArtifactBody)
+                            .frame(minHeight: 180)
+                    } else {
+                        Text("The artifact remains unchanged; this revision updates its title and claim.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .navigationTitle("Revise Proof")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("action.cancel") { isEditing = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("action.save") { saveRevision() }
+                    }
+                }
+            }
+        }
+        .alert("Could not revise Proof", isPresented: .constant(errorMessage != nil)) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
         #if os(iOS)
         .sheet(isPresented: $isShowingFilePreview) {
             if case let .file(url) = preview.kind {
@@ -79,12 +144,32 @@ struct ProofDetailView: View {
                 Label(url.absoluteString, systemImage: "link")
                     .lineLimit(2)
             }
+        case let .text(markdown):
+            ScrollView {
+                Text(markdown)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
         case .unavailable:
             ContentUnavailableView(
                 "Attachment Unavailable",
                 systemImage: "exclamationmark.triangle",
                 description: Text("The original file is not stored on this device.")
             )
+        }
+    }
+
+    private func saveRevision() {
+        do {
+            _ = try viewModel.reviseProof(
+                proofId: currentProof.id,
+                title: editTitle,
+                statement: editStatement,
+                artifactBody: currentProof.type == .text ? editArtifactBody : nil
+            )
+            isEditing = false
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

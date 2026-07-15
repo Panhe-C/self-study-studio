@@ -13,14 +13,19 @@ public struct ProjectsView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Picker("Project status", selection: $selectedStatus) {
-                    Text("Active  \(count(for: .active))").tag(ProjectStatus.active)
-                    Text("Paused  \(count(for: .paused))").tag(ProjectStatus.paused)
+                    (Text("project.status.active") + Text("  \(count(for: .active))")).tag(ProjectStatus.active)
+                    (Text("project.status.idea") + Text("  \(count(for: .idea))")).tag(ProjectStatus.idea)
                 }
                 .pickerStyle(.segmented)
 
                 Menu {
                     Button("Low Frequency (\(count(for: .lowFrequency)))") { selectedStatus = .lowFrequency }
+                    Button("Paused (\(count(for: .paused)))") { selectedStatus = .paused }
+                    Button("Completed (\(count(for: .completed)))") { selectedStatus = .completed }
                     Button("Archived (\(count(for: .archived)))") { selectedStatus = .archived }
+                    NavigationLink("Trash (\(count(for: .trash)))") {
+                        TrashView(viewModel: viewModel)
+                    }
                 } label: {
                     Image(systemName: selectedStatus == .archived ? "archivebox" : "ellipsis.circle")
                         .frame(width: 36, height: 32)
@@ -46,13 +51,18 @@ public struct ProjectsView: View {
             }
         }
         .background(StudioTheme.pageBackground.ignoresSafeArea())
-        .navigationTitle("Projects")
+        .navigationTitle("nav.projects")
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                NavigationLink {
+                    ProductHealthView(report: viewModel.productHealth())
+                } label: {
+                    Label("nav.product_health", systemImage: "waveform.path.ecg")
+                }
                 Button {
                     showingCreate = true
                 } label: {
-                    Label("Add Project", systemImage: "plus")
+                    Label("project.add", systemImage: "plus")
                 }
             }
         }
@@ -138,8 +148,6 @@ private struct CreateProjectView: View {
     @ObservedObject var viewModel: JournalViewModel
     @State private var name = ""
     @State private var area = ""
-    @State private var goal = ""
-    @State private var nextStep = ""
     @State private var errorMessage: String?
 
     var body: some View {
@@ -147,20 +155,16 @@ private struct CreateProjectView: View {
             Form {
                 TextField("Project", text: $name)
                 TextField("Area", text: $area)
-                TextField("Goal", text: $goal, axis: .vertical)
-                TextField("Next Step", text: $nextStep, axis: .vertical)
+                Text("Goal, Next Step, and Evidence Contract are added during activation.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             .navigationTitle("New Project")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
                         do {
-                            _ = try viewModel.createProject(
-                                name: name,
-                                area: area,
-                                goal: goal,
-                                nextStep: nextStep
-                            )
+                            _ = try viewModel.createIdea(name: name, area: area)
                             dismiss()
                         } catch {
                             errorMessage = error.localizedDescription
@@ -188,6 +192,7 @@ private struct ProjectDetailView: View {
     @State private var isCreatingReview = false
     @State private var showingAISettings = false
     @State private var showingCoursePlanWizard = false
+    @State private var showingCommitment = false
 
     private var currentProject: Project {
         viewModel.projects.first { $0.id == project.id } ?? project
@@ -199,6 +204,20 @@ private struct ProjectDetailView: View {
 
     var body: some View {
         List {
+            if currentProject.status == .idea || currentProject.commitmentState == .needsSetup {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Commitment setup needed", systemImage: "checklist")
+                            .font(.headline)
+                        Text("Add one Goal, one canonical Next Step, and one Evidence Contract before this project enters Today.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button("Set Up Project") { showingCommitment = true }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
             Section("Goal") {
                 Text(currentProject.goal)
                 Text("Next: \(currentProject.currentNextStep)")
@@ -329,6 +348,7 @@ private struct ProjectDetailView: View {
                 ForEach(viewModel.proofsForProject(currentProject.id)) { proof in
                     NavigationLink {
                         ProofDetailView(
+                            viewModel: viewModel,
                             proof: proof,
                             projectName: currentProject.name,
                             sessionSummary: sessionSummary(for: proof)
@@ -400,6 +420,9 @@ private struct ProjectDetailView: View {
         }
         .sheet(isPresented: $showingCoursePlanWizard) {
             CoursePlanWizardView(viewModel: viewModel, project: currentProject)
+        }
+        .sheet(isPresented: $showingCommitment) {
+            ProjectCommitmentView(viewModel: viewModel, project: currentProject)
         }
         .alert("Review failed", isPresented: .constant(reviewError != nil)) {
             Button("OK") { reviewError = nil }
@@ -474,6 +497,7 @@ private struct SessionDetailView: View {
                 ForEach(proofs) { proof in
                     NavigationLink {
                         ProofDetailView(
+                            viewModel: viewModel,
                             proof: proof,
                             projectName: project.name,
                             sessionSummary: "\(session.durationMinutes) min · \(session.actionType.rawValue) · \(session.note)"

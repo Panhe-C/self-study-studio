@@ -3,6 +3,7 @@ import SwiftUI
 struct PracticeRoutineDraft: Equatable {
     let routineId: UUID?
     let isArchived: Bool
+    var projectId: UUID?
     var name: String
     var symbolName: String
     var color: PracticeSemanticColor
@@ -12,6 +13,7 @@ struct PracticeRoutineDraft: Equatable {
     init(routine: PracticeRoutine? = nil) {
         routineId = routine?.id
         isArchived = routine?.isArchived ?? false
+        projectId = routine?.projectId
         name = routine?.name ?? ""
         symbolName = routine?.symbolName ?? "music.note"
         color = routine?.color ?? .coral
@@ -29,6 +31,7 @@ struct PracticeRoutineDraft: Equatable {
     ) -> Bool {
         if let activeRoutineId, routineId == activeRoutineId { return false }
         guard !trimmedName.isEmpty,
+              projectId != nil,
               (1...1_440).contains(targetMinutes),
               !weekdays.isEmpty,
               weekdays.allSatisfy({ (1...7).contains($0) }) else {
@@ -317,6 +320,14 @@ private struct PracticeRoutineEditorView: View {
                 }
 
                 Section("Routine") {
+                    Picker("Project", selection: $draft.projectId) {
+                        Text("Choose a project").tag(Optional<UUID>.none)
+                        ForEach(viewModel.projects.filter { $0.deletedAt == nil && $0.status != .trash }) { project in
+                            Text(project.name).tag(Optional(project.id))
+                        }
+                    }
+                    .disabled(draft.routineId != nil)
+
                     TextField("Name", text: $draft.name)
                         #if os(iOS)
                         .textInputAutocapitalization(.words)
@@ -440,6 +451,7 @@ private struct PracticeRoutineEditorView: View {
     private var validationMessage: String? {
         if isActiveRoutine { return nil }
         if draft.trimmedName.isEmpty { return "Enter a routine name." }
+        if draft.projectId == nil { return "Choose the project this practice advances." }
         if !(1...1_440).contains(draft.targetMinutes) { return "Choose a target from 1 to 1,440 minutes." }
         if draft.weekdays.isEmpty { return "Choose at least one practice day." }
         if draft.hasDuplicateActiveName(comparedWith: viewModel.practiceRoutines) {
@@ -527,7 +539,9 @@ private struct PracticeRoutineEditorView: View {
                     weekdays: draft.weekdays
                 )
             } else {
+                guard let projectId = draft.projectId else { return }
                 _ = try viewModel.createPracticeRoutine(
+                    projectId: projectId,
                     name: draft.trimmedName,
                     symbolName: draft.symbolName,
                     color: draft.color,

@@ -62,6 +62,10 @@ public final class InMemoryJournalRepository: JournalRepository {
             + snapshot.sessions.map(JournalEntity.session)
             + snapshot.proofs.map(JournalEntity.proof)
             + snapshot.reviews.map(JournalEntity.review)
+            + snapshot.evidenceContracts.map(JournalEntity.evidenceContract)
+            + snapshot.evidenceAcceptances.map(JournalEntity.evidenceAcceptance)
+            + snapshot.proofRevisions.map(JournalEntity.proofRevision)
+            + snapshot.reviewDecisions.map(JournalEntity.reviewDecision)
             + snapshot.trailEvents.map(JournalEntity.trailEvent)
             + snapshot.coursePlans.map(JournalEntity.coursePlan)
             + snapshot.planPhases.map(JournalEntity.planPhase)
@@ -104,6 +108,22 @@ public final class InMemoryJournalRepository: JournalRepository {
                 },
                 reviews: visibleEntities.compactMap {
                     guard case let .review(value) = $0 else { return nil }
+                    return value
+                },
+                evidenceContracts: visibleEntities.compactMap {
+                    guard case let .evidenceContract(value) = $0 else { return nil }
+                    return value
+                },
+                evidenceAcceptances: visibleEntities.compactMap {
+                    guard case let .evidenceAcceptance(value) = $0 else { return nil }
+                    return value
+                },
+                proofRevisions: visibleEntities.compactMap {
+                    guard case let .proofRevision(value) = $0 else { return nil }
+                    return value
+                },
+                reviewDecisions: visibleEntities.compactMap {
+                    guard case let .reviewDecision(value) = $0 else { return nil }
                     return value
                 },
                 trailEvents: visibleEntities.compactMap {

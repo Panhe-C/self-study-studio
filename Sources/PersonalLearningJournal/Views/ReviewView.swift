@@ -2,101 +2,71 @@ import SwiftUI
 
 public struct ReviewView: View {
     @ObservedObject private var viewModel: JournalViewModel
-    private var review: Review
-    @State private var facts: [String]
-    @State private var patterns: [String]
-    @State private var decisions: [String]
-    @State private var nextSteps: [UUID: String]
+    private let review: Review
+    @State private var selectedProjectID: UUID?
+    @State private var decisionKind: ReviewDecisionKind = .continueUnchanged
+    @State private var replacementNextStep = ""
+    @State private var capstoneProofID: UUID?
     @State private var notice: ReviewNotice?
 
     public init(viewModel: JournalViewModel, review: Review) {
         self.viewModel = viewModel
         self.review = review
-        _facts = State(initialValue: review.facts)
-        _patterns = State(initialValue: review.patterns)
-        _decisions = State(initialValue: review.decisions)
-        _nextSteps = State(initialValue: review.nextSteps)
+        let candidates = Set(review.projectRecommendations.keys).union(review.nextSteps.keys)
+        _selectedProjectID = State(initialValue: candidates.sorted { $0.uuidString < $1.uuidString }.first)
     }
 
     public var body: some View {
         List {
-            EditableReviewSection(
-                title: "Facts",
-                itemName: "Fact",
-                items: $facts,
-                sourceReferences: currentReview.sourceReferences
-            )
-            EditableReviewSection(
-                title: "Patterns",
-                itemName: "Pattern",
-                items: $patterns,
-                sourceReferences: currentReview.sourceReferences
-            )
-            EditableReviewSection(
-                title: "Decisions",
-                itemName: "Decision",
-                items: $decisions,
-                sourceReferences: currentReview.sourceReferences
-            )
+            sourcedSection(title: "Facts", items: currentReview.facts)
+            sourcedSection(title: "Patterns", items: currentReview.patterns)
 
-            Section("Next Steps") {
-                if nextSteps.isEmpty {
-                    ContentUnavailableView(
-                        "No Next Steps",
-                        systemImage: "figure.walk",
-                        description: Text("This review did not produce project-specific next steps.")
-                    )
-                } else {
-                    ForEach(nextStepProjectIds, id: \.self) { projectId in
-                        TextField(
-                            projectName(for: projectId),
-                            text: Binding(
-                                get: { nextSteps[projectId] ?? "" },
-                                set: { nextSteps[projectId] = $0 }
-                            ),
-                            axis: .vertical
-                        )
+            Section("Confirm one decision") {
+                Picker("Project", selection: $selectedProjectID) {
+                    Text("Select a project").tag(UUID?.none)
+                    ForEach(candidateProjects) { project in
+                        Text(project.name).tag(Optional(project.id))
                     }
                 }
+                Picker("Decision", selection: $decisionKind) {
+                    ForEach(ReviewDecisionKind.allCases, id: \.self) { kind in
+                        Text(title(for: kind)).tag(kind)
+                    }
+                }
+                if decisionKind == .changeNextStep {
+                    TextField("Replacement Next Step", text: $replacementNextStep, axis: .vertical)
+                }
+                if decisionKind == .complete {
+                    Picker("Capstone Proof", selection: $capstoneProofID) {
+                        Text("Select qualifying Proof").tag(UUID?.none)
+                        ForEach(qualifyingProofs) { proof in
+                            Text(proof.title).tag(Optional(proof.id))
+                        }
+                    }
+                }
+                Button("Confirm Decision", action: confirmDecision)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selectedProjectID == nil)
             }
 
-            Section("Recommendations") {
-                if recommendationProjectIds.isEmpty {
-                    Text("No project actions were suggested for this review.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(recommendationProjectIds, id: \.self) { projectId in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(projectName(for: projectId))
-                                .font(.headline)
-
-                            if let status = currentReview.projectRecommendations[projectId] {
-                                Label(
-                                    "Suggested status: \(status.rawValue)",
-                                    systemImage: "arrow.down.circle"
-                                )
-                                Button("Apply Status") {
-                                    applyRecommendation(for: projectId)
-                                }
-                            }
-
-                            if let nextStep = currentReview.nextSteps[projectId] {
-                                Text("Suggested next: \(nextStep)")
-                                    .foregroundStyle(.secondary)
-                                Button("Use as Next Step") {
-                                    applyNextStep(for: projectId)
-                                }
-                            }
+            Section("Suggestions") {
+                ForEach(candidateProjects) { project in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(project.name).font(.headline)
+                        if let status = currentReview.projectRecommendations[project.id] {
+                            Text("Suggested status: \(status.rawValue)")
                         }
-                        .padding(.vertical, 4)
+                        if let step = currentReview.nextSteps[project.id] {
+                            Text("Suggested Next Step: \(step)")
+                        }
                     }
+                    .foregroundStyle(.secondary)
                 }
             }
 
             Section("Sources") {
                 if currentReview.aiSourceSummary.isEmpty {
-                    Text("No session or Proof sources were attached.")
-                        .foregroundStyle(.secondary)
+                    Text("No source summaries attached.").foregroundStyle(.secondary)
                 } else {
                     ForEach(currentReview.aiSourceSummary, id: \.self) { source in
                         Label(source, systemImage: "quote.bubble")
@@ -104,14 +74,7 @@ public struct ReviewView: View {
                 }
             }
         }
-        .navigationTitle("Weekly Review")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    save()
-                }
-            }
-        }
+        .navigationTitle("review.title")
         .alert(item: $notice) { notice in
             Alert(
                 title: Text(notice.title),
@@ -125,87 +88,69 @@ public struct ReviewView: View {
         viewModel.reviews.first { $0.id == review.id } ?? review
     }
 
-    private var nextStepProjectIds: [UUID] {
-        nextSteps.keys.sorted { left, right in
-            projectName(for: left) < projectName(for: right)
-        }
-    }
-
-    private var recommendationProjectIds: [UUID] {
-        Set(currentReview.projectRecommendations.keys)
+    private var candidateProjects: [Project] {
+        let ids = Set(currentReview.projectRecommendations.keys)
             .union(currentReview.nextSteps.keys)
-            .sorted { projectName(for: $0) < projectName(for: $1) }
+        let explicit = viewModel.projects.filter { ids.contains($0.id) }
+        return explicit.isEmpty
+            ? viewModel.projects.filter { $0.deletedAt == nil && $0.status != .trash }
+            : explicit
     }
 
-    private func projectName(for projectId: UUID) -> String {
-        viewModel.projects.first { $0.id == projectId }?.name ?? "Project"
+    private var selectedProject: Project? {
+        guard let selectedProjectID else { return nil }
+        return viewModel.projects.first { $0.id == selectedProjectID }
     }
 
-    private func save() {
-        do {
-            _ = try viewModel.updateReview(
-                reviewId: review.id,
-                facts: facts,
-                patterns: patterns,
-                decisions: decisions,
-                nextSteps: nextSteps
-            )
-            notice = ReviewNotice(title: "Review Saved", message: "Your edits were saved.")
-        } catch {
-            notice = ReviewNotice(title: "Review Not Saved", message: error.localizedDescription)
-        }
+    private var qualifyingProofs: [Proof] {
+        guard let selectedProjectID else { return [] }
+        return viewModel.proofsForProject(selectedProjectID).filter(\.qualifies)
     }
 
-    private func applyRecommendation(for projectId: UUID) {
-        do {
-            try viewModel.applyReviewRecommendation(reviewId: review.id, projectId: projectId)
-            notice = ReviewNotice(title: "Status Applied", message: "The project status now follows this review decision.")
-        } catch {
-            notice = ReviewNotice(title: "Status Not Applied", message: error.localizedDescription)
-        }
-    }
-
-    private func applyNextStep(for projectId: UUID) {
-        do {
-            try viewModel.applyReviewNextStep(reviewId: review.id, projectId: projectId)
-            notice = ReviewNotice(title: "Next Step Applied", message: "The project now uses this review next step.")
-        } catch {
-            notice = ReviewNotice(title: "Next Step Not Applied", message: error.localizedDescription)
-        }
-    }
-}
-
-private struct EditableReviewSection: View {
-    var title: String
-    var itemName: String
-    @Binding var items: [String]
-    var sourceReferences: [String: [String]]
-
-    var body: some View {
+    private func sourcedSection(title: String, items: [String]) -> some View {
         Section(title) {
-            ForEach(items.indices, id: \.self) { index in
-                TextField(
-                    itemName,
-                    text: Binding(
-                        get: { items[index] },
-                        set: { items[index] = $0 }
-                    ),
-                    axis: .vertical
-                )
-                if let sources = sourceReferences[items[index]], !sources.isEmpty {
-                    ForEach(sources, id: \.self) { source in
+            ForEach(items, id: \.self) { item in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item)
+                    ForEach(currentReview.sourceReferences[item, default: []], id: \.self) { source in
                         Label(source, systemImage: "quote.bubble")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
+        }
+    }
 
-            Button {
-                items.append("")
-            } label: {
-                Label("Add \(itemName)", systemImage: "plus")
-            }
+    private func confirmDecision() {
+        guard let project = selectedProject else { return }
+        let decision = ReviewDecision(
+            reviewId: review.id,
+            projectId: project.id,
+            kind: decisionKind,
+            nextStep: decisionKind == .changeNextStep ? replacementNextStep : nil,
+            contractId: decisionKind == .reviseContract || decisionKind == .changeFrequency
+                ? project.activeEvidenceContractId
+                : nil,
+            capstoneProofId: decisionKind == .complete ? capstoneProofID : nil
+        )
+        do {
+            _ = try viewModel.completeReview(reviewId: review.id, decision: decision)
+            notice = ReviewNotice(title: "Decision Confirmed", message: "The project was updated atomically.")
+        } catch {
+            notice = ReviewNotice(title: "Decision Not Confirmed", message: error.localizedDescription)
+        }
+    }
+
+    private func title(for kind: ReviewDecisionKind) -> String {
+        switch kind {
+        case .continueUnchanged: String(localized: "review.decision.continue")
+        case .changeNextStep: String(localized: "review.decision.change_next_step")
+        case .reviseContract: String(localized: "review.decision.revise_contract")
+        case .changeFrequency: "Change frequency"
+        case .pause: String(localized: "review.decision.pause")
+        case .archive: String(localized: "review.decision.archive")
+        case .complete: String(localized: "review.decision.complete")
         }
     }
 }

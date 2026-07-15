@@ -181,7 +181,7 @@ public struct OpenAICompatibleReviewProvider: AIReviewProvider {
     }
 
     private static let systemPrompt = """
-    You are a calm personal learning-review assistant. Return only a JSON object with facts, patterns, decisions, projectRecommendations, nextSteps, sourceSummary, and sourceReferences. Use no more than three facts, patterns, or decisions. Every generated insight must cite concrete session, Proof, or practice summaries in sourceReferences. Never change project status yourself and do not use motivational or streak language.
+    You are a calm personal learning-review assistant. Return only a JSON object with facts, patterns, decisions, projectRecommendations, nextSteps, sourceSummary, and sourceReferences. Keep decisions as an empty array because only the user may confirm a decision. Use no more than three facts or patterns. Every generated insight must cite concrete session, Proof, or practice summaries in sourceReferences. Never change project status yourself and do not use motivational or streak language.
     """
 
     private static func reviewInput(
@@ -199,7 +199,7 @@ public struct OpenAICompatibleReviewProvider: AIReviewProvider {
             periodEnd: periodEnd,
             projects: snapshot.projects,
             sessions: snapshot.sessions,
-            proofs: snapshot.proofs,
+            proofs: snapshot.proofs.map(AIProofMetadata.init),
             practiceSessions: practiceSessions,
             practiceSources: PracticeReviewContext.sources(
                 for: practiceSessions,
@@ -222,13 +222,13 @@ private struct OpenAIReviewDraftPayload: Decodable, Sendable {
 
     var reviewDraft: ReviewDraft {
         var references = sourceReferences ?? [:]
-        for insight in facts + patterns + decisions where references[insight, default: []].isEmpty {
+        for insight in facts + patterns where references[insight, default: []].isEmpty {
             references[insight] = sourceSummary
         }
         return ReviewDraft(
             facts: facts,
             patterns: patterns,
-            decisions: decisions,
+            decisions: [],
             projectRecommendations: projectRecommendations.reduce(into: [:]) { result, item in
                 guard let id = UUID(uuidString: item.key), let status = ProjectStatus(rawValue: item.value) else { return }
                 result[id] = status
@@ -322,10 +322,28 @@ private struct OpenAICompatibleReviewInput: Codable {
     var periodEnd: Date
     var projects: [Project]
     var sessions: [LearningSession]
-    var proofs: [Proof]
+    var proofs: [AIProofMetadata]
     var practiceSessions: [PracticeSession]
     var practiceSources: [String]
     var planProgress: [CoursePlanReviewProgress]
+}
+
+private struct AIProofMetadata: Codable {
+    var id: UUID
+    var projectId: UUID
+    var sessionId: UUID?
+    var type: ProofType
+    var title: String
+    var statement: String
+
+    init(_ proof: Proof) {
+        id = proof.id
+        projectId = proof.projectId
+        sessionId = proof.sessionId
+        type = proof.type
+        title = proof.title
+        statement = proof.statement
+    }
 }
 
 private struct OpenAICompatibleReviewResponse: Decodable {

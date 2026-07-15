@@ -41,10 +41,28 @@ public final class EventKitCalendarClient: CalendarClient {
                     id: $0.calendarIdentifier,
                     title: $0.title,
                     allowsContentModifications: $0.allowsContentModifications,
-                    isDefault: $0.calendarIdentifier == defaultIdentifier
+                    isDefault: $0.calendarIdentifier == defaultIdentifier,
+                    isShared: false
                 )
             }
             .sorted { ($0.isDefault ? 0 : 1, $0.title) < ($1.isDefault ? 0 : 1, $1.title) }
+    }
+
+    public func createCalendar(named title: String) async throws -> CalendarDescriptor {
+        try requireFullAccess()
+        let calendar = EKCalendar(for: .event, eventStore: eventStore)
+        calendar.title = title
+        calendar.source = eventStore.defaultCalendarForNewEvents?.source
+            ?? eventStore.sources.first(where: { $0.sourceType == .local })
+        guard calendar.source != nil else { throw CalendarClientError.calendarUnavailable }
+        try eventStore.saveCalendar(calendar, commit: true)
+        return CalendarDescriptor(
+            id: calendar.calendarIdentifier,
+            title: calendar.title,
+            allowsContentModifications: calendar.allowsContentModifications,
+            isDefault: false,
+            isShared: false
+        )
     }
 
     public func busyIntervals(in range: DateInterval) async throws -> [BusyInterval] {
@@ -75,6 +93,7 @@ public final class EventKitCalendarClient: CalendarClient {
         let stored = event.identifier.flatMap { eventStore.event(withIdentifier: $0) } ?? EKEvent(eventStore: eventStore)
         stored.calendar = calendar
         stored.title = event.title
+        stored.notes = event.details
         stored.startDate = event.start
         stored.endDate = event.end
         try eventStore.save(stored, span: .thisEvent, commit: true)
@@ -100,6 +119,7 @@ public final class EventKitCalendarClient: CalendarClient {
             identifier: event.eventIdentifier,
             calendarIdentifier: event.calendar.calendarIdentifier,
             title: event.title ?? "",
+            details: event.notes,
             start: event.startDate,
             end: event.endDate,
             lastModifiedAt: event.lastModifiedDate

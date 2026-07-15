@@ -3,7 +3,10 @@ import XCTest
 
 final class ProofPreviewTests: XCTestCase {
     func testLocalAudioProofProducesAudioPreview() throws {
-        let localURL = URL(fileURLWithPath: "/tmp/practice.m4a")
+        let localURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("practice-\(UUID().uuidString).m4a")
+        try Data("audio".utf8).write(to: localURL)
+        defer { try? FileManager.default.removeItem(at: localURL) }
         let proof = try Proof(
             projectId: UUID(),
             type: .audio,
@@ -44,5 +47,25 @@ final class ProofPreviewTests: XCTestCase {
         )
 
         XCTAssertEqual(ProofPreviewDescriptor(proof: proof).kind, .unavailable)
+    }
+
+    func testUnreadableAttachmentAndInvalidLinkAreUnavailable() throws {
+        let attachment = try Proof(
+            projectId: UUID(),
+            type: .file,
+            title: "Missing file",
+            statement: "Shows the result",
+            localPath: "/tmp/does-not-exist-\(UUID().uuidString)"
+        )
+        let invalidLink = try Proof(
+            projectId: UUID(),
+            type: .link,
+            title: "Local link",
+            statement: "Shows the result",
+            url: URL(string: "file:///tmp/result")
+        )
+
+        XCTAssertEqual(ProofPreviewDescriptor(proof: attachment).kind, .unavailable)
+        XCTAssertEqual(ProofPreviewDescriptor(proof: invalidLink).kind, .unavailable)
     }
 }

@@ -4,6 +4,19 @@ import XCTest
 
 @MainActor
 final class JournalViewModelTests: XCTestCase {
+    func testMainTabsAppearForIdeaButNotTrashOnlyState() throws {
+        let viewModel = makeViewModel()
+        let idea = try viewModel.createIdea(name: "Shaders", area: "Graphics")
+
+        XCTAssertTrue(viewModel.shouldShowMainTabs)
+
+        try viewModel.moveToTrash(projectId: idea.id)
+        XCTAssertFalse(viewModel.shouldShowMainTabs)
+
+        try viewModel.restoreFromTrash(projectId: idea.id)
+        XCTAssertTrue(viewModel.shouldShowMainTabs)
+    }
+
     func testMainTabsAppearAfterProjectCreationBeforeFirstRecord() throws {
         let viewModel = makeViewModel()
 
@@ -115,7 +128,7 @@ final class JournalViewModelTests: XCTestCase {
         let syncNowCount = await syncCoordinator.syncNowCount
         XCTAssertEqual(syncNowCount, 1)
     }
-    func testOnboardingCompletesAfterFirstQuickLogAndShowsTodayContinueCard() throws {
+    func testLegacyOnboardingRecordDoesNotBypassEvidenceContractRequirement() throws {
         let viewModel = makeViewModel()
 
         let project = try viewModel.onboardProject(
@@ -136,7 +149,7 @@ final class JournalViewModelTests: XCTestCase {
 
         XCTAssertTrue(viewModel.hasCompletedOnboarding)
         XCTAssertNil(viewModel.pendingFirstRecordProject)
-        XCTAssertEqual(viewModel.continueCards.map(\.id), [project.id])
+        XCTAssertTrue(viewModel.continueCards.isEmpty)
     }
 
     func testCreatingProjectAfterOnboardingKeepsOnboardingCompleted() throws {
@@ -190,7 +203,8 @@ final class JournalViewModelTests: XCTestCase {
         ])
 
         XCTAssertEqual(projects.map(\.name), ["CS336", "吉他弹唱", "DaVinci 调色"])
-        XCTAssertEqual(Set(viewModel.continueCards.map(\.id)), Set(projects.map(\.id)))
+        XCTAssertTrue(viewModel.continueCards.isEmpty)
+        XCTAssertTrue(projects.allSatisfy { !$0.canContinue })
     }
 
     func testQuickLogRefreshesSessionsAndTrail() throws {
@@ -468,7 +482,9 @@ final class JournalViewModelTests: XCTestCase {
             practiceService: practiceService,
             practiceTimer: runtime
         )
+        let project = try viewModel.createIdea(name: "Guitar Project", area: "Music")
         let routine = try viewModel.createPracticeRoutine(
+            projectId: project.id,
             name: "Guitar",
             symbolName: "guitars",
             color: .coral,
@@ -489,8 +505,9 @@ final class JournalViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.practiceSessions.map(\.id), [result.session.id])
+        XCTAssertEqual(viewModel.sessions.map(\.id), [result.learningSession.id])
         XCTAssertTrue(result.didDropMissingProjectLink)
-        XCTAssertNil(result.session.linkedProjectId)
+        XCTAssertEqual(result.session.linkedProjectId, project.id)
     }
 
     func testPracticeFacadeUsesInjectedRuntimeAndRefreshesRoutineMutations() throws {
@@ -504,7 +521,9 @@ final class JournalViewModelTests: XCTestCase {
             practiceService: PracticeService(repository: repository),
             practiceTimer: runtime
         )
+        let project = try viewModel.createIdea(name: "Guitar Project", area: "Music")
         let routine = try viewModel.createPracticeRoutine(
+            projectId: project.id,
             name: "Guitar",
             symbolName: "guitars",
             color: .coral,

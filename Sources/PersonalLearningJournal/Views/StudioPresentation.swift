@@ -1,5 +1,12 @@
 import Foundation
 
+public enum StudioPrimaryTab: String, Equatable, CaseIterable, Sendable {
+    case today
+    case projects
+    case calendar
+    case library
+}
+
 public struct StudioWeekDay: Equatable, Identifiable, Sendable {
     public let date: Date
     public let minutes: Int
@@ -83,6 +90,12 @@ public struct StudioPracticeCard: Identifiable, Equatable, Sendable {
 }
 
 public enum StudioPresentation {
+    public static func primaryTabs(calendarEnabled: Bool) -> [StudioPrimaryTab] {
+        calendarEnabled
+            ? [.today, .projects, .calendar, .library]
+            : [.today, .projects, .library]
+    }
+
     public static func projects(_ projects: [Project], status: ProjectStatus) -> [Project] {
         projects.filter { $0.status == status }
     }
