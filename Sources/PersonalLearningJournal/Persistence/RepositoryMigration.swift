@@ -33,7 +33,16 @@ public struct RepositoryMigration {
             + snapshot.sessions.map(JournalEntity.session)
             + snapshot.proofs.map(JournalEntity.proof)
             + snapshot.reviews.map(JournalEntity.review)
+            + snapshot.evidenceContracts.map(JournalEntity.evidenceContract)
+            + snapshot.evidenceAcceptances.map(JournalEntity.evidenceAcceptance)
+            + snapshot.proofRevisions.map(JournalEntity.proofRevision)
+            + snapshot.reviewDecisions.map(JournalEntity.reviewDecision)
             + snapshot.trailEvents.map(JournalEntity.trailEvent)
+            + snapshot.coursePlans.map(JournalEntity.coursePlan)
+            + snapshot.planPhases.map(JournalEntity.planPhase)
+            + snapshot.plannedSessions.map(JournalEntity.plannedSession)
+            + snapshot.availabilityRules.map(JournalEntity.availabilityRule)
+            + snapshot.schedulingPreferences.map(JournalEntity.schedulingPreferences)
             + snapshot.practiceRoutines.map(JournalEntity.practiceRoutine)
             + snapshot.practiceSessions.map(JournalEntity.practiceSession)
         try repository.commit(
@@ -43,6 +52,25 @@ public struct RepositoryMigration {
                 stateMetadata: JournalStateMetadata(snapshot: snapshot),
                 completedMigrationIdentifier: Self.legacySnapshotIdentifier
             )
+        )
+    }
+
+    @discardableResult
+    public func convergeIfNeeded(
+        repository: any JournalRepository,
+        resolutions: [MigrationResolution],
+        backupDirectory: URL
+    ) throws -> MigrationValidationReport? {
+        guard try !repository.hasCompletedMigration(
+            identifier: ProductConvergenceMigration.identifier
+        ) else {
+            return nil
+        }
+        return try ProductConvergenceMigration().execute(
+            snapshot: repository.snapshot(),
+            resolutions: resolutions,
+            repository: repository,
+            backupDirectory: backupDirectory
         )
     }
 }

@@ -2,6 +2,25 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class RepositoryMigrationTests: XCTestCase {
+    func testConvergenceFailureDoesNotSetMarkerOrMutateRepository() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let project = Project(name: "CS336", area: "AI", goal: "Learn", currentNextStep: "Read")
+        let backing = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let repository = FailingCommitRepository(backing: backing)
+
+        XCTAssertThrowsError(
+            try RepositoryMigration().convergeIfNeeded(
+                repository: repository,
+                resolutions: [],
+                backupDirectory: root
+            )
+        )
+
+        XCTAssertEqual(try backing.snapshot().projects, [project])
+        XCTAssertFalse(try backing.hasCompletedMigration(identifier: ProductConvergenceMigration.identifier))
+    }
     func testMigrationImportsLegacySnapshotOnceWithoutCreatingOutbox() throws {
         let project = Project(
             name: "CS336",
@@ -112,4 +131,24 @@ final class RepositoryMigrationTests: XCTestCase {
         XCTAssertEqual(snapshot.practiceSessions, [session])
         XCTAssertTrue(try repository.pendingMutations(limit: 10).isEmpty)
     }
+}
+
+private final class FailingCommitRepository: JournalRepository {
+    enum Failure: Error { case commit }
+    let backing: InMemoryJournalRepository
+    init(backing: InMemoryJournalRepository) { self.backing = backing }
+    func snapshot() throws -> JournalSnapshot { try backing.snapshot() }
+    func commit(_ transaction: JournalTransaction) throws { throw Failure.commit }
+    func pendingMutations(limit: Int) throws -> [PendingMutation] { [] }
+    func acknowledge(_ mutationIDs: Set<UUID>, metadata: [SyncRecordMetadata]) throws {}
+    func conflicts() throws -> [SyncConflict] { [] }
+    func resolveConflict(id: UUID, with entity: JournalEntity) throws {}
+    func hasCompletedMigration(identifier: String) throws -> Bool { try backing.hasCompletedMigration(identifier: identifier) }
+    func entity(for reference: JournalEntityReference) throws -> JournalEntity? { try backing.entity(for: reference) }
+    func metadata(for reference: JournalEntityReference) throws -> SyncRecordMetadata? { nil }
+    func reference(recordName: String) throws -> JournalEntityReference? { nil }
+    func recordSyncFailures(retryable: [UUID: String], terminal: [UUID: String]) throws {}
+    func syncChangeToken() throws -> Data? { nil }
+    func storeSyncChangeToken(_ token: Data?) throws {}
+    func applyRemote(_ transaction: JournalTransaction, conflicts: [SyncConflict]) throws {}
 }
