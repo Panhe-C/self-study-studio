@@ -21,6 +21,20 @@ const periods: Array<{ id: DashboardPeriod; label: string }> = [
   { id: "12w", label: "12 weeks" },
 ];
 
+function weekLabel(index: number, bucketCount: number) {
+  const weeksAgo = bucketCount - 1 - index;
+  if (weeksAgo === 0) return "This week";
+  return `${weeksAgo} week${weeksAgo === 1 ? "" : "s"} ago`;
+}
+
+function movementSummary(
+  row: ReturnType<typeof derivePortfolioDashboard>["movement"][number],
+) {
+  return `${row.projectName} weekly movement: ${row.buckets
+    .map((bucket) => `${bucket.label}: ${bucket.count}`)
+    .join("; ")} meaningful events.`;
+}
+
 function PulseCard({
   label,
   value,
@@ -49,6 +63,12 @@ function PortfolioProjectCard({
   openProject: PortfolioDashboardProps["openProject"];
 }) {
   const maxActivity = Math.max(...project.activity, 1);
+  const activitySummary = `${project.name} meaningful activity over ${project.activity.length} weeks: ${project.activity
+    .map(
+      (count, index) =>
+        `${weekLabel(index, project.activity.length)}: ${count}`,
+    )
+    .join("; ")} meaningful events.`;
   const evidencePercent =
     project.evidence.expected === 0
       ? 0
@@ -85,9 +105,13 @@ function PortfolioProjectCard({
           <span className="mini-label">Active Phase</span>
           <h5>{project.activePhase?.title ?? "No active Phase"}</h5>
           <p className="portfolio-outcome">{project.outcome}</p>
+          <div className="portfolio-expected-proof">
+            <span className="mini-label">Expected Proof</span>
+            <p>{project.expectedProof}</p>
+          </div>
           <div className="portfolio-evidence">
             <div>
-              <span>Expected Proof</span>
+              <span>Proof readiness</span>
               <strong>
                 {project.evidence.ready} of {project.evidence.expected} signals
                 ready
@@ -103,21 +127,20 @@ function PortfolioProjectCard({
         </div>
         <div className="portfolio-activity">
           <span className="mini-label">Meaningful activity</span>
-          <div
-            className="portfolio-sparkline"
-            aria-label={`${project.name} meaningful activity over 6 weeks`}
-          >
+          <div className="portfolio-sparkline" aria-hidden="true">
             {project.activity.map((count, index) => (
               <span
                 key={index}
+                data-activity-count={count}
                 style={{
-                  height: `${Math.max(8, (count / maxActivity) * 100)}%`,
+                  height: `${count === 0 ? 0 : (count / maxActivity) * 100}%`,
                 }}
               />
             ))}
           </div>
+          <p className="sr-only">{activitySummary}</p>
           <small>
-            6 weeks ago <span>This week</span>
+            {weekLabel(0, project.activity.length)} <span>This week</span>
           </small>
         </div>
       </div>
@@ -178,7 +201,6 @@ function PortfolioMovementMatrix({
           <div
             className="movement-row"
             key={row.projectId}
-            aria-label={row.accessibleSummary}
           >
             <strong>{row.projectName}</strong>
             <div>
@@ -186,10 +208,11 @@ function PortfolioMovementMatrix({
                 <span
                   className={`movement-cell intensity-${bucket.intensity}`}
                   key={bucket.label}
-                  title={`${bucket.label}: ${bucket.count} meaningful events`}
+                  aria-hidden="true"
                 />
               ))}
             </div>
+            <p className="sr-only">{movementSummary(row)}</p>
             <small>{row.accessibleSummary}</small>
           </div>
         ))}
@@ -298,9 +321,9 @@ export function PortfolioDashboard({
         />
       </section>
       <div className="portfolio-main-grid">
-        <section>
+        <section aria-labelledby="portfolio-projects-heading">
           <div className="section-heading">
-            <h3>Active Projects</h3>
+            <h3 id="portfolio-projects-heading">Active Projects</h3>
             {model.hasMoreProjects && (
               <button className="text-button" onClick={openProjects}>
                 View all {model.totalActiveProjects}
@@ -329,9 +352,9 @@ export function PortfolioDashboard({
             </div>
           )}
         </section>
-        <aside>
+        <aside aria-labelledby="portfolio-decisions-heading">
           <div className="section-heading">
-            <h3>Decisions</h3>
+            <h3 id="portfolio-decisions-heading">Decisions</h3>
             <button className="text-button" onClick={openReviews}>
               Review inbox
             </button>

@@ -15,6 +15,10 @@ import {
   type ProjectTab,
   type WorkspaceSection,
 } from "../lib/journal";
+import {
+  projectNavigationState,
+  type WorkspaceNavigationState,
+} from "../lib/workspace-navigation";
 import { PortfolioDashboard } from "./portfolio-dashboard";
 
 const navigation: Array<{ id: WorkspaceSection; label: string; glyph: string }> = [
@@ -102,11 +106,8 @@ export function WorkspaceApp() {
     () => "",
   );
   const urlState = parseUrlState(search);
-  const [localState, setLocalState] = useState<{
-    section: WorkspaceSection;
-    projectId: string;
-    tab: ProjectTab;
-  } | null>(null);
+  const [localState, setLocalState] =
+    useState<WorkspaceNavigationState | null>(null);
 
   const section = localState?.section ?? urlState.section;
   const selectedProjectId = localState?.projectId ?? urlState.projectId;
@@ -143,7 +144,7 @@ export function WorkspaceApp() {
   );
 
   function openProject(projectId: string, tab: ProjectTab = "overview") {
-    setLocalState({ section: "project", projectId, tab });
+    setLocalState(projectNavigationState(projectId, tab));
   }
 
   async function runCloudKitCheck() {

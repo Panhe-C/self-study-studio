@@ -40,11 +40,8 @@ test("keeps portfolio derivation and dashboard presentation in focused modules",
   assert.match(selectors, /deriveCapacityAllocation/);
 });
 
-test("opens a portfolio project and its requested tab in one navigation update", async () => {
+test("delegates portfolio project navigation to a focused state helper", async () => {
   const workspace = await readFile(workspaceUrl, "utf8");
 
-  assert.match(
-    workspace,
-    /function openProject\(projectId: string, tab: ProjectTab = "overview"\) \{\s+setLocalState\(\{ section: "project", projectId, tab \}\);\s+\}/,
-  );
+  assert.match(workspace, /projectNavigationState/);
 });

@@ -1,0 +1,162 @@
+export const CLOUDKIT_SCRIPT_URL =
+  "https://cdn.apple-cloudkit.com/ck/2/CloudKit.js";
+
+export type CloudKitMode =
+  | "demo"
+  | "ready"
+  | "checking"
+  | "signed-out"
+  | "connected"
+  | "error";
+
+export type CloudKitDiagnostic = {
+  mode: CloudKitMode;
+  message: string;
+  userRecordName?: string;
+  recordCount?: number;
+  recordTypes?: Record<string, number>;
+  latestChangeTag?: string;
+};
+
+type CloudKitRecordField = { value?: unknown };
+
+export type CloudKitRecord = {
+  recordName: string;
+  recordType: string;
+  recordChangeTag?: string;
+  deleted?: boolean;
+  fields?: Record<string, CloudKitRecordField>;
+};
+
+type CloudKitZoneChange = {
+  records?: CloudKitRecord[];
+  moreComing?: boolean;
+  syncToken?: string;
+  errors?: Array<{ reason?: string }>;
+};
+
+type CloudKitDatabase = {
+  fetchRecordZoneChanges(
+    options: Record<string, unknown>,
+  ): Promise<{ zones?: CloudKitZoneChange[] }>;
+};
+
+type CloudKitContainer = {
+  privateCloudDatabase: CloudKitDatabase;
+  setUpAuth(): Promise<{ userRecordName?: string } | null>;
+};
+
+type CloudKitNamespace = {
+  DEVELOPMENT_ENVIRONMENT: string;
+  PRODUCTION_ENVIRONMENT: string;
+  configure(config: Record<string, unknown>): void;
+  getDefaultContainer(): CloudKitContainer;
+};
+
+declare global {
+  interface Window {
+    CloudKit?: CloudKitNamespace;
+  }
+}
+
+export const cloudKitConfig = {
+  containerIdentifier:
+    process.env.NEXT_PUBLIC_CLOUDKIT_CONTAINER_IDENTIFIER ??
+    "iCloud.com.local.selfstudystudio",
+  apiToken: process.env.NEXT_PUBLIC_CLOUDKIT_API_TOKEN ?? "",
+  environment:
+    process.env.NEXT_PUBLIC_CLOUDKIT_ENVIRONMENT === "production"
+      ? "production"
+      : "development",
+  zoneName:
+    process.env.NEXT_PUBLIC_CLOUDKIT_ZONE_NAME ?? "LearningJournalZone",
+};
+
+export function hasCloudKitConfiguration() {
+  return cloudKitConfig.apiToken.trim().length > 0;
+}
+
+export function cloudKitFieldValue<T>(
+  record: CloudKitRecord,
+  key: string,
+): T | undefined {
+  return record.fields?.[key]?.value as T | undefined;
+}
+
+async function waitForCloudKit(): Promise<CloudKitNamespace> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (window.CloudKit) return window.CloudKit;
+    await new Promise((resolve) => window.setTimeout(resolve, 100));
+  }
+  throw new Error("Apple CloudKit JS did not load.");
+}
+
+function configureCloudKit(cloudKit: CloudKitNamespace) {
+  const environment =
+    cloudKitConfig.environment === "production"
+      ? cloudKit.PRODUCTION_ENVIRONMENT
+      : cloudKit.DEVELOPMENT_ENVIRONMENT;
+
+  cloudKit.configure({
+    containers: [
+      {
+        containerIdentifier: cloudKitConfig.containerIdentifier,
+        apiTokenAuth: {
+          apiToken: cloudKitConfig.apiToken,
+          persist: true,
+        },
+        environment,
+      },
+    ],
+  });
+}
+
+export async function inspectCloudKitJournal(): Promise<CloudKitDiagnostic> {
+  if (!hasCloudKitConfiguration()) {
+    return {
+      mode: "demo",
+      message: "Add a CloudKit Web API token to test the private journal.",
+    };
+  }
+
+  try {
+    const cloudKit = await waitForCloudKit();
+    configureCloudKit(cloudKit);
+    const container = cloudKit.getDefaultContainer();
+    const identity = await container.setUpAuth();
+
+    if (!identity) {
+      return {
+        mode: "signed-out",
+        message: "Sign in with the Apple Account that owns this journal.",
+      };
+    }
+
+    const response = await container.privateCloudDatabase.fetchRecordZoneChanges({
+      zoneID: { zoneName: cloudKitConfig.zoneName },
+    });
+    const zone = response.zones?.[0];
+    const records = zone?.records?.filter((record) => !record.deleted) ?? [];
+    const recordTypes = records.reduce<Record<string, number>>((counts, record) => {
+      counts[record.recordType] = (counts[record.recordType] ?? 0) + 1;
+      return counts;
+    }, {});
+    const latestChangeTag = records.find((record) => record.recordChangeTag)
+      ?.recordChangeTag;
+
+    return {
+      mode: "connected",
+      message: `Read ${records.length} records from ${cloudKitConfig.zoneName}.`,
+      userRecordName: identity.userRecordName,
+      recordCount: records.length,
+      recordTypes,
+      latestChangeTag,
+    };
+  } catch (error) {
+    return {
+      mode: "error",
+      message:
+        error instanceof Error ? error.message : "CloudKit validation failed.",
+    };
+  }
+}
