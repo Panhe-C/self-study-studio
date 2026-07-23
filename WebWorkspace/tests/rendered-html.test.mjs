@@ -41,6 +41,11 @@ test("server-renders the learning workspace", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
+  assert.match(html, /aria-label="Portfolio pulse"/);
+  assert.match(html, /aria-label="Dashboard period"/);
+  assert.match(html, /aria-pressed="true"/);
+  assert.match(html, /meaningful activity over 6 weeks/i);
+  assert.match(html, /planned minutes of .* available/i);
   assert.match(html, /<title>Self Study Studio — Learning Workspace<\/title>/i);
   assert.match(html, /Your learning portfolio/);
   assert.match(html, /Active Projects/);
@@ -60,6 +65,19 @@ test("server-renders the learning workspace", async () => {
   assert.match(html, /meaningful events across 4 weeks/i);
   assert.doesNotMatch(html, /completion percentage|streak|rank|grade/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
+});
+
+test("keeps portfolio visualizations responsive and text-equivalent", async () => {
+  const [css, dashboard] = await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(css, /\.portfolio-main-grid/);
+  assert.match(css, /\.portfolio-lower-grid/);
+  assert.match(css, /@media \(max-width: 820px\)[\s\S]*\.portfolio-main-grid/);
+  assert.match(css, /\.sr-only/);
+  assert.match(dashboard, /accessibleSummary/);
+  assert.doesNotMatch(css, /overflow-x:\s*scroll[^}]*movement-matrix/);
 });
 
 test("server-renders complete accessible activity sequences in hierarchy order", async () => {
