@@ -56,6 +56,12 @@ test("buckets meaningful events for each project and changes the visible period"
 
   assert.equal(now.length, 2);
   assert.equal(now[0].buckets.length, 4);
+  assert.deepEqual(now[0].buckets.map((bucket) => bucket.label), [
+    "3 weeks ago",
+    "2 weeks ago",
+    "1 week ago",
+    "This week",
+  ]);
   assert.equal(twelveWeeks[0].buckets.length, 12);
   assert.match(now[0].accessibleSummary, /meaningful events/i);
 });

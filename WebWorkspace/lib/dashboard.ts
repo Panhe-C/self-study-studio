@@ -215,11 +215,16 @@ export function deriveMeaningfulActivityBuckets(
   const bucketCount = period === "12w" ? 12 : 4;
   return activeDemos(demos).map((demo) => {
     const counts = activityCounts(demo, bucketCount);
-    const buckets = counts.map((count, index) => ({
-      label: `${bucketCount - index} weeks ago`,
-      count,
-      intensity: Math.min(3, count) as 0 | 1 | 2 | 3,
-    }));
+    const buckets = counts.map((count, index) => {
+      const weeksAgo = bucketCount - 1 - index;
+      return {
+        label: weeksAgo === 0
+          ? "This week"
+          : `${weeksAgo} week${weeksAgo === 1 ? "" : "s"} ago`,
+        count,
+        intensity: Math.min(3, count) as 0 | 1 | 2 | 3,
+      };
+    });
     const total = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
     return {
       projectId: demo.project.id,
