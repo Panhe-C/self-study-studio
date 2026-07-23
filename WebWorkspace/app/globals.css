@@ -91,7 +91,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .welcome-row p:not(.date-line), .page-heading p { margin: 9px 0 0; color: var(--muted); font-size: 13px; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.portfolio-dashboard { max-width: 1280px; margin: 0 auto; }
+.portfolio-dashboard { --portfolio-faint-text: #646a73; --portfolio-green-text: #226348; --portfolio-amber-text: #704509; max-width: 1280px; margin: 0 auto; }
+.portfolio-dashboard button:focus-visible,
+.workspace-shell:has(.portfolio-dashboard) .topbar-actions button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; box-shadow: 0 0 0 2px #fff; }
 .portfolio-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 4px 2px 8px; }
 .portfolio-header h2 { margin: 0; font-size: clamp(28px, 3vw, 38px); line-height: 1.04; letter-spacing: -0.055em; }
 .portfolio-header > div:first-child > p:last-child { margin: 9px 0 0; color: var(--muted); font-size: 13px; }
@@ -100,11 +102,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .portfolio-period button.active { background: var(--ink); color: white; }
 .portfolio-pulse { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .portfolio-pulse-card { min-height: 96px; padding: 17px; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: var(--shadow); }
-.portfolio-pulse-card > span { color: var(--faint); font-size: 9px; font-weight: 760; letter-spacing: 0.07em; text-transform: uppercase; }
+.portfolio-pulse-card > span { color: var(--portfolio-faint-text); font-size: 9px; font-weight: 760; letter-spacing: 0.07em; text-transform: uppercase; }
 .portfolio-pulse-card strong { display: block; margin-top: 10px; font-size: 27px; letter-spacing: -0.05em; }
 .portfolio-pulse-card small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; }
 .portfolio-pulse-card.attention { border-color: #ecd9bc; background: #fffaf2; }
-.portfolio-pulse-card.attention strong { color: var(--amber); }
+.portfolio-pulse-card.attention strong { color: var(--portfolio-amber-text); }
 .portfolio-main-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.62fr); gap: 18px; align-items: start; }
 .portfolio-project-list { display: grid; gap: 12px; margin-top: 12px; }
 .portfolio-empty-state { margin-top: 12px; padding: 34px; border: 1px dashed var(--line-strong); border-radius: 16px; background: rgba(255, 255, 255, 0.55); text-align: center; }
@@ -116,8 +118,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .portfolio-token { --project-accent: var(--blue); width: 38px; height: 38px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 11px; background: color-mix(in srgb, var(--project-accent) 15%, white); color: var(--project-accent); font-size: 11px; font-weight: 800; }
 .portfolio-project-identity h4 { margin: 0; font-size: 15px; letter-spacing: -0.02em; }
 .portfolio-project-identity p { margin: 4px 0 0; color: var(--muted); font-size: 9px; }
-.portfolio-state { padding: 5px 9px; border-radius: 10px; background: var(--green-soft); color: var(--green); font-size: 8px; font-weight: 760; }
-.portfolio-state.attention { background: var(--amber-soft); color: var(--amber); }
+.portfolio-state { padding: 5px 9px; border-radius: 10px; background: var(--green-soft); color: var(--portfolio-green-text); font-size: 8px; font-weight: 760; }
+.portfolio-state.attention { background: var(--amber-soft); color: var(--portfolio-amber-text); }
 .portfolio-project-body { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(150px, 0.75fr); gap: 22px; margin-top: 20px; }
 .portfolio-project-body h5 { margin: 7px 0 0; font-size: 15px; letter-spacing: -0.025em; }
 .portfolio-outcome { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
@@ -129,7 +131,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .portfolio-activity { padding-left: 20px; border-left: 1px solid var(--line); }
 .portfolio-sparkline { height: 65px; display: flex; align-items: flex-end; gap: 6px; margin-top: 14px; }
 .portfolio-sparkline span { flex: 1; min-height: 5px; border-radius: 4px 4px 1px 1px; background: #6f8fc9; }
-.portfolio-activity > small { display: flex; justify-content: space-between; margin-top: 6px; color: var(--faint); font-size: 8px; }
+.portfolio-activity > small { display: flex; justify-content: space-between; margin-top: 6px; color: var(--portfolio-faint-text); font-size: 8px; }
 .portfolio-project-card > footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--line); }
 .portfolio-project-card > footer strong, .portfolio-project-card > footer small { display: block; }
 .portfolio-project-card > footer strong { margin-top: 5px; font-size: 11px; }
@@ -447,9 +449,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   .portfolio-pulse { grid-template-columns: 1fr; }
   .portfolio-period { width: 100%; }
   .portfolio-period button { flex: 1; min-height: 44px; }
+  .portfolio-dashboard .text-button { min-height: 44px; }
+  .portfolio-dashboard .portfolio-empty-state .secondary-button { min-height: 44px; }
   .portfolio-decision-card button { min-height: 44px; }
   .portfolio-project-card > footer { align-items: stretch; flex-direction: column; }
   .portfolio-project-card > footer .secondary-button { width: 100%; min-height: 44px; }
+  .workspace-shell:has(.portfolio-dashboard) .topbar-actions button { min-width: 44px; min-height: 44px; }
   .movement-row { grid-template-columns: 1fr; }
   .movement-row > small { grid-column: auto; }
   .project-list-card { grid-template-columns: 5px minmax(0, 1fr) 15px; }

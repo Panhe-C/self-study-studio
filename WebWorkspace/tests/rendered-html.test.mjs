@@ -35,6 +35,38 @@ function assertInOrder(input, values) {
   }
 }
 
+function contrastRatio(foreground, background) {
+  const luminance = (hex) => {
+    const channels = hex
+      .slice(1)
+      .match(/.{2}/g)
+      .map((channel) => Number.parseInt(channel, 16) / 255)
+      .map((channel) =>
+        channel <= 0.04045
+          ? channel / 12.92
+          : ((channel + 0.055) / 1.055) ** 2.4,
+      );
+    return (
+      0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+    );
+  };
+
+  const foregroundLuminance = luminance(foreground);
+  const backgroundLuminance = luminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+}
+
+function cssHexVariable(css, name) {
+  const match = css.match(
+    new RegExp(`--${name}:\\s*(#[0-9a-f]{6})\\b`, "i"),
+  );
+  assert.ok(match, `Expected --${name} to be a six-digit hex color`);
+  return match[1];
+}
+
 test("server-renders the learning workspace", async () => {
   const response = await render();
   assert.equal(response.status, 200);
@@ -77,7 +109,96 @@ test("keeps portfolio visualizations responsive and text-equivalent", async () =
   assert.match(css, /@media \(max-width: 820px\)[\s\S]*\.portfolio-main-grid/);
   assert.match(css, /\.sr-only/);
   assert.match(dashboard, /accessibleSummary/);
-  assert.doesNotMatch(css, /overflow-x:\s*scroll[^}]*movement-matrix/);
+  const forbiddenMovementScroll =
+    /\.movement-matrix\s*\{[^}]*overflow-x:\s*(?:auto|scroll)\b/;
+  assert.match(
+    ".movement-matrix { overflow-x: auto; }",
+    forbiddenMovementScroll,
+  );
+  assert.doesNotMatch(css, forbiddenMovementScroll);
+});
+
+test("keeps every narrow Dashboard action at least 44 pixels", async () => {
+  const css = await readFile(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+  const narrowRules = css.match(
+    /@media \(max-width: 540px\) \{([\s\S]*?)\n\}/,
+  )?.[1];
+
+  assert.ok(narrowRules, "Expected the 540px responsive rules");
+  assert.match(
+    narrowRules,
+    /\.portfolio-period button\s*\{[^}]*min-height:\s*44px/,
+  );
+  assert.match(
+    narrowRules,
+    /\.portfolio-dashboard \.text-button\s*\{[^}]*min-height:\s*44px/,
+  );
+  assert.match(
+    narrowRules,
+    /\.portfolio-dashboard \.portfolio-empty-state \.secondary-button\s*\{[^}]*min-height:\s*44px/,
+  );
+  assert.match(
+    narrowRules,
+    /\.portfolio-decision-card button\s*\{[^}]*min-height:\s*44px/,
+  );
+  assert.match(
+    narrowRules,
+    /\.portfolio-project-card > footer \.secondary-button\s*\{[^}]*min-height:\s*44px/,
+  );
+  assert.match(
+    css,
+    /\.portfolio-attention-row\s*\{[^}]*min-height:\s*52px/,
+  );
+  assert.match(
+    narrowRules,
+    /\.workspace-shell:has\(\.portfolio-dashboard\) \.topbar-actions button\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*44px/,
+  );
+});
+
+test("uses readable Portfolio status colors for small text", async () => {
+  const css = await readFile(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+  const faintText = cssHexVariable(css, "portfolio-faint-text");
+  const greenText = cssHexVariable(css, "portfolio-green-text");
+  const amberText = cssHexVariable(css, "portfolio-amber-text");
+
+  assert.ok(contrastRatio(faintText, "#ffffff") >= 4.5);
+  assert.ok(contrastRatio(greenText, "#e6f1ec") >= 4.5);
+  assert.ok(contrastRatio(amberText, "#fbf1df") >= 4.5);
+  assert.match(
+    css,
+    /\.portfolio-pulse-card > span\s*\{[^}]*color:\s*var\(--portfolio-faint-text\)/,
+  );
+  assert.match(
+    css,
+    /\.portfolio-activity > small\s*\{[^}]*color:\s*var\(--portfolio-faint-text\)/,
+  );
+  assert.match(
+    css,
+    /\.portfolio-state\s*\{[^}]*color:\s*var\(--portfolio-green-text\)/,
+  );
+  assert.match(
+    css,
+    /\.portfolio-state\.attention\s*\{[^}]*color:\s*var\(--portfolio-amber-text\)/,
+  );
+});
+
+test("gives Dashboard controls a high-contrast focus indicator", async () => {
+  const css = await readFile(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    css,
+    /\.portfolio-dashboard button:focus-visible,[\s\S]*?\.workspace-shell:has\(\.portfolio-dashboard\) \.topbar-actions button:focus-visible\s*\{[^}]*outline:\s*3px solid #1d4ed8;[^}]*outline-offset:\s*3px;[^}]*box-shadow:\s*0 0 0 2px #fff/,
+  );
+  assert.ok(contrastRatio("#1d4ed8", "#ffffff") >= 3);
 });
 
 test("server-renders complete accessible activity sequences in hierarchy order", async () => {

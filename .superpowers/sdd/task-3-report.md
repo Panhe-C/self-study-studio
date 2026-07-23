@@ -103,3 +103,65 @@ Still requiring a connected browser for direct observation:
 - Shared styles still used by non-Dashboard screens were preserved.
 - Responsive rules use grid collapse rather than chart scrolling.
 - The only concern is the unavailable browser instance; no automated test or lint failures remain.
+
+## Review fix follow-up
+
+Review identified four accessibility-contract gaps. This follow-up remained inside Task 3 and intentionally skipped browser acceptance and Task 4.
+
+### RED
+
+Added source contracts for:
+
+- every narrow Dashboard action, including Review inbox, conditional View all, empty-state action, attention rows, Project/Review actions, period controls, and Dashboard-only topbar actions;
+- WCAG 4.5:1 contrast for the new faint, green, and amber small/status text roles;
+- a Dashboard-specific focus-visible indicator with at least 3:1 adjacent contrast;
+- a correctly ordered movement-matrix overflow guard that rejects both `overflow-x: auto` and `overflow-x: scroll`.
+
+Command:
+
+```bash
+cd WebWorkspace
+npm run build
+node --experimental-strip-types --test tests/rendered-html.test.mjs
+```
+
+Observed:
+
+- Production build passed.
+- 5 tests passed and 3 failed.
+- Expected failures were the missing narrow-action rules, readable local color roles, and high-contrast Dashboard focus indicator.
+- The corrected movement-matrix regex was also exercised against synthetic `.movement-matrix { overflow-x: auto; }` CSS and detected it.
+
+### GREEN
+
+Implemented the minimum Dashboard-scoped CSS:
+
+- 44 px narrow controls for Dashboard text actions, empty state, primary decisions, Project actions, period controls, and topbar actions; attention rows remain 52 px.
+- Local readable text roles:
+  - faint text: `#646a73` on white = 5.45:1;
+  - green status text: `#226348` on `#e6f1ec` = 6.16:1;
+  - amber status text: `#704509` on `#fbf1df` = 7.37:1.
+- A 3 px `#1d4ed8` focus outline, 3 px offset, and white separation ring for Portfolio controls and Dashboard-only topbar actions; blue-to-white contrast is 6.70:1.
+- Graph fills and non-Dashboard controls were left unchanged.
+
+Re-running the targeted command passed all 8 rendered/source tests.
+
+### Final follow-up verification
+
+```bash
+cd WebWorkspace
+npm run lint
+npm test
+```
+
+Results:
+
+- ESLint passed with exit code 0.
+- Vinext production build passed.
+- 23 tests passed, 0 failed.
+
+```bash
+git diff --check
+```
+
+Result: passed with exit code 0.
