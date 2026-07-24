@@ -18,12 +18,15 @@ function atRuleBody(source, atRule) {
   assert.fail(`Expected ${atRule} to have a closing brace`);
 }
 
-test("keeps every Dashboard button at least 44 pixels on coarse pointers at every viewport", async () => {
+test("keeps every Dashboard button at least 44 pixels on primary or mixed coarse pointers", async () => {
   const css = await readFile(
     new URL("../app/globals.css", import.meta.url),
     "utf8",
   );
-  const coarsePointerRules = atRuleBody(css, "@media (pointer: coarse)");
+  const coarsePointerRules = atRuleBody(
+    css,
+    "@media (pointer: coarse), (any-pointer: coarse)",
+  );
 
   assert.match(
     coarsePointerRules,

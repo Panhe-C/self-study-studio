@@ -496,7 +496,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   .block-actual { grid-column: 3; text-align: left; }
 }
 
-@media (pointer: coarse) {
+@media (pointer: coarse), (any-pointer: coarse) {
   .workspace-shell:has(.portfolio-dashboard) button { min-width: 44px; min-height: 44px; }
 }
 

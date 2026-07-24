@@ -71,3 +71,44 @@ exit code 0
 The first full-suite run occurred while the independent CloudKit fix was still
 in progress and reported four CloudKit-only failures. The final fresh run above
 was performed after that shared-workspace update and passed all 29 tests.
+
+## Mixed-device final review
+
+Review baseline: `0317f37`
+
+The primary-pointer-only query did not cover hybrid devices whose primary
+pointer is fine but which also expose a touchscreen. The media query is now:
+
+```css
+@media (pointer: coarse), (any-pointer: coarse) {
+  .workspace-shell:has(.portfolio-dashboard) button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+```
+
+The original `pointer: coarse` branch, selector, 44px declarations, and narrow
+viewport rules remain intact.
+
+TDD RED:
+
+```text
+node --test tests/dashboard-touch.test.mjs
+tests 2; pass 1; fail 1
+AssertionError: Expected @media (pointer: coarse), (any-pointer: coarse)
+```
+
+Final verification:
+
+```text
+node --test tests/dashboard-touch.test.mjs
+tests 2; pass 2; fail 0
+
+npm test
+Build complete.
+tests 36; pass 36; fail 0
+
+npm run lint
+exit code 0
+```
