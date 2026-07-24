@@ -427,7 +427,7 @@ function ProjectOverview({ demo }: { demo: ProjectDemo }) {
           <h3>{project.nextStep}</h3>
           <button className="dark-button">Make Up Next</button>
         </article>
-        <article className="card mini-practice-card">
+        <article className="card">
           <div className="section-heading compact">
             <div>
               <span className="mini-label">Practice routine</span>

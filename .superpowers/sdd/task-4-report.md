@@ -182,3 +182,40 @@ not satisfy its no-match expectation. All build, lint, test, approved
 vocabulary, whitespace, worktree-scope, and commit-history evidence otherwise
 matched the verification scope. The failure was reported without expanding
 into implementation work.
+
+## Post-verification minimal repair
+
+Date: 2026-07-24
+
+Fix-start HEAD: `ebd8ba5`
+
+Result: **PASSED**
+
+The failing stale-assumption command was first rerun unchanged and reproduced
+the single expected RED result:
+
+```text
+WebWorkspace/app/workspace-app.tsx:430:        <article className="card mini-practice-card">
+```
+
+A repository search for `mini-practice-card` and `.mini-practice-card` found
+only that JSX class and no corresponding CSS or code reference. The minimal
+repair removed only the unused `mini-practice-card` token while retaining the
+shared `card` class; no rendering logic or behavior changed.
+
+The exact stale-assumption command was rerun after the repair. It returned exit
+code `1` with no output, proving there are no remaining matches. The focused
+repository search for `mini-practice-card` and `.mini-practice-card` also
+returned exit code `1` with no output.
+
+Final validation:
+
+- `cd WebWorkspace && npm test`: exit code `0`; production build completed and
+  all 23 tests passed.
+- `cd WebWorkspace && npm run lint`: exit code `0`; no lint errors.
+- `git diff --check`: exit code `0`; no whitespace errors.
+
+The production-code diff is one line in
+`WebWorkspace/app/workspace-app.tsx`. The pre-existing root/iOS/docs/assets
+changes listed earlier in this report were not modified or included in this
+repair.
