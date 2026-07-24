@@ -7,6 +7,7 @@ export type CloudKitMode =
   | "checking"
   | "signed-out"
   | "connected"
+  | "partial"
   | "error";
 
 export type CloudKitDiagnostic = {
@@ -132,23 +133,85 @@ export async function inspectCloudKitJournal(): Promise<CloudKitDiagnostic> {
       };
     }
 
-    const response = await container.privateCloudDatabase.fetchRecordZoneChanges({
-      zoneID: { zoneName: cloudKitConfig.zoneName },
-    });
-    const zone = response.zones?.[0];
-    const records = zone?.records?.filter((record) => !record.deleted) ?? [];
-    const recordTypes = records.reduce<Record<string, number>>((counts, record) => {
-      counts[record.recordType] = (counts[record.recordType] ?? 0) + 1;
-      return counts;
-    }, {});
-    const latestChangeTag = records.find((record) => record.recordChangeTag)
+    const records: CloudKitRecord[] = [];
+    const readIssues: string[] = [];
+    const seenSyncTokens = new Set<string>();
+    let syncToken: string | undefined;
+
+    while (true) {
+      const response =
+        await container.privateCloudDatabase.fetchRecordZoneChanges({
+          zoneID: { zoneName: cloudKitConfig.zoneName },
+          ...(syncToken ? { syncToken } : {}),
+        });
+      const zone = response.zones?.[0];
+
+      if (!zone) {
+        readIssues.push(
+          `CloudKit returned no result for ${cloudKitConfig.zoneName}.`,
+        );
+        break;
+      }
+
+      records.push(...(zone.records ?? []));
+      readIssues.push(
+        ...(zone.errors ?? []).map(
+          (error) =>
+            error.reason ?? "CloudKit reported an unspecified zone error.",
+        ),
+      );
+
+      if (!zone.moreComing) break;
+
+      const nextSyncToken = zone.syncToken?.trim();
+      if (!nextSyncToken) {
+        readIssues.push(
+          "CloudKit reported more changes but did not return a sync token.",
+        );
+        break;
+      }
+      if (seenSyncTokens.has(nextSyncToken)) {
+        readIssues.push(
+          "CloudKit repeated a sync token before the zone read completed.",
+        );
+        break;
+      }
+
+      seenSyncTokens.add(nextSyncToken);
+      syncToken = nextSyncToken;
+    }
+
+    const activeRecords = records.filter((record) => !record.deleted);
+    const recordTypes = activeRecords.reduce<Record<string, number>>(
+      (counts, record) => {
+        counts[record.recordType] = (counts[record.recordType] ?? 0) + 1;
+        return counts;
+      },
+      {},
+    );
+    const latestChangeTag = activeRecords.find((record) => record.recordChangeTag)
       ?.recordChangeTag;
+
+    if (readIssues.length > 0) {
+      const mode = activeRecords.length > 0 ? "partial" : "error";
+      return {
+        mode,
+        message:
+          mode === "partial"
+            ? `Partial read: read ${activeRecords.length} records from ${cloudKitConfig.zoneName}, but ${readIssues.join(" ")}`
+            : `CloudKit validation failed for ${cloudKitConfig.zoneName}: ${readIssues.join(" ")}`,
+        userRecordName: identity.userRecordName,
+        recordCount: activeRecords.length,
+        recordTypes,
+        latestChangeTag,
+      };
+    }
 
     return {
       mode: "connected",
-      message: `Read ${records.length} records from ${cloudKitConfig.zoneName}.`,
+      message: `Read ${activeRecords.length} records from ${cloudKitConfig.zoneName}.`,
       userRecordName: identity.userRecordName,
-      recordCount: records.length,
+      recordCount: activeRecords.length,
       recordTypes,
       latestChangeTag,
     };
