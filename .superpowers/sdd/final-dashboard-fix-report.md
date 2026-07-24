@@ -8,9 +8,9 @@ dependencies.
 
 The final implementation now:
 
-- injects one `asOf`/clock value into derivation and rendering, formats the
-  header date from that same instant, and derives the latest meaningful time
-  from canonical Trail events;
+- creates one `initialAsOf` and one explicit display time zone at the server
+  page boundary, serializes both through `WorkspaceApp`, and consumes those
+  values in Dashboard derivation and rendering without a client clock;
 - shows the active Phase description as the Phase outcome and the real Project
   lifecycle status;
 - derives a Project's Next Decision from the same ordered attention items used
@@ -26,7 +26,8 @@ The final implementation now:
 - selects the top eight active Projects by explicit decision, severity, age,
   and stable Project id;
 - keeps additional ready Reviews visible after the primary decision is chosen;
-- defines Needs Attention as the number of distinct involved Projects;
+- defines Needs Attention as the number of unique actionable attention item
+  ids, including multiple actions from one Project;
 - makes `Now`, `4 weeks`, and `12 weeks` use 1, 4, and 12 activity buckets;
 - normalizes movement intensity against the maximum count in the complete
   visible Project-by-period matrix;
@@ -37,6 +38,7 @@ The final implementation now:
 
 - `WebWorkspace/lib/dashboard.ts`
 - `WebWorkspace/lib/journal.ts`
+- `WebWorkspace/app/page.tsx`
 - `WebWorkspace/app/portfolio-dashboard.tsx`
 - `WebWorkspace/app/workspace-app.tsx`
 - `WebWorkspace/app/globals.css`
@@ -63,6 +65,10 @@ No CloudKit file was modified.
    segment, or attention.
 8. All Review items were removed from the attention list after only one Review
    was selected as the primary decision.
+9. The Dashboard component's default clock ran once during server rendering and
+   again during hydration, so date-sensitive markup could cross a time boundary.
+10. Needs Attention deduplicated by Project id, hiding additional actionable
+    items belonging to the same Project.
 
 ## TDD evidence
 
@@ -109,6 +115,29 @@ fail 2
 The rendered component still showed the fixed `Wednesday, July 23`, ignored the
 injected snapshot, omitted overload treatment, and could not render empty,
 partial, conflict, loading, or error states.
+
+### RED — server snapshot identity and actionable-item count
+
+Command:
+
+```bash
+cd WebWorkspace
+node --experimental-strip-types --test \
+  --test-name-pattern='unique actionable|explicit local time zone|threads one server initialAsOf' \
+  tests/dashboard.test.mjs tests/rendered-html.test.mjs
+```
+
+Observed before the follow-up implementation:
+
+```text
+tests 3
+pass 0
+fail 3
+```
+
+The selector returned `2` distinct Projects instead of `5` unique actionable
+items, the date formatter returned UTC Friday instead of configured-local
+Saturday, and `page.tsx` did not create or pass an `initialAsOf`.
 
 ### RED — exact top-eight age comparator
 
@@ -165,8 +194,8 @@ npm test
 Result:
 
 ```text
-tests 36
-pass 36
+tests 39
+pass 39
 fail 0
 ```
 

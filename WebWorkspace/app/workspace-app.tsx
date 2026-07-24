@@ -97,7 +97,13 @@ function formatMinutes(minutes: number) {
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 
-export function WorkspaceApp() {
+export function WorkspaceApp({
+  initialAsOf,
+  initialTimeZone,
+}: {
+  initialAsOf: string;
+  initialTimeZone: string;
+}) {
   // URL search is an external store: SSR renders the fallback (dashboard),
   // hydration matches it, and React re-reads the real search right after.
   const search = useSyncExternalStore(
@@ -256,6 +262,8 @@ export function WorkspaceApp() {
         <div className="content-scroll">
           {section === "dashboard" && (
             <PortfolioDashboard
+              initialAsOf={initialAsOf}
+              initialTimeZone={initialTimeZone}
               openProject={openProject}
               openProjects={() => setSection("projects")}
               openReviews={() => setSection("reviews")}

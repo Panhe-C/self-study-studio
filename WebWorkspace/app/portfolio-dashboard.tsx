@@ -19,8 +19,9 @@ type PortfolioDashboardProps = {
   openProjects: () => void;
   openReviews: () => void;
   openSync: () => void;
+  initialAsOf: string;
+  initialTimeZone: string;
   snapshot?: DashboardSnapshot;
-  clock?: () => Date;
 };
 
 const periods: Array<{ id: DashboardPeriod; label: string }> = [
@@ -28,8 +29,6 @@ const periods: Array<{ id: DashboardPeriod; label: string }> = [
   { id: "4w", label: "4 weeks" },
   { id: "12w", label: "12 weeks" },
 ];
-
-const defaultClock = () => new Date();
 
 const unavailableLabels: Record<DashboardSection, string> = {
   evidence: "Proof readiness",
@@ -347,17 +346,19 @@ function CapacityAllocation({
 
 function DashboardHeader({
   asOf,
+  timeZone,
   period,
   setPeriod,
 }: {
   asOf: string;
+  timeZone: string;
   period: DashboardPeriod;
   setPeriod: (period: DashboardPeriod) => void;
 }) {
   return (
     <header className="portfolio-header">
       <div>
-        <p className="date-line">{formatDashboardDate(asOf)}</p>
+        <p className="date-line">{formatDashboardDate(asOf, timeZone)}</p>
         <h2>Your learning portfolio</h2>
         <p>See where every active Project stands and what needs a decision.</p>
       </div>
@@ -377,7 +378,13 @@ function DashboardHeader({
   );
 }
 
-function DashboardLoading({ asOf }: { asOf: string }) {
+function DashboardLoading({
+  asOf,
+  timeZone,
+}: {
+  asOf: string;
+  timeZone: string;
+}) {
   return (
     <div
       className="portfolio-dashboard page-stack"
@@ -386,7 +393,7 @@ function DashboardLoading({ asOf }: { asOf: string }) {
     >
       <header className="portfolio-header portfolio-skeleton">
         <div>
-          <p className="date-line">{formatDashboardDate(asOf)}</p>
+          <p className="date-line">{formatDashboardDate(asOf, timeZone)}</p>
           <span className="skeleton-line wide" />
           <span className="skeleton-line" />
         </div>
@@ -429,19 +436,19 @@ export function PortfolioDashboard({
   openProjects,
   openReviews,
   openSync,
+  initialAsOf,
+  initialTimeZone,
   snapshot,
-  clock = defaultClock,
 }: PortfolioDashboardProps) {
   const [period, setPeriod] = useState<DashboardPeriod>("now");
-  const [asOf] = useState(() => snapshot?.asOf ?? clock().toISOString());
   const currentSnapshot = useMemo(
     () =>
       snapshot ??
       createDashboardSnapshot({
-        asOf,
+        asOf: initialAsOf,
         demos: projectDemos,
       }),
-    [asOf, snapshot],
+    [initialAsOf, snapshot],
   );
   const model = useMemo(
     () => derivePortfolioDashboard(currentSnapshot, period),
@@ -449,7 +456,9 @@ export function PortfolioDashboard({
   );
 
   if (model.loadState === "loading") {
-    return <DashboardLoading asOf={model.asOf} />;
+    return (
+      <DashboardLoading asOf={model.asOf} timeZone={initialTimeZone} />
+    );
   }
 
   if (model.loadState === "error") {
@@ -457,6 +466,7 @@ export function PortfolioDashboard({
       <div className="portfolio-dashboard page-stack">
         <DashboardHeader
           asOf={model.asOf}
+          timeZone={initialTimeZone}
           period={period}
           setPeriod={setPeriod}
         />
@@ -483,6 +493,7 @@ export function PortfolioDashboard({
     <div className="portfolio-dashboard page-stack">
       <DashboardHeader
         asOf={model.asOf}
+        timeZone={initialTimeZone}
         period={period}
         setPeriod={setPeriod}
       />
@@ -530,7 +541,7 @@ export function PortfolioDashboard({
         <PulseCard
           label="Needs attention"
           value={`${model.pulse.needsAttention}`}
-          detail="Distinct Projects involved"
+          detail="Actionable items"
           attention
         />
       </section>

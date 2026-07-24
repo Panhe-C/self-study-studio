@@ -322,7 +322,7 @@ export function createDashboardSnapshot(
   };
 }
 
-export function formatDashboardDate(asOf: string) {
+export function formatDashboardDate(asOf: string, timeZone: string) {
   const timestamp = asTimestamp(asOf);
   if (timestamp === null) return "Date unavailable";
 
@@ -330,7 +330,7 @@ export function formatDashboardDate(asOf: string) {
     weekday: "long",
     month: "long",
     day: "numeric",
-    timeZone: "UTC",
+    timeZone,
   }).format(new Date(timestamp));
 }
 
@@ -579,8 +579,8 @@ export function derivePortfolioPulse(
 ): PortfolioPulse {
   const active = activeDemos(demos);
   const unavailable = new Set(options.unavailableSections ?? []);
-  const attentionProjectIds = new Set(
-    deriveAttentionItems(active, options).map((item) => item.projectId),
+  const attentionItemIds = new Set(
+    deriveAttentionItems(active, options).map((item) => item.id),
   );
 
   return {
@@ -598,7 +598,7 @@ export function derivePortfolioPulse(
           0,
         ),
     reviewsReady: active.filter((demo) => demo.review.ready).length,
-    needsAttention: attentionProjectIds.size,
+    needsAttention: attentionItemIds.size,
   };
 }
 

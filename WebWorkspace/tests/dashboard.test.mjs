@@ -7,6 +7,7 @@ import {
   derivePortfolioDashboard,
   derivePortfolioPulse,
   deriveProjectDashboardState,
+  formatDashboardDate,
 } from "../lib/dashboard.ts";
 import { projectDemos } from "../lib/journal.ts";
 
@@ -16,10 +17,11 @@ function cloneDemo(demo = projectDemos[0]) {
   return structuredClone(demo);
 }
 
-test("aggregates every active project and counts Needs Attention as distinct projects", () => {
+test("aggregates every active project and counts unique actionable attention items", () => {
   const model = derivePortfolioDashboard(projectDemos, "now", {
     asOf: AS_OF,
   });
+  const attentionItems = deriveAttentionItems(projectDemos, { asOf: AS_OF });
 
   assert.equal(model.projects.length, 2);
   assert.equal(model.pulse.activeProjects, 2);
@@ -28,13 +30,32 @@ test("aggregates every active project and counts Needs Attention as distinct pro
   assert.equal(model.pulse.reviewsReady, 1);
   assert.equal(
     model.pulse.needsAttention,
-    new Set(
-      deriveAttentionItems(projectDemos, { asOf: AS_OF }).map(
-        (item) => item.projectId,
-      ),
-    ).size,
+    new Set(attentionItems.map((item) => item.id)).size,
+  );
+  assert.ok(
+    attentionItems.length >
+      new Set(attentionItems.map((item) => item.projectId)).size,
   );
   assert.ok(model.projects.every((item) => !("completionPercent" in item)));
+});
+
+test("formats the injected instant in an explicit local time zone", () => {
+  assert.equal(
+    formatDashboardDate("2026-07-24T16:30:00Z", "Asia/Shanghai"),
+    "Saturday, July 25",
+  );
+});
+
+test("counts multiple actionable items from one Project separately", () => {
+  const demo = cloneDemo(projectDemos[0]);
+  const attentionItems = deriveAttentionItems([demo], { asOf: AS_OF });
+
+  assert.equal(new Set(attentionItems.map((item) => item.projectId)).size, 1);
+  assert.ok(attentionItems.length > 1);
+  assert.equal(
+    derivePortfolioPulse([demo], { asOf: AS_OF }).needsAttention,
+    new Set(attentionItems.map((item) => item.id)).size,
+  );
 });
 
 test("uses the active Phase outcome, explicit Project status, and unified attention priority", () => {

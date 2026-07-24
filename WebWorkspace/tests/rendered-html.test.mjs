@@ -54,6 +54,8 @@ async function renderDashboard(props) {
   );
   return renderToStaticMarkup(
     createElement(PortfolioDashboard, {
+      initialAsOf: "2026-07-24T12:00:00Z",
+      initialTimeZone: "UTC",
       openProject() {},
       openProjects() {},
       openReviews() {},
@@ -62,6 +64,34 @@ async function renderDashboard(props) {
     }),
   );
 }
+
+test("threads one server initialAsOf through the production Dashboard boundary", async () => {
+  const [pageSource, workspaceSource, dashboardSource] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/workspace-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(pageSource, /const initialAsOf = new Date\(\)\.toISOString\(\)/);
+  assert.match(pageSource, /<WorkspaceApp[\s\S]*initialAsOf=\{initialAsOf\}/);
+  assert.match(
+    workspaceSource,
+    /export function WorkspaceApp\(\{[\s\S]*initialAsOf[\s\S]*\}\)/,
+  );
+  assert.match(
+    workspaceSource,
+    /<PortfolioDashboard[\s\S]*initialAsOf=\{initialAsOf\}/,
+  );
+  assert.match(dashboardSource, /initialAsOf: string/);
+  assert.doesNotMatch(dashboardSource, /defaultClock|clock\(\)/);
+
+  const html = await renderDashboard({
+    initialAsOf: "2026-08-02T12:00:00Z",
+    initialTimeZone: "Asia/Shanghai",
+  });
+  assert.match(html, /Sunday, August 2/);
+  assert.match(html, /Actionable items/);
+});
 
 test.after(async () => {
   if (dashboardServerPromise) {
@@ -249,7 +279,7 @@ test("gives Dashboard controls a high-contrast focus indicator", async () => {
 
 test("server-renders complete accessible activity sequences in hierarchy order", async () => {
   const html = await renderDashboard({
-    clock: () => new Date("2026-07-24T12:00:00Z"),
+    initialAsOf: "2026-07-24T12:00:00Z",
   });
 
   assert.match(
@@ -286,12 +316,12 @@ test("server-renders zero activity buckets at zero height", async () => {
   assert.doesNotMatch(html, /data-activity-count="0" style="height:(?!0%)[^"]+"/);
 });
 
-test("server-renders the injected clock, overload warning segment, and capacity attention", async () => {
+test("server-renders the injected asOf, overload warning segment, and capacity attention", async () => {
   const demos = structuredClone(projectDemos);
   demos[1].capacity.plannedMinutes = 600;
   demos[1].capacity.availableMinutes = 300;
   const clockHtml = await renderDashboard({
-    clock: () => new Date("2026-07-24T12:00:00Z"),
+    initialAsOf: "2026-07-24T12:00:00Z",
   });
   const html = await renderDashboard({
     snapshot: {
