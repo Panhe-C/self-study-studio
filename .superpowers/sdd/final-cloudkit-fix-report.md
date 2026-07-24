@@ -66,3 +66,22 @@ remain intact.
   an environment acceptance step and was not available in this task.
 - Dashboard presentation of the new `partial` state was intentionally left
   unchanged because Dashboard files were explicitly outside this fix.
+
+## Minor follow-up — overlapping page records
+
+Final review found that overlapping CloudKit pages, including the page that
+reveals a repeated continuation token, could append the same record more than
+once and inflate `recordCount` and `recordTypes`.
+
+The diagnostic now collapses fetched changes by stable `recordName` before
+filtering deleted records and computing counts. Later page entries replace
+earlier entries for the same record, so a later deletion also removes that
+record from the active diagnostic count.
+
+TDD evidence:
+
+- RED: focused contract run passed 5 / failed 2. A normal overlapping page
+  counted 3 instead of 2; a repeated-token page counted 2 instead of 1.
+- GREEN: focused contract run passed 7 / failed 0.
+- Full `npm test`: production build succeeded; 36 passed / 0 failed.
+- `npm run lint`: exited 0 with no findings.

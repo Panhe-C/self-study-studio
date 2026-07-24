@@ -181,7 +181,12 @@ export async function inspectCloudKitJournal(): Promise<CloudKitDiagnostic> {
       syncToken = nextSyncToken;
     }
 
-    const activeRecords = records.filter((record) => !record.deleted);
+    const recordsByName = new Map(
+      records.map((record) => [record.recordName, record]),
+    );
+    const activeRecords = [...recordsByName.values()].filter(
+      (record) => !record.deleted,
+    );
     const recordTypes = activeRecords.reduce<Record<string, number>>(
       (counts, record) => {
         counts[record.recordType] = (counts[record.recordType] ?? 0) + 1;

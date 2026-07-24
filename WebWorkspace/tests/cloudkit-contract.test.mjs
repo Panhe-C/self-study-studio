@@ -127,9 +127,14 @@ test("Web diagnostics fetch every CloudKit zone change page", async () => {
         {
           records: [
             {
+              recordName: "project-1",
+              recordType: "Project",
+              recordChangeTag: "tag-2",
+            },
+            {
               recordName: "proof-1",
               recordType: "Proof",
-              recordChangeTag: "tag-2",
+              recordChangeTag: "tag-3",
             },
           ],
           moreComing: false,
@@ -241,6 +246,8 @@ test("Web diagnostics stop when CloudKit repeats a continuation token", async ()
   const diagnostic = await inspectCloudKitJournal();
 
   assert.equal(diagnostic.mode, "partial");
+  assert.equal(diagnostic.recordCount, 1);
+  assert.deepEqual(diagnostic.recordTypes, { Project: 1 });
   assert.match(diagnostic.message, /repeated a sync token/i);
   assert.equal(requests.length, 2);
 });
