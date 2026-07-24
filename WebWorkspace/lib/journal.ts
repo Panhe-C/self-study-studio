@@ -28,7 +28,6 @@ export type ProjectSummary = {
   evidenceCount: number;
   evidenceTarget: number;
   lastMeaningfulActivity: string;
-  lastMeaningfulActivityAt: string;
 };
 
 export type PracticeBlock = {
@@ -56,6 +55,7 @@ export type PlanSession = {
   window: string;
   duration: number;
   status: "Done" | "Planned" | "Carryover";
+  attentionAt?: string;
 };
 
 export type PlanPhase = {
@@ -91,6 +91,12 @@ export type ProjectDemo = {
   routineTargetMinutes: number;
   practiceBlocks: PracticeBlock[];
   practiceBalanceNote: string;
+  practiceAttention?: {
+    id: string;
+    label: string;
+    detail: string;
+    markedAt: string;
+  };
   lastSessionLabel: string;
   trail: TrailItem[];
   proofs: ProofItem[];
@@ -101,6 +107,7 @@ export type ProjectDemo = {
     practiceSessions: number;
     carryovers: number;
     readySince: string;
+    readySinceAt?: string;
   };
   capacity: {
     plannedMinutes: number;
@@ -125,7 +132,6 @@ const guitarDemo: ProjectDemo = {
     evidenceCount: 1,
     evidenceTarget: 3,
     lastMeaningfulActivity: "Guided practice · 31 min · yesterday",
-    lastMeaningfulActivityAt: "2026-07-22T12:14:00Z",
   },
   sourceLabel: "Demo source · Electric Guitar Improvisation Learning Guide",
   planTitle: "12-week electric guitar improvisation foundation",
@@ -189,7 +195,7 @@ const guitarDemo: ProjectDemo = {
   sessions: [
     { id: "guitar-session-1", title: "Map A, C, D, E, G roots", window: "Completed Monday", duration: 15, status: "Done" },
     { id: "guitar-session-2", title: "Three-note call and response", window: "Today", duration: 30, status: "Planned" },
-    { id: "guitar-session-3", title: "Listen back and mark unstable phrases", window: "Due yesterday", duration: 15, status: "Carryover" },
+    { id: "guitar-session-3", title: "Listen back and mark unstable phrases", window: "Due yesterday", duration: 15, status: "Carryover", attentionAt: "2026-07-22T00:00:00Z" },
   ],
   routineTitle: "30-minute improvisation foundation",
   routineFrequency: "5 times each week",
@@ -220,6 +226,7 @@ const guitarDemo: ProjectDemo = {
     practiceSessions: 5,
     carryovers: 1,
     readySince: "Ready since yesterday",
+    readySinceAt: "2026-07-22T00:00:00Z",
   },
   capacity: {
     plannedMinutes: 210,
@@ -244,7 +251,6 @@ const cs336Demo: ProjectDemo = {
     evidenceCount: 2,
     evidenceTarget: 4,
     lastMeaningfulActivity: "Build session · 52 min · 3 days ago",
-    lastMeaningfulActivityAt: "2026-07-18T03:14:00Z",
   },
   sourceLabel: "Demo source · CS336 20-week Online Self-study Plan",
   planTitle: "CS336 20-week core route",
@@ -273,6 +279,12 @@ const cs336Demo: ProjectDemo = {
     { id: "cs-log", name: "Learning log", targetMinutes: 10, actualMinutes: 6, focus: "Record bugs, next step, and unresolved questions", nextFocus: "Explain vocabulary-size tradeoffs", tone: "green" },
   ],
   practiceBalanceNote: "Implementation is on target; the learning log needs four more minutes to preserve reasoning and next-step context.",
+  practiceAttention: {
+    id: "learning-log-balance",
+    label: "Learning log needs attention",
+    detail: "The last session left four minutes of the Learning log block unvisited.",
+    markedAt: "2026-07-19T02:20:00Z",
+  },
   lastSessionLabel: "Sunday at 10:20 · all three Blocks visited.",
   trail: [
     { id: "cs-trail-1", date: "Jul 19 · 10:20", occurredAt: "2026-07-19T02:20:00Z", title: "BPE implementation session", detail: "52 min · recall 8m · build 38m · learning log 6m", kind: "practice" },

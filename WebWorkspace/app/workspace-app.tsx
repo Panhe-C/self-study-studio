@@ -259,6 +259,7 @@ export function WorkspaceApp() {
               openProject={openProject}
               openProjects={() => setSection("projects")}
               openReviews={() => setSection("reviews")}
+              openSync={() => setSection("sync")}
             />
           )}
           {section === "projects" && <Projects openProject={openProject} />}

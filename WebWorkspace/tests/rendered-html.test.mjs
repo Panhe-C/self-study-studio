@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
+import { createRunnableDevEnvironment, createServer } from "vite";
+import { projectDemos } from "../lib/journal.ts";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -22,6 +26,48 @@ async function render() {
     },
   );
 }
+
+let dashboardServerPromise;
+
+async function dashboardServer() {
+  dashboardServerPromise ??= createServer({
+    configFile: false,
+    root: new URL("..", import.meta.url).pathname,
+    appType: "custom",
+    server: { middlewareMode: true, hmr: false },
+    environments: {
+      client: {
+        dev: {
+          createEnvironment: (name, config) =>
+            createRunnableDevEnvironment(name, config, { hot: false }),
+        },
+      },
+    },
+  });
+  return dashboardServerPromise;
+}
+
+async function renderDashboard(props) {
+  const server = await dashboardServer();
+  const { PortfolioDashboard } = await server.ssrLoadModule(
+    "/app/portfolio-dashboard.tsx",
+  );
+  return renderToStaticMarkup(
+    createElement(PortfolioDashboard, {
+      openProject() {},
+      openProjects() {},
+      openReviews() {},
+      openSync() {},
+      ...props,
+    }),
+  );
+}
+
+test.after(async () => {
+  if (dashboardServerPromise) {
+    await (await dashboardServerPromise).close();
+  }
+});
 
 function assertInOrder(input, values) {
   let previousIndex = -1;
@@ -94,7 +140,7 @@ test("server-renders the learning workspace", async () => {
   assert.match(html, /Stage Review is ready/);
   assert.match(html, /Portfolio movement/);
   assert.match(html, /Next 2 weeks capacity/);
-  assert.match(html, /meaningful events across 4 weeks/i);
+  assert.match(html, /meaningful events across 1 week/i);
   assert.doesNotMatch(html, /completion percentage|streak|rank|grade/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
@@ -202,7 +248,9 @@ test("gives Dashboard controls a high-contrast focus indicator", async () => {
 });
 
 test("server-renders complete accessible activity sequences in hierarchy order", async () => {
-  const html = await (await render()).text();
+  const html = await renderDashboard({
+    clock: () => new Date("2026-07-24T12:00:00Z"),
+  });
 
   assert.match(
     html,
@@ -214,11 +262,11 @@ test("server-renders complete accessible activity sequences in hierarchy order",
   );
   assert.match(
     html,
-    /Electric guitar improvisation weekly movement: 3 weeks ago: 0; 2 weeks ago: 0; 1 week ago: 1; This week: 3 meaningful events\./,
+    /Electric guitar improvisation weekly movement: This week: 3 meaningful events\./,
   );
   assert.match(
     html,
-    /CS336 · Language Modeling from Scratch weekly movement: 3 weeks ago: 1; 2 weeks ago: 0; 1 week ago: 1; This week: 2 meaningful events\./,
+    /CS336 · Language Modeling from Scratch weekly movement: This week: 2 meaningful events\./,
   );
   assert.doesNotMatch(html, /title="(?:This week|\d+ weeks? ago): \d+ meaningful events"/);
 
@@ -236,6 +284,91 @@ test("server-renders zero activity buckets at zero height", async () => {
 
   assert.match(html, /data-activity-count="0" style="height:0%"/);
   assert.doesNotMatch(html, /data-activity-count="0" style="height:(?!0%)[^"]+"/);
+});
+
+test("server-renders the injected clock, overload warning segment, and capacity attention", async () => {
+  const demos = structuredClone(projectDemos);
+  demos[1].capacity.plannedMinutes = 600;
+  demos[1].capacity.availableMinutes = 300;
+  const clockHtml = await renderDashboard({
+    clock: () => new Date("2026-07-24T12:00:00Z"),
+  });
+  const html = await renderDashboard({
+    snapshot: {
+      loadState: "ready",
+      asOf: "2026-07-24T12:00:00Z",
+      demos,
+      unavailableSections: [],
+      conflicts: [],
+    },
+  });
+
+  assert.match(clockHtml, /Friday, July 24/);
+  assert.match(html, /Capacity exceeds availability/);
+  assert.match(html, /class="capacity-overage-segment"/);
+  assert.match(html, /Over capacity by 270m/);
+  assert.match(html, /Planned capacity needs a decision/);
+});
+
+test("server-renders empty, partial, conflict, loading, and error snapshot states", async () => {
+  const base = {
+    asOf: "2026-07-24T12:00:00Z",
+    unavailableSections: [],
+    conflicts: [],
+  };
+  const [empty, partial, conflict, loading, error] = await Promise.all([
+    renderDashboard({
+      snapshot: { ...base, loadState: "empty", demos: [] },
+    }),
+    renderDashboard({
+      snapshot: {
+        ...base,
+        loadState: "partial",
+        demos: projectDemos,
+        unavailableSections: ["capacity"],
+      },
+    }),
+    renderDashboard({
+      snapshot: {
+        ...base,
+        loadState: "conflict",
+        demos: projectDemos,
+        conflicts: [
+          {
+            id: "conflict-1",
+            projectId: projectDemos[0].project.id,
+            label: "Plan revision conflict",
+            detail: "Choose the canonical revision.",
+            detectedAt: "2026-07-24T10:00:00Z",
+          },
+        ],
+      },
+    }),
+    renderDashboard({
+      snapshot: {
+        loadState: "loading",
+        asOf: "2026-07-24T12:00:00Z",
+      },
+    }),
+    renderDashboard({
+      snapshot: {
+        loadState: "error",
+        asOf: "2026-07-24T12:00:00Z",
+        message: "Snapshot unavailable",
+      },
+    }),
+  ]);
+
+  assert.match(empty, /Create Project/);
+  assert.match(empty, /View archive/);
+  assert.match(partial, /Some Dashboard data is unavailable/);
+  assert.match(partial, /Capacity data unavailable/);
+  assert.match(conflict, /Plan revision conflict/);
+  assert.match(conflict, /Open Sync &amp; conflicts/);
+  assert.match(loading, /aria-busy="true"/);
+  assert.match(loading, /portfolio-skeleton/);
+  assert.match(error, /Dashboard unavailable/);
+  assert.match(error, /Snapshot unavailable/);
 });
 
 test("removes disposable starter UI and keeps CloudKit explicit", async () => {

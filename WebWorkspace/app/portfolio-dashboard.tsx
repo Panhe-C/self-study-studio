@@ -2,9 +2,14 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import {
+  createDashboardSnapshot,
   derivePortfolioDashboard,
+  formatDashboardDate,
   type AttentionItem,
   type DashboardPeriod,
+  type DashboardSection,
+  type DashboardSnapshot,
+  type PortfolioDashboardDataModel,
   type ProjectDashboardState,
 } from "../lib/dashboard";
 import { projectDemos, type ProjectTab } from "../lib/journal";
@@ -13,6 +18,9 @@ type PortfolioDashboardProps = {
   openProject: (id: string, tab?: ProjectTab) => void;
   openProjects: () => void;
   openReviews: () => void;
+  openSync: () => void;
+  snapshot?: DashboardSnapshot;
+  clock?: () => Date;
 };
 
 const periods: Array<{ id: DashboardPeriod; label: string }> = [
@@ -21,6 +29,14 @@ const periods: Array<{ id: DashboardPeriod; label: string }> = [
   { id: "12w", label: "12 weeks" },
 ];
 
+const defaultClock = () => new Date();
+
+const unavailableLabels: Record<DashboardSection, string> = {
+  evidence: "Proof readiness",
+  activity: "Meaningful activity",
+  capacity: "Capacity",
+};
+
 function weekLabel(index: number, bucketCount: number) {
   const weeksAgo = bucketCount - 1 - index;
   if (weeksAgo === 0) return "This week";
@@ -28,7 +44,7 @@ function weekLabel(index: number, bucketCount: number) {
 }
 
 function movementSummary(
-  row: ReturnType<typeof derivePortfolioDashboard>["movement"][number],
+  row: NonNullable<PortfolioDashboardDataModel["movement"]>[number],
 ) {
   return `${row.projectName} weekly movement: ${row.buckets
     .map((bucket) => `${bucket.label}: ${bucket.count}`)
@@ -55,22 +71,38 @@ function PulseCard({
   );
 }
 
+function openDestination(
+  item: Pick<AttentionItem, "projectId" | "destination">,
+  openProject: PortfolioDashboardProps["openProject"],
+  openSync: PortfolioDashboardProps["openSync"],
+) {
+  if (item.destination.section === "sync") {
+    openSync();
+    return;
+  }
+  openProject(item.projectId, item.destination.tab);
+}
+
 function PortfolioProjectCard({
   project,
   openProject,
+  openSync,
 }: {
   project: ProjectDashboardState;
   openProject: PortfolioDashboardProps["openProject"];
+  openSync: PortfolioDashboardProps["openSync"];
 }) {
-  const maxActivity = Math.max(...project.activity, 1);
-  const activitySummary = `${project.name} meaningful activity over ${project.activity.length} weeks: ${project.activity
-    .map(
-      (count, index) =>
-        `${weekLabel(index, project.activity.length)}: ${count}`,
-    )
-    .join("; ")} meaningful events.`;
+  const maxActivity = Math.max(...(project.activity ?? []), 1);
+  const activitySummary = project.activity
+    ? `${project.name} meaningful activity over ${project.activity.length} weeks: ${project.activity
+        .map(
+          (count, index) =>
+            `${weekLabel(index, project.activity?.length ?? 0)}: ${count}`,
+        )
+        .join("; ")} meaningful events.`
+    : "";
   const evidencePercent =
-    project.evidence.expected === 0
+    !project.evidence || project.evidence.expected === 0
       ? 0
       : Math.min(
           100,
@@ -97,7 +129,7 @@ function PortfolioProjectCard({
         <span
           className={`portfolio-state${project.attention ? " attention" : ""}`}
         >
-          {project.attention ? "Attention" : "On course"}
+          {project.status}
         </span>
       </header>
       <div className="portfolio-project-body">
@@ -109,39 +141,54 @@ function PortfolioProjectCard({
             <span className="mini-label">Expected Proof</span>
             <p>{project.expectedProof}</p>
           </div>
-          <div className="portfolio-evidence">
-            <div>
-              <span>Proof readiness</span>
-              <strong>
-                {project.evidence.ready} of {project.evidence.expected} signals
-                ready
-              </strong>
+          {project.evidence ? (
+            <div className="portfolio-evidence">
+              <div>
+                <span>Proof readiness</span>
+                <strong>
+                  {project.evidence.ready} of {project.evidence.expected} signals
+                  ready
+                </strong>
+              </div>
+              <div
+                className="portfolio-evidence-track"
+                aria-label={`${project.evidence.ready} of ${project.evidence.expected} expected Proof signals ready`}
+              >
+                <span style={{ width: `${evidencePercent}%` }} />
+              </div>
             </div>
-            <div
-              className="portfolio-evidence-track"
-              aria-label={`${project.evidence.ready} of ${project.evidence.expected} expected Proof signals ready`}
-            >
-              <span style={{ width: `${evidencePercent}%` }} />
-            </div>
-          </div>
+          ) : (
+            <p className="portfolio-unavailable-note">
+              Proof readiness unavailable
+            </p>
+          )}
         </div>
         <div className="portfolio-activity">
           <span className="mini-label">Meaningful activity</span>
-          <div className="portfolio-sparkline" aria-hidden="true">
-            {project.activity.map((count, index) => (
-              <span
-                key={index}
-                data-activity-count={count}
-                style={{
-                  height: `${count === 0 ? 0 : (count / maxActivity) * 100}%`,
-                }}
-              />
-            ))}
-          </div>
-          <p className="sr-only">{activitySummary}</p>
-          <small>
-            {weekLabel(0, project.activity.length)} <span>This week</span>
-          </small>
+          {project.activity ? (
+            <>
+              <div className="portfolio-sparkline" aria-hidden="true">
+                {project.activity.map((count, index) => (
+                  <span
+                    key={index}
+                    data-activity-count={count}
+                    style={{
+                      height: `${count === 0 ? 0 : (count / maxActivity) * 100}%`,
+                    }}
+                  />
+                ))}
+              </div>
+              <p className="sr-only">{activitySummary}</p>
+              <small>
+                {weekLabel(0, project.activity.length)}{" "}
+                <span>This week</span>
+              </small>
+            </>
+          ) : (
+            <p className="portfolio-unavailable-note">
+              Meaningful activity unavailable
+            </p>
+          )}
         </div>
       </div>
       <footer>
@@ -152,9 +199,20 @@ function PortfolioProjectCard({
         </div>
         <button
           className="secondary-button"
-          onClick={() => openProject(project.id, project.nextDecision.tab)}
+          onClick={() =>
+            openDestination(
+              {
+                projectId: project.id,
+                destination: project.nextDecision.destination,
+              },
+              openProject,
+              openSync,
+            )
+          }
         >
-          Open Project
+          {project.nextDecision.destination.section === "sync"
+            ? "Open Sync & conflicts"
+            : "Open Project"}
         </button>
       </footer>
     </article>
@@ -164,16 +222,21 @@ function PortfolioProjectCard({
 function AttentionRow({
   item,
   openProject,
+  openSync,
 }: {
   item: AttentionItem;
   openProject: PortfolioDashboardProps["openProject"];
+  openSync: PortfolioDashboardProps["openSync"];
 }) {
   return (
     <button
       className="portfolio-attention-row"
-      onClick={() => openProject(item.projectId, item.tab)}
+      onClick={() => openDestination(item, openProject, openSync)}
     >
-      <span className="attention-dot" aria-hidden="true" />
+      <span
+        className={`attention-dot ${item.kind}`}
+        aria-hidden="true"
+      />
       <span>
         <strong>{item.projectName}</strong>
         <small>{item.label}</small>
@@ -186,7 +249,7 @@ function AttentionRow({
 function PortfolioMovementMatrix({
   movement,
 }: {
-  movement: ReturnType<typeof derivePortfolioDashboard>["movement"];
+  movement: NonNullable<PortfolioDashboardDataModel["movement"]>;
 }) {
   return (
     <article className="card portfolio-viz-card">
@@ -198,10 +261,7 @@ function PortfolioMovementMatrix({
       </div>
       <div className="movement-matrix">
         {movement.map((row) => (
-          <div
-            className="movement-row"
-            key={row.projectId}
-          >
+          <div className="movement-row" key={row.projectId}>
             <strong>{row.projectName}</strong>
             <div>
               {row.buckets.map((bucket) => (
@@ -224,16 +284,24 @@ function PortfolioMovementMatrix({
 function CapacityAllocation({
   capacity,
 }: {
-  capacity: ReturnType<typeof derivePortfolioDashboard>["capacity"];
+  capacity: NonNullable<PortfolioDashboardDataModel["capacity"]>;
 }) {
   return (
-    <article className="card portfolio-viz-card">
+    <article
+      className={`card portfolio-viz-card capacity-${capacity.status}`}
+    >
       <div className="section-heading">
         <div>
           <span className="mini-label">Planned allocation</span>
           <h3>Next 2 weeks capacity</h3>
         </div>
       </div>
+      {capacity.warning && (
+        <div className="capacity-warning" role="status">
+          <strong>Capacity exceeds availability</strong>
+          <span>{capacity.warning}</span>
+        </div>
+      )}
       <div
         className="portfolio-capacity-bar"
         aria-label={capacity.accessibleSummary}
@@ -248,6 +316,14 @@ function CapacityAllocation({
           />
         ))}
       </div>
+      {capacity.warningSegment && (
+        <div className="capacity-overage-track" aria-hidden="true">
+          <span
+            className="capacity-overage-segment"
+            style={{ width: `${capacity.warningSegment.percent}%` }}
+          />
+        </div>
+      )}
       <ul className="capacity-legend">
         {capacity.segments.map((segment) => (
           <li key={segment.projectId}>
@@ -256,47 +332,185 @@ function CapacityAllocation({
             <strong>{segment.minutes}m</strong>
           </li>
         ))}
+        {capacity.warningSegment && (
+          <li className="capacity-overage-legend">
+            <i />
+            <span>{capacity.warningSegment.label}</span>
+            <strong>Over capacity by {capacity.warningSegment.minutes}m</strong>
+          </li>
+        )}
       </ul>
       <p className="sr-only">{capacity.accessibleSummary}</p>
     </article>
   );
 }
 
+function DashboardHeader({
+  asOf,
+  period,
+  setPeriod,
+}: {
+  asOf: string;
+  period: DashboardPeriod;
+  setPeriod: (period: DashboardPeriod) => void;
+}) {
+  return (
+    <header className="portfolio-header">
+      <div>
+        <p className="date-line">{formatDashboardDate(asOf)}</p>
+        <h2>Your learning portfolio</h2>
+        <p>See where every active Project stands and what needs a decision.</p>
+      </div>
+      <div className="portfolio-period" aria-label="Dashboard period">
+        {periods.map((item) => (
+          <button
+            className={period === item.id ? "active" : ""}
+            aria-pressed={period === item.id}
+            key={item.id}
+            onClick={() => setPeriod(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </header>
+  );
+}
+
+function DashboardLoading({ asOf }: { asOf: string }) {
+  return (
+    <div
+      className="portfolio-dashboard page-stack"
+      aria-busy="true"
+      aria-label="Loading Dashboard"
+    >
+      <header className="portfolio-header portfolio-skeleton">
+        <div>
+          <p className="date-line">{formatDashboardDate(asOf)}</p>
+          <span className="skeleton-line wide" />
+          <span className="skeleton-line" />
+        </div>
+      </header>
+      <section className="portfolio-pulse portfolio-skeleton" aria-hidden="true">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div className="portfolio-pulse-card" key={index} />
+        ))}
+      </section>
+      <section
+        className="portfolio-project-card portfolio-skeleton"
+        aria-hidden="true"
+      >
+        <span className="skeleton-line wide" />
+        <span className="skeleton-block" />
+      </section>
+      <p className="sr-only">Loading portfolio snapshot.</p>
+    </div>
+  );
+}
+
+function UnavailableVisualization({ section }: { section: DashboardSection }) {
+  return (
+    <article className="card portfolio-viz-card portfolio-unavailable-card">
+      <span className="mini-label">Partial snapshot</span>
+      <h3>{unavailableLabels[section]} data unavailable</h3>
+      <p>Available Project state remains visible; this section is not estimated.</p>
+    </article>
+  );
+}
+
+function decisionActionLabel(item: AttentionItem) {
+  if (item.destination.section === "sync") return "Open Sync & conflicts";
+  if (item.kind === "review") return "Start Stage Review";
+  return "Open Project";
+}
+
 export function PortfolioDashboard({
   openProject,
   openProjects,
   openReviews,
+  openSync,
+  snapshot,
+  clock = defaultClock,
 }: PortfolioDashboardProps) {
   const [period, setPeriod] = useState<DashboardPeriod>("now");
-  const model = useMemo(
-    () => derivePortfolioDashboard(projectDemos, period),
-    [period],
+  const [asOf] = useState(() => snapshot?.asOf ?? clock().toISOString());
+  const currentSnapshot = useMemo(
+    () =>
+      snapshot ??
+      createDashboardSnapshot({
+        asOf,
+        demos: projectDemos,
+      }),
+    [asOf, snapshot],
   );
+  const model = useMemo(
+    () => derivePortfolioDashboard(currentSnapshot, period),
+    [currentSnapshot, period],
+  );
+
+  if (model.loadState === "loading") {
+    return <DashboardLoading asOf={model.asOf} />;
+  }
+
+  if (model.loadState === "error") {
+    return (
+      <div className="portfolio-dashboard page-stack">
+        <DashboardHeader
+          asOf={model.asOf}
+          period={period}
+          setPeriod={setPeriod}
+        />
+        <section className="card portfolio-error-state" role="alert">
+          <span className="mini-label">Snapshot error</span>
+          <h3>Dashboard unavailable</h3>
+          <p>{model.errorMessage}</p>
+          <button className="secondary-button" onClick={openSync}>
+            Open Sync & conflicts
+          </button>
+        </section>
+      </div>
+    );
+  }
+
   const primaryDecision = model.decisions[0];
+  const evidenceValue =
+    model.pulse.evidenceReady === null ||
+    model.pulse.evidenceExpected === null
+      ? "Unavailable"
+      : `${model.pulse.evidenceReady} / ${model.pulse.evidenceExpected}`;
 
   return (
     <div className="portfolio-dashboard page-stack">
-      <header className="portfolio-header">
-        <div>
-          <p className="date-line">Wednesday, July 23</p>
-          <h2>Your learning portfolio</h2>
-          <p>
-            See where every active Project stands and what needs a decision.
-          </p>
-        </div>
-        <div className="portfolio-period" aria-label="Dashboard period">
-          {periods.map((item) => (
-            <button
-              className={period === item.id ? "active" : ""}
-              aria-pressed={period === item.id}
-              key={item.id}
-              onClick={() => setPeriod(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </header>
+      <DashboardHeader
+        asOf={model.asOf}
+        period={period}
+        setPeriod={setPeriod}
+      />
+      {model.loadState === "partial" && (
+        <section className="portfolio-state-banner partial" role="status">
+          <strong>Some Dashboard data is unavailable</strong>
+          <span>
+            {model.unavailableSections
+              .map((section) => unavailableLabels[section])
+              .join(", ")}{" "}
+            is shown as unavailable, not estimated.
+          </span>
+        </section>
+      )}
+      {model.loadState === "conflict" && (
+        <section className="portfolio-state-banner conflict" role="alert">
+          <div>
+            <strong>{model.conflicts[0]?.label ?? "Sync conflict"}</strong>
+            <span>
+              Last trusted Project data remains visible until you choose the
+              canonical state.
+            </span>
+          </div>
+          <button className="secondary-button" onClick={openSync}>
+            Open Sync & conflicts
+          </button>
+        </section>
+      )}
       <section className="portfolio-pulse" aria-label="Portfolio pulse">
         <PulseCard
           label="Active Projects"
@@ -305,7 +519,7 @@ export function PortfolioDashboard({
         />
         <PulseCard
           label="Evidence ready"
-          value={`${model.pulse.evidenceReady} / ${model.pulse.evidenceExpected}`}
+          value={evidenceValue}
           detail="Expected Proof signals"
         />
         <PulseCard
@@ -316,7 +530,7 @@ export function PortfolioDashboard({
         <PulseCard
           label="Needs attention"
           value={`${model.pulse.needsAttention}`}
-          detail="Distinct Projects"
+          detail="Distinct Projects involved"
           attention
         />
       </section>
@@ -336,6 +550,7 @@ export function PortfolioDashboard({
                 <PortfolioProjectCard
                   project={project}
                   openProject={openProject}
+                  openSync={openSync}
                   key={project.id}
                 />
               ))}
@@ -346,9 +561,14 @@ export function PortfolioDashboard({
               <p>
                 Paused, Completed, and Abandoned Projects remain in the archive.
               </p>
-              <button className="secondary-button" onClick={openProjects}>
-                View Projects and archive
-              </button>
+              <div className="portfolio-empty-actions">
+                <button className="primary-button" onClick={openProjects}>
+                  Create Project
+                </button>
+                <button className="secondary-button" onClick={openProjects}>
+                  View archive
+                </button>
+              </div>
             </div>
           )}
         </section>
@@ -361,39 +581,64 @@ export function PortfolioDashboard({
           </div>
           {primaryDecision ? (
             <article className="portfolio-decision-card">
-              <span className="mini-label">Review ready</span>
+              <span className="mini-label">
+                {primaryDecision.kind === "review"
+                  ? "Review ready"
+                  : "Decision needed"}
+              </span>
               <h3>{primaryDecision.projectName}</h3>
               <p>{primaryDecision.detail}</p>
               <button
                 onClick={() =>
-                  openProject(primaryDecision.projectId, "reviews")
+                  openDestination(primaryDecision, openProject, openSync)
                 }
               >
-                Start Stage Review
+                {decisionActionLabel(primaryDecision)}
               </button>
-              <small>Nothing advances until you publish.</small>
+              <small>
+                {primaryDecision.kind === "review"
+                  ? "Nothing advances until you publish."
+                  : "The Dashboard remains read-only."}
+              </small>
             </article>
           ) : (
             <p className="portfolio-empty-note">
-              No Stage Review is waiting.
+              No explicit decision is waiting.
             </p>
           )}
           <article className="portfolio-attention-card">
             <h3>Needs attention</h3>
-            {model.attention.map((item) => (
-              <AttentionRow
-                item={item}
-                openProject={openProject}
-                key={item.id}
-              />
-            ))}
+            {model.attention.length > 0 ? (
+              model.attention.map((item) => (
+                <AttentionRow
+                  item={item}
+                  openProject={openProject}
+                  openSync={openSync}
+                  key={item.id}
+                />
+              ))
+            ) : (
+              <p className="portfolio-empty-note">
+                No additional attention items.
+              </p>
+            )}
           </article>
         </aside>
       </div>
-      <section className="portfolio-lower-grid">
-        <PortfolioMovementMatrix movement={model.movement} />
-        <CapacityAllocation capacity={model.capacity} />
-      </section>
+      {model.loadState !== "empty" && (
+        <section className="portfolio-lower-grid">
+          {model.movement ? (
+            <PortfolioMovementMatrix movement={model.movement} />
+          ) : (
+            <UnavailableVisualization section="activity" />
+          )}
+          {model.capacity ? (
+            <CapacityAllocation capacity={model.capacity} />
+          ) : (
+            <UnavailableVisualization section="capacity" />
+          )}
+        </section>
+      )}
     </div>
   );
 }
