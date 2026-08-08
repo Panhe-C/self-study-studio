@@ -45,7 +45,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
             proofRevisions: try decodedRecords(StoredProofRevisionV2.self, as: ProofRevision.self),
             reviewDecisions: try decodedRecords(StoredReviewDecisionV2.self, as: ReviewDecision.self),
             trailEvents: try decodedRecords(StoredTrailEventV2.self, as: TrailEvent.self),
-            coursePlans: try decodedRecords(StoredCoursePlanV2.self, as: CoursePlan.self),
+            coursePlans: try decodedRecords(StoredCoursePlanV2.self, as: LearningPlan.self),
             planPhases: try decodedRecords(StoredPlanPhaseV2.self, as: PlanPhase.self),
             plannedSessions: try decodedRecords(StoredPlannedSessionV2.self, as: PlannedSession.self),
             availabilityRules: try decodedRecords(StoredAvailabilityRuleV2.self, as: AvailabilityRule.self),
@@ -171,7 +171,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
         case .proofRevision: return try entity(reference.id, in: StoredProofRevisionV2.self, as: ProofRevision.self).map(JournalEntity.proofRevision)
         case .reviewDecision: return try entity(reference.id, in: StoredReviewDecisionV2.self, as: ReviewDecision.self).map(JournalEntity.reviewDecision)
         case .trailEvent: return try entity(reference.id, in: StoredTrailEventV2.self, as: TrailEvent.self).map(JournalEntity.trailEvent)
-        case .coursePlan: return try entity(reference.id, in: StoredCoursePlanV2.self, as: CoursePlan.self).map(JournalEntity.coursePlan)
+        case .coursePlan: return try entity(reference.id, in: StoredCoursePlanV2.self, as: LearningPlan.self).map(JournalEntity.coursePlan)
         case .planPhase: return try entity(reference.id, in: StoredPlanPhaseV2.self, as: PlanPhase.self).map(JournalEntity.planPhase)
         case .plannedSession: return try entity(reference.id, in: StoredPlannedSessionV2.self, as: PlannedSession.self).map(JournalEntity.plannedSession)
         case .availabilityRule: return try entity(reference.id, in: StoredAvailabilityRuleV2.self, as: AvailabilityRule.self).map(JournalEntity.availabilityRule)
@@ -440,7 +440,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
                 return value
             }
         case .coursePlan:
-            try markDeleted(reference.id, in: StoredCoursePlanV2.self, as: CoursePlan.self) {
+            try markDeleted(reference.id, in: StoredCoursePlanV2.self, as: LearningPlan.self) {
                 var value = $0
                 value.deletedAt = now()
                 value.updatedAt = value.deletedAt!
@@ -624,7 +624,7 @@ extension EvidenceAcceptance: DeletionDated { fileprivate var journalDeletedAt: 
 extension ProofRevision: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension ReviewDecision: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension TrailEvent: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
-extension CoursePlan: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension LearningPlan: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension PlanPhase: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension PlannedSession: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension AvailabilityRule: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }

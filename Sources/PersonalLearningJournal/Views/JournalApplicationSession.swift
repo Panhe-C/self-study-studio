@@ -140,6 +140,10 @@ public final class JournalApplicationSession: ObservableObject {
             practiceMigrationResolutions = [:]
             pendingMigration = nil
             rebuildViewModels(using: migrationRepository)
+            // B2 has no user-choice prompts: once B1 is complete, map legacy
+            // CoursePlan revisions to stable Learning Plan identities with a
+            // deterministic backup before allowing sync to resume.
+            prepareMigrationGate(for: migrationRepository)
             if case .cloud = accountCoordinator.state.mode {
                 Task { [weak self] in
                     guard let self, !self.isMigrationBlockingSync else { return }
@@ -156,6 +160,18 @@ public final class JournalApplicationSession: ObservableObject {
             if try repository.hasCompletedMigration(
                 identifier: ProductConvergenceMigration.statusMigrationIdentifier
             ) {
+                if try !repository.hasCompletedMigration(identifier: PlanRevisionMigration.identifier) {
+                    let snapshot = try repository.snapshot()
+                    let backupDirectory = documentsDirectory
+                        .appendingPathComponent("LearningJournal", isDirectory: true)
+                        .appendingPathComponent("Migrations", isDirectory: true)
+                        .appendingPathComponent("B2", isDirectory: true)
+                    _ = try PlanRevisionMigration().execute(
+                        snapshot: snapshot,
+                        repository: repository,
+                        backupDirectory: backupDirectory
+                    )
+                }
                 pendingMigration = nil
                 migrationGateBlocked = false
                 migrationError = nil

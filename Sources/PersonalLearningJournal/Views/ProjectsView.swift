@@ -82,7 +82,7 @@ public struct ProjectsView: View {
     }
 
     private func projectCard(_ project: Project) -> some View {
-        let plan = viewModel.activeCoursePlan(for: project.id)
+        let plan = viewModel.activeLearningPlan(for: project.id)
         let sessions = plan.map { viewModel.plannedSessions(for: $0.id) } ?? []
         let progress = StudioPresentation.progress(
             completed: sessions.count { $0.status == .completed },
@@ -285,8 +285,8 @@ private struct ProjectDetailView: View {
                 }
             }
 
-            Section("Study Plan") {
-                if let plan = viewModel.activeCoursePlan(for: currentProject.id) {
+            Section("Learning Plan") {
+                if let plan = viewModel.activeLearningPlan(for: currentProject.id) {
                     NavigationLink {
                         CoursePlanDetailView(viewModel: viewModel, project: currentProject, plan: plan)
                     } label: {
@@ -302,7 +302,7 @@ private struct ProjectDetailView: View {
                     Button {
                         showingCoursePlanWizard = true
                     } label: {
-                        Label("Create Study Plan", systemImage: "list.bullet.rectangle")
+                        Label("Create Learning Plan", systemImage: "list.bullet.rectangle")
                     }
                 }
 

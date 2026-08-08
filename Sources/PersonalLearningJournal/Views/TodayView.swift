@@ -113,7 +113,7 @@ public struct TodayView: View {
                 }
             }
 
-            let plansWithUnscheduledWork = viewModel.coursePlans.filter {
+            let plansWithUnscheduledWork = viewModel.learningPlans.filter {
                 $0.status == .active && viewModel.unscheduledPlannedSessionCount(for: $0.id) > 0
             }
             if !plansWithUnscheduledWork.isEmpty {

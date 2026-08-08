@@ -13,6 +13,27 @@ public enum CloudMutation: Sendable {
     case delete(mutationID: UUID, entity: JournalEntityReference)
 }
 
+/// Caller-supplied server tag used by a guarded save. The mutation enum stays
+/// source-compatible with existing clients; guarded expectations travel as a
+/// separate map so old fakes and adapters continue to compile.
+public struct CloudRevisionExpectation: Equatable, Sendable {
+    public let entity: JournalEntityReference
+    public let recordChangeTag: String
+
+    public init(entity: JournalEntityReference, recordChangeTag: String) {
+        self.entity = entity
+        self.recordChangeTag = recordChangeTag
+    }
+}
+
+public enum CloudRevisionGuardError: Error, Equatable, Sendable {
+    case stale(
+        entity: JournalEntityReference,
+        expectedRecordChangeTag: String,
+        actualRecordChangeTag: String?
+    )
+}
+
 public struct CloudSendResult: Sendable {
     public var acknowledgedMutationIDs: Set<UUID>
     public var metadata: [SyncRecordMetadata]
@@ -56,7 +77,22 @@ public struct CloudChangeBatch: @unchecked Sendable {
 public protocol CloudDatabaseClient: Sendable {
     func ensureZone(named: String) async throws
     func send(_ mutations: [CloudMutation]) async throws -> CloudSendResult
+    func send(
+        _ mutations: [CloudMutation],
+        revisionExpectations: [JournalEntityReference: String]
+    ) async throws -> CloudSendResult
     func fetchChanges(after tokenData: Data?) async throws -> CloudChangeBatch
+}
+
+public extension CloudDatabaseClient {
+    func send(
+        _ mutations: [CloudMutation],
+        revisionExpectations: [JournalEntityReference: String]
+    ) async throws -> CloudSendResult {
+        // Legacy adapters can ignore guards; the production CK client
+        // implements this overload and performs the compare-before-write.
+        try await send(mutations)
+    }
 }
 
 public protocol CloudSyncCoordinating: AnyObject, Sendable {
@@ -136,10 +172,14 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
     }
 
     private func push(_ pending: [PendingMutation]) async throws {
+        var revisionExpectations: [JournalEntityReference: String] = [:]
         let mutations = try pending.compactMap { mutation -> CloudMutation? in
             switch mutation.operation {
             case .save:
                 guard let entity = try repository.entity(for: mutation.entity) else { return nil }
+                if let recordChangeTag = try repository.metadata(for: mutation.entity)?.recordChangeTag {
+                    revisionExpectations[mutation.entity] = recordChangeTag
+                }
                 return .save(mutationID: mutation.id, entity: entity)
             case .delete:
                 return .delete(mutationID: mutation.id, entity: mutation.entity)
@@ -147,7 +187,10 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
         }
         guard !mutations.isEmpty else { return }
 
-        let result = try await client.send(mutations)
+        let result = try await client.send(
+            mutations,
+            revisionExpectations: revisionExpectations
+        )
         if !result.acknowledgedMutationIDs.isEmpty {
             try repository.acknowledge(
                 result.acknowledgedMutationIDs,
@@ -180,12 +223,25 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
         var upserts: [JournalEntity] = []
         var deletions: [JournalEntityReference] = []
         var conflicts: [SyncConflict] = []
+        var remoteMetadata: [SyncRecordMetadata] = []
 
         for change in changes {
             switch change {
             case let .save(record):
                 let remote = try mapper.entity(from: record)
                 let reference = remote.reference
+                var metadataState: SyncState = .synced
+                remoteMetadata.append(
+                    SyncRecordMetadata(
+                        entity: reference,
+                        zoneName: record.recordID.zoneID.zoneName,
+                        recordName: record.recordID.recordName,
+                        recordChangeTag: record.recordChangeTag,
+                        lastSyncedPayload: try JSONEncoder.journal.encode(remote),
+                        lastSyncedAt: now(),
+                        state: .synced
+                    )
+                )
                 guard let local = try repository.entity(for: reference),
                       let metadata = try repository.metadata(for: reference),
                       let basePayload = metadata.lastSyncedPayload,
@@ -195,7 +251,13 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
                 }
                 switch try merger.merge(base: base, local: local, server: remote, now: now()) {
                 case let .merged(entity): upserts.append(entity)
-                case let .conflict(conflict): conflicts.append(conflict)
+                case let .conflict(conflict):
+                    conflicts.append(conflict)
+                    metadataState = .conflict
+                }
+                if metadataState == .conflict,
+                   let index = remoteMetadata.lastIndex(where: { $0.entity == reference }) {
+                    remoteMetadata[index].state = .conflict
                 }
             case let .delete(recordID):
                 if let reference = reference(for: recordID) {
@@ -204,15 +266,22 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
             }
         }
 
-        guard !upserts.isEmpty || !deletions.isEmpty || !conflicts.isEmpty else { return }
-        try repository.applyRemote(
-            JournalTransaction(
-                upserts: upserts,
-                deletions: deletions,
-                origin: .remote
-            ),
-            conflicts: conflicts
-        )
+        if !upserts.isEmpty || !deletions.isEmpty || !conflicts.isEmpty {
+            try repository.applyRemote(
+                JournalTransaction(
+                    upserts: upserts,
+                    deletions: deletions,
+                    origin: .remote
+                ),
+                conflicts: conflicts
+            )
+        }
+        // Persist the server change tag even when a remote record was merged
+        // into local state or resulted in a conflict. Never synthesize a new
+        // tag by fetching and overwriting the server record.
+        if !remoteMetadata.isEmpty {
+            try repository.acknowledge([], metadata: remoteMetadata)
+        }
     }
 
     private func reference(for recordID: CKRecord.ID) -> JournalEntityReference? {

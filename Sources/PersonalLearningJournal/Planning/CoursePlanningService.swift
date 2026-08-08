@@ -33,6 +33,14 @@ public final class CoursePlanningService {
         input: CoursePlanningInput,
         draft: CoursePlanDraft
     ) throws -> CoursePlan {
+        try saveDraft(input: input, draft: draft, basedOn: nil)
+    }
+
+    private func saveDraft(
+        input: CoursePlanningInput,
+        draft: CoursePlanDraft,
+        basedOn basePlan: LearningPlan?
+    ) throws -> LearningPlan {
         let validation = validator.validate(draft, input: input)
         guard validation.isValid else {
             throw validation.errors.first ?? CoursePlanningValidationError.emptyTitle
@@ -50,6 +58,9 @@ public final class CoursePlanningService {
         let plan = try CoursePlan(
             projectId: input.projectId,
             revision: revision,
+            planSeriesID: basePlan?.planSeriesID,
+            baseRevisionID: basePlan?.revisionID,
+            supersedesID: basePlan?.revisionID,
             status: .draft,
             courseURL: input.courseURL,
             courseTitle: draft.title,
@@ -111,7 +122,10 @@ public final class CoursePlanningService {
     }
 
     @discardableResult
-    public func activate(draftPlanID: UUID) throws -> CanonicalNextStepProposal? {
+    public func activate(
+        draftPlanID: UUID,
+        expectation: RevisionGuardExpectation? = nil
+    ) throws -> CanonicalNextStepProposal? {
         let snapshot = try repository.snapshot()
         guard let planIndex = snapshot.coursePlans.firstIndex(where: { $0.id == draftPlanID }) else {
             throw JournalValidationError.missingProject
@@ -120,7 +134,40 @@ public final class CoursePlanningService {
             throw JournalValidationError.missingProject
         }
         let activatedAt = now()
-        var activatedPlan = snapshot.coursePlans[planIndex]
+        let existingPlan = snapshot.coursePlans[planIndex]
+
+        // Activation is idempotent. In particular, do not create another
+        // outbox mutation or trail event when a retry observes the already
+        // active revision.
+        if existingPlan.status == .active {
+            return nextStepProposal(
+                projectID: existingPlan.projectId,
+                planID: existingPlan.id,
+                sessions: snapshot.plannedSessions,
+                phases: snapshot.planPhases,
+                reason: "First session in the activated learning plan"
+            )
+        }
+
+        if let expectation {
+            guard let baseRevisionID = existingPlan.baseRevisionID,
+                  baseRevisionID == expectation.baseRevisionID else {
+                throw RevisionGuardError.stale(
+                    baseRevisionID: expectation.baseRevisionID,
+                    expectedRecordChangeTag: expectation.recordChangeTag,
+                    actualRecordChangeTag: nil
+                )
+            }
+            let baseReference = JournalEntityReference(.coursePlan, baseRevisionID)
+            let metadata = try repository.metadata(for: baseReference)
+            try RevisionGuard.validate(
+                expectation: expectation,
+                currentRevisionID: baseRevisionID,
+                currentRecordChangeTag: metadata?.recordChangeTag
+            )
+        }
+
+        var activatedPlan = existingPlan
         activatedPlan.status = .active
         activatedPlan.activatedAt = activatedAt
         activatedPlan.updatedAt = activatedAt
@@ -151,7 +198,7 @@ public final class CoursePlanningService {
             type: .planActivated,
             sourceId: activatedPlan.id,
             occurredAt: activatedAt,
-            title: "Course plan activated",
+            title: "Learning plan activated",
             detail: activatedPlan.courseTitle
         )
         upserts.append(.trailEvent(trailEvent))
@@ -161,7 +208,7 @@ public final class CoursePlanningService {
                 projectId: project.id,
                 plannedSessionId: $0.id,
                 title: $0.title,
-                reason: "First session in the activated course plan"
+                reason: "First session in the activated learning plan"
             )
         }
     }
@@ -172,10 +219,27 @@ public final class CoursePlanningService {
         input: CoursePlanningInput,
         draft: CoursePlanDraft
     ) throws -> CoursePlan {
-        guard try repository.snapshot().coursePlans.contains(where: { $0.id == planID }) else {
+        let snapshot = try repository.snapshot()
+        guard let basePlan = snapshot.coursePlans.first(where: { $0.id == planID }) else {
             throw JournalValidationError.missingProject
         }
-        return try saveDraft(input: input, draft: draft)
+        return try saveDraft(input: input, draft: draft, basedOn: basePlan)
+    }
+
+    /// Persists a structural edit as an explicit immutable-revision draft.
+    @discardableResult
+    public func saveRevisionDraft(
+        planID: UUID,
+        input: CoursePlanningInput,
+        draft: CoursePlanDraft
+    ) throws -> PlanRevisionDraft {
+        let plan = try revise(planID: planID, input: input, draft: draft)
+        let snapshot = try repository.snapshot()
+        return PlanRevisionDraft(
+            plan: plan,
+            phases: snapshot.planPhases.filter { $0.planId == plan.id },
+            sessions: snapshot.plannedSessions.filter { $0.planId == plan.id }
+        )
     }
 
     public func unschedule(plannedSessionID: UUID) throws {

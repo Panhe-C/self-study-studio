@@ -50,6 +50,13 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
     }
 
     public func send(_ mutations: [CloudMutation]) async throws -> CloudSendResult {
+        try await send(mutations, revisionExpectations: [:])
+    }
+
+    public func send(
+        _ mutations: [CloudMutation],
+        revisionExpectations: [JournalEntityReference: String]
+    ) async throws -> CloudSendResult {
         guard !mutations.isEmpty else { return CloudSendResult() }
 
         var mutationByRecordID: [CKRecord.ID: CloudMutation] = [:]
@@ -59,7 +66,10 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
         for mutation in mutations {
             switch mutation {
             case let .save(_, entity):
-                let record = try await recordForSave(entity)
+                let record = try await recordForSave(
+                    entity,
+                    expectedRecordChangeTag: revisionExpectations[entity.reference]
+                )
                 mutationByRecordID[record.recordID] = mutation
                 recordsToSave.append(record)
             case let .delete(_, reference):
@@ -74,7 +84,7 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
                 saving: recordsToSave,
                 deleting: recordIDsToDelete,
                 savePolicy: .ifServerRecordUnchanged,
-                atomically: false
+                atomically: true
             )
             return try makeSendResult(result, mutationByRecordID: mutationByRecordID)
         } catch {
@@ -134,11 +144,30 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
         CKSyncEngine.FetchChangesOptions(scope: .zoneIDs([zoneID]))
     }
 
-    private func recordForSave(_ entity: JournalEntity) async throws -> CKRecord {
+    private func recordForSave(
+        _ entity: JournalEntity,
+        expectedRecordChangeTag: String?
+    ) async throws -> CKRecord {
         let encoded = try mapper.record(for: entity, zoneID: zoneID)
         let results = try await database.records(for: [encoded.recordID])
         guard case let .success(existing)? = results[encoded.recordID] else {
+            if let expectedRecordChangeTag {
+                throw CloudRevisionGuardError.stale(
+                    entity: entity.reference,
+                    expectedRecordChangeTag: expectedRecordChangeTag,
+                    actualRecordChangeTag: nil
+                )
+            }
             return encoded
+        }
+
+        if let expectedRecordChangeTag,
+           existing.recordChangeTag != expectedRecordChangeTag {
+            throw CloudRevisionGuardError.stale(
+                entity: entity.reference,
+                expectedRecordChangeTag: expectedRecordChangeTag,
+                actualRecordChangeTag: existing.recordChangeTag
+            )
         }
 
         let encodedKeys = Set(encoded.allKeys())
@@ -224,12 +253,16 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
         terminal: inout [UUID: String]
     ) {
         let message = error.localizedDescription
+        if let guardError = error as? CloudRevisionGuardError {
+            terminal[mutationID] = String(describing: guardError)
+            return
+        }
         guard let cloudError = error as? CKError else {
             retryable[mutationID] = message
             return
         }
         switch cloudError.code {
-        case .networkFailure, .networkUnavailable, .serviceUnavailable, .requestRateLimited, .zoneBusy, .serverRecordChanged:
+        case .networkFailure, .networkUnavailable, .serviceUnavailable, .requestRateLimited, .zoneBusy:
             retryable[mutationID] = message
         default:
             terminal[mutationID] = message

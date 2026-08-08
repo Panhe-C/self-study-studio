@@ -21,7 +21,7 @@ public struct StudioWeekDay: Equatable, Identifiable, Sendable {
 
 public struct StudioProjectProgress: Equatable, Identifiable, Sendable {
     public let project: Project
-    public let plan: CoursePlan?
+    public let plan: LearningPlan?
     public let phases: [PlanPhase]
     public let plannedSessions: [PlannedSession]
 
@@ -37,7 +37,7 @@ public struct StudioProjectProgress: Equatable, Identifiable, Sendable {
 
     public init(
         project: Project,
-        plan: CoursePlan? = nil,
+        plan: LearningPlan? = nil,
         phases: [PlanPhase] = [],
         plannedSessions: [PlannedSession] = []
     ) {

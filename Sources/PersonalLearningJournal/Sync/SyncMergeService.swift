@@ -44,6 +44,25 @@ public struct SyncMergeService {
         case let (.trailEvent(base), .trailEvent(local), .trailEvent(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.trailEvent, now: now)
         case let (.coursePlan(base), .coursePlan(local), .coursePlan(server)):
+            // A revision is immutable. If any identity edge changed on the
+            // same record, surface a conflict instead of combining fields into
+            // an in-place structural overwrite.
+            if base.revisionID != local.revisionID || base.revisionID != server.revisionID
+                || base.planSeriesID != local.planSeriesID || base.planSeriesID != server.planSeriesID
+                || base.baseRevisionID != local.baseRevisionID || base.baseRevisionID != server.baseRevisionID
+                || base.supersedesID != local.supersedesID || base.supersedesID != server.supersedesID {
+                return .conflict(
+                    SyncConflict(
+                        entity: JournalEntity.coursePlan(base).reference,
+                        basePayload: try JSONEncoder.journal.encode(JournalEntity.coursePlan(base)),
+                        localPayload: try JSONEncoder.journal.encode(JournalEntity.coursePlan(local)),
+                        serverPayload: try JSONEncoder.journal.encode(JournalEntity.coursePlan(server)),
+                        proposedPayload: try JSONEncoder.journal.encode(JournalEntity.coursePlan(base)),
+                        conflictingFields: ["revisionID", "planSeriesID", "baseRevisionID", "supersedesID"],
+                        createdAt: now
+                    )
+                )
+            }
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.coursePlan, now: now)
         case let (.planPhase(base), .planPhase(local), .planPhase(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.planPhase, now: now)

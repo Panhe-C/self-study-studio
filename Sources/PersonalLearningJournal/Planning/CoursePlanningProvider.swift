@@ -73,7 +73,7 @@ public struct OpenAICompatibleCoursePlanningProvider: CoursePlanningProvider {
     }
 
     private static let systemPrompt = """
-    You create a practical, editable personal course study plan. Return only a JSON object with title, summary, phases, sessions, assumptions, and warnings. Each phase needs id, title, objective, expectedProof, ordinal, targetStart, and targetEnd. Each session needs id, phaseID, title, actionType, expectedProof, durationMinutes, and deadline. Use only the supplied course outline and learning context. Do not invent course-page content. State an assumption whenever the supplied outline is incomplete. Fit sessions within the provided weekly budget and preferred duration. Do not use or request calendar event content, contacts, location, or any data beyond the request.
+    You create a practical, editable personal Learning Plan. Return only a JSON object with title, summary, phases, sessions, assumptions, and warnings. Each phase needs id, title, objective, expectedProof, ordinal, targetStart, and targetEnd. Each session needs id, phaseID, title, actionType, expectedProof, durationMinutes, and deadline. Use only the supplied optional course outline and learning context. Do not invent course-page content. State an assumption whenever the supplied outline is incomplete. Fit sessions within the provided weekly budget and preferred duration. Do not use or request calendar event content, contacts, location, or any data beyond the request.
     """
 
     private static func requestBody(

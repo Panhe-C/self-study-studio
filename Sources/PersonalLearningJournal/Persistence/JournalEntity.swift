@@ -39,7 +39,9 @@ public enum JournalEntity: Codable, Equatable, Sendable {
     case proofRevision(ProofRevision)
     case reviewDecision(ReviewDecision)
     case trailEvent(TrailEvent)
-    case coursePlan(CoursePlan)
+    /// Compatibility case: the canonical value is a LearningPlan, while the
+    /// `coursePlan` kind and CloudKit CoursePlan record type stay stable.
+    case coursePlan(LearningPlan)
     case planPhase(PlanPhase)
     case plannedSession(PlannedSession)
     case availabilityRule(AvailabilityRule)
@@ -66,6 +68,12 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .practiceRoutine(value): .init(.practiceRoutine, value.id)
         case let .practiceSession(value): .init(.practiceSession, value.id)
         }
+    }
+
+    /// Canonical constructor spelling for new code. The enum case remains
+    /// `coursePlan` indefinitely for archive and CloudKit compatibility.
+    public static func learningPlan(_ value: LearningPlan) -> JournalEntity {
+        .coursePlan(value)
     }
 
     var isDeleted: Bool {

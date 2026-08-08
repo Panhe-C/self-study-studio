@@ -1,6 +1,6 @@
 # Cross-Surface Migration Roadmap
 
-Status: B1 complete; execution starts at B2
+Status: B2 complete; execution starts at B3
 
 Product decisions: `docs/adr/0001` through `docs/adr/0033`
 Target domain language: `CONTEXT.md`
@@ -9,8 +9,9 @@ Target product spec: `docs/web-workspace-mvp-spec.md`
 ## Why this document exists
 
 The product decisions for the iPhone + Web personal learning system are accepted, but the
-code has not followed them yet. The iOS app still implements the pre-decision model
-(`CoursePlan`, flat `PracticeRoutine`, seven `ProjectStatus` values, a Primary/Alternatives
+code has not followed all of them yet. The iOS app now uses the canonical Learning Plan
+domain (with a compatibility `CoursePlan` alias), while it still has the pre-decision model
+(flat `PracticeRoutine`, seven `ProjectStatus` values, a Primary/Alternatives
 recommendation split, Weekly-Review-only reflection). The Web Workspace renders the target
 information architecture from two hardcoded demo Projects and reads CloudKit only for
 diagnostics.
@@ -178,27 +179,32 @@ explicitly confirmed orphan cleanup, corrupt/unsafe-legacy queue quarantine with
 strict canonical transport rejection, and dependency-safe permanent deletion. Unencrypted Trash
 exports require an explicit trusted-location confirmation. Verification: `swift test` 330 tests / 0
 failures, `npm test` in `WebWorkspace` 48 tests / 0 failures, `npm run lint`, `swift build`,
-unsigned iOS Simulator build, and `git diff --check` all pass. B2 remains unimplemented and is
-the next milestone.
+unsigned iOS Simulator build, and `git diff --check` all pass. B2 is implemented below.
 
 ### B2. Learning Plan rename and explicit Plan Revisions
 
-**Current.** `CoursePlan` with `PlanPhase` and `PlannedSession` exists and already preserves
-prior plans as history, but revisions are not a first-class immutable type and there is no
-Revision Guard. `docs/adr/0004` generalizes course plans into Learning Plans and
-`docs/adr/0019` requires structural changes to publish as revisions.
+**Status.** Completed 2026-08-09. `LearningPlan` is canonical in the domain and UI while
+`CoursePlan`/`coursePlan`/`CoursePlan` CloudKit records remain read/write compatibility aliases.
+`PlanRevision` and `PlanRevisionDraft` now preserve immutable structural snapshots, stable
+series/revision identities, and queryable superseded history. `RevisionGuard` validates the
+base revision and caller-supplied CloudKit change tag before activation.
 
-**Work.** Rename the concept and user-facing language to Learning Plan while keeping the
-`coursePlan` record kind readable for compatibility. Make `PlanRevision` an explicit immutable
-type where exactly one revision is active and superseded revisions stay queryable. Add the
-Revision Guard as a freshness precondition on activation, implemented against CloudKit record
-change tags. Separate `Adjust Plan` (produces a Plan Revision Draft) from ordinary execution
-updates such as completing a session or moving one date.
+**Implemented.** User-visible plan language is Learning Plan across Wizard, Detail, Today,
+Projects, Review/Calendar consumers, with an explicit `Adjust Plan` entry. Structural edits
+create a draft linked by `baseRevisionID`/`supersedesID`; completing or rescheduling a planned
+session remains a direct execution update. Cloud pushes use conditional writes with atomic
+custom-zone batches, preserve server change tags on pull, and map stale writes without LWW.
+The idempotent migration performs dry-run, backup, stable-series mapping, active-revision
+validation, and rollback-safe persistence.
 
 **Independent verification.** Existing `coursePlan` records load and display under the new
 language with no data loss. Activating a draft built from stale state fails and does not
 overwrite the newer revision. Superseded revisions remain readable and explain historical
 decisions.
+
+Verification: targeted B2 compatibility, planning-service, migration, Cloud sync, and contract
+tests pass; Web build/tests pass. Real CloudKit conditional-write behavior and physical-device
+acceptance remain outside this local verification.
 
 **Risk.** Medium-high. Touches planning, scheduling, and the Calendar draft pipeline. Keep the
 existing EventKit preview and confirmation boundary untouched.
@@ -377,8 +383,9 @@ Phase advancement, or Calendar write.
 Resolved: the B1 status mapping is settled by `docs/adr/0032`, `docs/adr/0033`, and the mapping
 table above. These remain open and are due when their milestone starts, not before:
 
-1. **B2:** whether the `coursePlan` record kind is renamed with a migration or kept as a
-   compatibility alias indefinitely.
+1. **B2 (resolved):** keep the `coursePlan` JournalEntity kind and `CoursePlan` CloudKit
+   record type as compatibility aliases indefinitely; only domain/UI terminology and canonical
+   revision fields use Learning Plan.
 2. **B3:** whether a Project with several existing Routines defaults to a merge proposal or an
    archive proposal in the resolution UI.
 3. **C1:** attachment size and browser preview limits, given that canonical assets must not

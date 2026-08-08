@@ -143,6 +143,13 @@ export function decodeJournalRecord(
   }
 
   const normalized = normalizePayload(payload, definition.fields);
+  // Legacy CoursePlan archives and CloudKit records did not carry explicit
+  // revision identity. Keep the alias readable while exposing canonical
+  // Learning Plan metadata to Web consumers.
+  if (kind === "coursePlan" && typeof normalized.id === "string") {
+    normalized.planSeriesID ??= normalized.id;
+    normalized.revisionID ??= normalized.id;
+  }
   validateCrossFieldRules(normalized, kind, contract);
   return { kind, payload: normalized };
 }

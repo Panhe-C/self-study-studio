@@ -160,20 +160,20 @@ A published learning plan that guides upcoming learning sessions across the Web 
 _Avoid_: Approved mobile plan, final plan
 _Gap_: guides iPhone only; Web does not read it yet.
 
-**Plan Revision Draft** `[partial]`:
+**Plan Revision Draft** `[shipped]`:
 An editable proposal for structurally changing an Active Plan, including its Phase objectives, ordering, expected Proof, or Practice Routine structure; activation supersedes the prior published revision without erasing it.
 _Avoid_: Direct plan edit, duplicate plan, execution update
-_Gap_: revising a plan preserves prior plans as history, but structural change is not separated from ordinary execution updates.
+_Gap_: Web authoring and publication remain a later C1/C2 responsibility.
 
-**Plan Revision** `[partial]`:
+**Plan Revision** `[shipped]`:
 One immutable published structural version of a Learning Plan; only one revision is active, while superseded revisions remain available to explain historical learning decisions.
 _Avoid_: Backup, edit history, separate learning plan
-_Gap_: `CoursePlan.revision` is an integer on a mutable record rather than an immutable first-class type.
+_Gap_: Web reads and writes arrive in C1/C2; the iPhone repository and Cloud sync now preserve immutable revision identity.
 
-**Learning Plan** `[partial]`:
+**Learning Plan** `[shipped]`:
 A Project-owned plan that turns a learning goal into ordered Phases, Planned Sessions, and expected Proof; course material may inform it but is not required.
 _Avoid_: Course Plan, curriculum, task list
-_Gap_: the type and the user-facing language are still `CoursePlan`, with course title, outline, and URL as primary fields.
+_Gap_: Web has not yet switched from demo data to the real Journal; the iPhone keeps `CoursePlan` as an indefinite persistence/CloudKit compatibility alias.
 
 **Plan Phase** `[shipped]`:
 A coherent stage of a Learning Plan with its own objective, expected Proof, and target time range.

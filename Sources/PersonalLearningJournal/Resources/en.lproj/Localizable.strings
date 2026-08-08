@@ -28,6 +28,9 @@
 "review.decision.archive" = "Archive";
 "review.decision.abandon" = "Abandon";
 "review.decision.complete" = "Complete";
+"learning_plan.title" = "Learning Plan";
+"learning_plan.adjust" = "Adjust Plan";
+"learning_plan.revision_history" = "Superseded Learning Plan Revisions";
 "migration.title" = "Migration Review";
 "migration.attach_evidence" = "Attach Evidence";
 "migration.convert_note" = "Convert to Session Note";

@@ -197,9 +197,15 @@ public struct CloudRecordMapper {
         record["schemaVersion"] = value.schemaVersion
     }
 
-    private func encode(_ value: CoursePlan, into record: CKRecord) {
+    private func encode(_ value: LearningPlan, into record: CKRecord) {
         record["projectId"] = value.projectId.uuidString
         record["revision"] = value.revision
+        // Keep the remote record type/shape as CoursePlan for compatibility,
+        // while making the immutable revision identity explicit for new writes.
+        record["planSeriesID"] = value.planSeriesID.uuidString
+        record["revisionID"] = value.revisionID.uuidString
+        record["baseRevisionID"] = value.baseRevisionID?.uuidString
+        record["supersedesID"] = value.supersedesID?.uuidString
         record["status"] = value.status.rawValue
         record["courseURL"] = value.courseURL?.absoluteString
         record["courseTitle"] = value.courseTitle
@@ -461,7 +467,7 @@ public struct CloudRecordMapper {
         )
     }
 
-    private func decodeCoursePlan(_ record: CKRecord, id: UUID) throws -> CoursePlan {
+    private func decodeCoursePlan(_ record: CKRecord, id: UUID) throws -> LearningPlan {
         guard let status = CoursePlanStatus(rawValue: try string("status", from: record)) else {
             throw CloudRecordMapperError.invalidField("course plan status")
         }
@@ -469,6 +475,10 @@ public struct CloudRecordMapper {
             id: id,
             projectId: try uuid("projectId", from: record),
             revision: try integer("revision", from: record),
+            planSeriesID: try optionalUUID("planSeriesID", from: record) ?? id,
+            revisionID: try optionalUUID("revisionID", from: record) ?? id,
+            baseRevisionID: try optionalUUID("baseRevisionID", from: record),
+            supersedesID: try optionalUUID("supersedesID", from: record),
             status: status,
             courseURL: optionalString("courseURL", from: record).flatMap(URL.init(string:)),
             courseTitle: try string("courseTitle", from: record),

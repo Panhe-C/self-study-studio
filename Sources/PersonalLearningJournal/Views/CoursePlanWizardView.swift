@@ -21,7 +21,7 @@ struct CoursePlanWizardView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var viewModel: JournalViewModel
     private let project: Project
-    private let revisionSource: CoursePlan?
+    private let revisionSource: LearningPlan?
 
     @State private var step: WizardStep = .course
     @State private var courseURLText: String
@@ -46,7 +46,7 @@ struct CoursePlanWizardView: View {
     init(
         viewModel: JournalViewModel,
         project: Project,
-        revisionSource: CoursePlan? = nil
+        revisionSource: LearningPlan? = nil
     ) {
         self.viewModel = viewModel
         self.project = project
@@ -121,7 +121,7 @@ struct CoursePlanWizardView: View {
                     }
                 }
             }
-            .navigationTitle(revisionSource == nil ? "Study Plan" : "Revise Plan")
+            .navigationTitle(revisionSource == nil ? "Learning Plan" : "Adjust Learning Plan")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") {
@@ -151,7 +151,7 @@ struct CoursePlanWizardView: View {
             .sheet(isPresented: $showingScheduleDraft) {
                 ScheduleDraftView(viewModel: calendarViewModel)
             }
-            .alert("Course plan unavailable", isPresented: .constant(errorMessage != nil)) {
+            .alert("Learning plan unavailable", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
@@ -244,7 +244,7 @@ struct CoursePlanWizardView: View {
     @ViewBuilder
     private var confirmationFields: some View {
         if let draft {
-            Section("Plan summary") {
+            Section("Learning Plan summary") {
                 Text(draft.title).font(.headline)
                 Text(draft.summary).foregroundStyle(.secondary)
                 LabeledContent("Phases", value: "\(draft.phases.count)")
@@ -273,7 +273,7 @@ struct CoursePlanWizardView: View {
                     Button {
                         schedulePlan()
                     } label: {
-                        Label(isScheduling ? "Scheduling" : "Schedule Plan", systemImage: "calendar.badge.clock")
+                        Label(isScheduling ? "Scheduling" : "Schedule Learning Plan", systemImage: "calendar.badge.clock")
                     }
                     .disabled(isScheduling)
                     Button("Done") { dismiss() }
@@ -281,7 +281,7 @@ struct CoursePlanWizardView: View {
                     Button {
                         activateDraft()
                     } label: {
-                        Label("Activate Plan", systemImage: "checkmark.circle.fill")
+                        Label("Activate Learning Plan", systemImage: "checkmark.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -325,7 +325,7 @@ struct CoursePlanWizardView: View {
     private func activateDraft() {
         guard let draft else { return }
         do {
-            let plan: CoursePlan
+            let plan: LearningPlan
             if let persistedDraftPlan, !hasEditedDraft {
                 plan = persistedDraftPlan
             } else if let revisionSource {
@@ -385,7 +385,7 @@ struct CoursePlanWizardView: View {
         }
     }
 
-    private static func draft(from plan: CoursePlan, viewModel: JournalViewModel) -> CoursePlanDraft {
+    private static func draft(from plan: LearningPlan, viewModel: JournalViewModel) -> CoursePlanDraft {
         let phases = viewModel.phases(for: plan.id)
         let phaseIDs = Dictionary(uniqueKeysWithValues: phases.map { ($0.id, $0.id.uuidString) })
         return CoursePlanDraft(

@@ -11,7 +11,9 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
     public var proofRevisions: [ProofRevision]
     public var reviewDecisions: [ReviewDecision]
     public var trailEvents: [TrailEvent]
-    public var coursePlans: [CoursePlan]
+    /// Persisted key remains `coursePlans` for archive compatibility; values
+    /// are canonical LearningPlan revisions.
+    public var coursePlans: [LearningPlan]
     public var planPhases: [PlanPhase]
     public var plannedSessions: [PlannedSession]
     public var availabilityRules: [AvailabilityRule]
@@ -20,6 +22,11 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
     public var practiceSessions: [PracticeSession]
     public var hasCompletedOnboarding: Bool
     public var pendingFirstRecordProjectId: UUID?
+
+    public var learningPlans: [LearningPlan] {
+        get { coursePlans }
+        set { coursePlans = newValue }
+    }
 
     public init(
         projects: [Project] = [],
@@ -31,7 +38,7 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
         proofRevisions: [ProofRevision] = [],
         reviewDecisions: [ReviewDecision] = [],
         trailEvents: [TrailEvent] = [],
-        coursePlans: [CoursePlan] = [],
+        coursePlans: [LearningPlan] = [],
         planPhases: [PlanPhase] = [],
         plannedSessions: [PlannedSession] = [],
         availabilityRules: [AvailabilityRule] = [],

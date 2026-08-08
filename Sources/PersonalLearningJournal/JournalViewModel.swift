@@ -10,7 +10,7 @@ public final class JournalViewModel: ObservableObject {
     @Published public private(set) var syncPendingMutationCount: Int
     @Published public private(set) var syncLastSuccess: Date?
     @Published public private(set) var bootstrapEntityCount: Int
-    @Published public private(set) var draftCoursePlan: CoursePlan?
+    @Published public private(set) var draftCoursePlan: LearningPlan?
     @Published public private(set) var coursePlanGenerationState: CoursePlanGenerationState
     @Published public private(set) var coursePlanValidationErrors: [CoursePlanningValidationError]
     @Published public private(set) var pendingCanonicalNextStepProposal: CanonicalNextStepProposal?
@@ -190,9 +190,13 @@ public final class JournalViewModel: ObservableObject {
         snapshot.reviews
     }
 
-    public var coursePlans: [CoursePlan] {
+    /// Canonical Learning Plan collection. `coursePlans` remains the source
+    /// compatibility spelling below for older integrations.
+    public var learningPlans: [LearningPlan] {
         snapshot.coursePlans
     }
+
+    public var coursePlans: [CoursePlan] { learningPlans }
 
     public var planPhases: [PlanPhase] {
         snapshot.planPhases
@@ -520,7 +524,7 @@ public final class JournalViewModel: ObservableObject {
     }
 
     @discardableResult
-    public func generateCoursePlan(_ input: CoursePlanningInput) async throws -> CoursePlan {
+    public func generateCoursePlan(_ input: CoursePlanningInput) async throws -> LearningPlan {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
@@ -556,7 +560,7 @@ public final class JournalViewModel: ObservableObject {
     public func saveManualDraft(
         input: CoursePlanningInput,
         draft: CoursePlanDraft
-    ) throws -> CoursePlan {
+    ) throws -> LearningPlan {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
@@ -576,11 +580,17 @@ public final class JournalViewModel: ObservableObject {
     }
 
     @discardableResult
-    public func activateCoursePlan(draftPlanID: UUID) throws -> CanonicalNextStepProposal? {
+    public func activateCoursePlan(
+        draftPlanID: UUID,
+        expectation: RevisionGuardExpectation? = nil
+    ) throws -> CanonicalNextStepProposal? {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
-        let proposal = try coursePlanningService.activate(draftPlanID: draftPlanID)
+        let proposal = try coursePlanningService.activate(
+            draftPlanID: draftPlanID,
+            expectation: expectation
+        )
         pendingCanonicalNextStepProposal = proposal
         if draftCoursePlan?.id == draftPlanID {
             draftCoursePlan = nil
@@ -611,7 +621,7 @@ public final class JournalViewModel: ObservableObject {
         planID: UUID,
         input: CoursePlanningInput,
         draft: CoursePlanDraft
-    ) throws -> CoursePlan {
+    ) throws -> LearningPlan {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
@@ -1056,17 +1066,41 @@ public final class JournalViewModel: ObservableObject {
         }
     }
 
-    public func coursePlans(for projectId: UUID) -> [CoursePlan] {
+    public func learningPlans(for projectId: UUID) -> [LearningPlan] {
         snapshot.coursePlans
             .filter { $0.projectId == projectId }
             .sorted { $0.revision > $1.revision }
     }
 
-    public func activeCoursePlan(for projectId: UUID) -> CoursePlan? {
+    public func coursePlans(for projectId: UUID) -> [CoursePlan] {
+        learningPlans(for: projectId)
+    }
+
+    public func learningPlanAggregates(for projectId: UUID) -> [LearningPlanAggregate] {
+        snapshot.learningPlanAggregates(for: projectId)
+    }
+
+    public func activeLearningPlan(for projectId: UUID) -> LearningPlan? {
+        if let aggregatePlan = snapshot.learningPlanAggregates(for: projectId)
+            .compactMap(\.activeRevision)
+            .first?.plan {
+            return aggregatePlan
+        }
         guard let activeID = snapshot.projects.first(where: { $0.id == projectId })?.activeCoursePlanId else {
             return nil
         }
         return snapshot.coursePlans.first { $0.id == activeID }
+    }
+
+    public func activeCoursePlan(for projectId: UUID) -> CoursePlan? {
+        activeLearningPlan(for: projectId)
+    }
+
+    public func supersededLearningPlans(for projectId: UUID) -> [LearningPlan] {
+        snapshot.learningPlanAggregates(for: projectId)
+            .flatMap(\.supersededRevisions)
+            .map(\.plan)
+            .sorted { $0.revision > $1.revision }
     }
 
     public func phases(for planId: UUID) -> [PlanPhase] {

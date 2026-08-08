@@ -64,6 +64,76 @@ final class CoursePlanningServiceTests: XCTestCase {
         XCTAssertTrue(try repository.snapshot().coursePlans.isEmpty)
     }
 
+    func testStructuralRevisionCreatesLinkedDraftWithoutMutatingPublishedRevision() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = CoursePlanningService(repository: repository, now: { self.timestamp })
+        let firstDraft = try service.saveDraft(input: input, draft: draft)
+        _ = try service.activate(draftPlanID: firstDraft.id)
+
+        let revised = try service.revise(planID: firstDraft.id, input: input, draft: draft)
+        let snapshot = try repository.snapshot()
+        let original = try XCTUnwrap(snapshot.coursePlans.first { $0.id == firstDraft.id })
+
+        XCTAssertEqual(revised.status, .draft)
+        XCTAssertEqual(revised.planSeriesID, firstDraft.planSeriesID)
+        XCTAssertEqual(revised.baseRevisionID, firstDraft.revisionID)
+        XCTAssertEqual(revised.supersedesID, firstDraft.revisionID)
+        XCTAssertEqual(original.status, .active)
+        XCTAssertEqual(original.revisionID, firstDraft.revisionID)
+    }
+
+    func testStaleRevisionGuardFailsBeforeActivationWritesOrEnqueues() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = CoursePlanningService(repository: repository, now: { self.timestamp })
+        let firstDraft = try service.saveDraft(input: input, draft: draft)
+        _ = try service.activate(draftPlanID: firstDraft.id)
+        let revised = try service.revise(planID: firstDraft.id, input: input, draft: draft)
+        let metadata = SyncRecordMetadata(
+            entity: .init(.coursePlan, firstDraft.id),
+            zoneName: CloudSyncCoordinator.zoneName,
+            recordName: firstDraft.id.uuidString,
+            recordChangeTag: "server-v2",
+            state: .synced
+        )
+        try repository.acknowledge([], metadata: [metadata])
+        let before = try repository.snapshot()
+        let pendingBefore = try repository.pendingMutations(limit: 100)
+
+        XCTAssertThrowsError(
+            try service.activate(
+                draftPlanID: revised.id,
+                expectation: RevisionGuardExpectation(
+                    baseRevisionID: firstDraft.revisionID,
+                    recordChangeTag: "stale-v1"
+                )
+            )
+        ) { error in
+            guard case let RevisionGuardError.stale(baseRevisionID, expected, actual) = error else {
+                return XCTFail("Expected stale revision guard, got \(error)")
+            }
+            XCTAssertEqual(baseRevisionID, firstDraft.revisionID)
+            XCTAssertEqual(expected, "stale-v1")
+            XCTAssertEqual(actual, "server-v2")
+        }
+
+        XCTAssertEqual(try repository.snapshot(), before)
+        XCTAssertEqual(try repository.pendingMutations(limit: 100), pendingBefore)
+    }
+
+    func testActivatingAnAlreadyActiveRevisionIsIdempotent() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = CoursePlanningService(repository: repository, now: { self.timestamp })
+        let plan = try service.saveDraft(input: input, draft: draft)
+        _ = try service.activate(draftPlanID: plan.id)
+        let before = try repository.snapshot()
+        let pendingBefore = try repository.pendingMutations(limit: 100)
+
+        _ = try service.activate(draftPlanID: plan.id)
+
+        XCTAssertEqual(try repository.snapshot(), before)
+        XCTAssertEqual(try repository.pendingMutations(limit: 100), pendingBefore)
+    }
+
     private let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
     private let projectID = UUID()
 

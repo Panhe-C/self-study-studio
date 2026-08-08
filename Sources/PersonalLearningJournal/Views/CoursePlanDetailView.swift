@@ -3,12 +3,12 @@ import SwiftUI
 struct CoursePlanDetailView: View {
     @ObservedObject private var viewModel: JournalViewModel
     private let project: Project
-    private let plan: CoursePlan
+    private let plan: LearningPlan
     @State private var showingRevision = false
     @State private var proposedNextStep = ""
     @State private var errorMessage: String?
 
-    init(viewModel: JournalViewModel, project: Project, plan: CoursePlan) {
+    init(viewModel: JournalViewModel, project: Project, plan: LearningPlan) {
         self.viewModel = viewModel
         self.project = project
         self.plan = plan
@@ -88,10 +88,10 @@ struct CoursePlanDetailView: View {
                 }
             }
 
-            let archived = viewModel.coursePlans(for: project.id).filter { $0.status == .archived || $0.status == .completed }
-            if !archived.isEmpty {
-                Section("Previous revisions") {
-                    ForEach(archived) { revision in
+            let superseded = viewModel.supersededLearningPlans(for: project.id)
+            if !superseded.isEmpty {
+                Section("Superseded learning-plan revisions") {
+                    ForEach(superseded) { revision in
                         LabeledContent("Revision \(revision.revision)", value: revision.status.rawValue.capitalized)
                     }
                 }
@@ -114,7 +114,7 @@ struct CoursePlanDetailView: View {
                 Button {
                     showingRevision = true
                 } label: {
-                    Label("Revise Plan", systemImage: "pencil")
+                    Label("Adjust Plan", systemImage: "pencil")
                 }
             }
         }

@@ -12,7 +12,7 @@ public struct JournalExport: Codable, Equatable, Sendable {
     public var proofRevisions: [ProofRevision]
     public var reviewDecisions: [ReviewDecision]
     public var trailEvents: [TrailEvent]
-    public var coursePlans: [CoursePlan]
+    public var coursePlans: [LearningPlan]
     public var planPhases: [PlanPhase]
     public var plannedSessions: [PlannedSession]
     public var availabilityRules: [AvailabilityRule]
@@ -32,7 +32,7 @@ public struct JournalExport: Codable, Equatable, Sendable {
         proofRevisions: [ProofRevision] = [],
         reviewDecisions: [ReviewDecision] = [],
         trailEvents: [TrailEvent] = [],
-        coursePlans: [CoursePlan] = [],
+        coursePlans: [LearningPlan] = [],
         planPhases: [PlanPhase] = [],
         plannedSessions: [PlannedSession] = [],
         availabilityRules: [AvailabilityRule] = [],
@@ -94,7 +94,7 @@ public struct JournalExport: Codable, Equatable, Sendable {
         proofRevisions = try container.decodeIfPresent([ProofRevision].self, forKey: .proofRevisions) ?? []
         reviewDecisions = try container.decodeIfPresent([ReviewDecision].self, forKey: .reviewDecisions) ?? []
         trailEvents = try container.decodeIfPresent([TrailEvent].self, forKey: .trailEvents) ?? []
-        coursePlans = try container.decode([CoursePlan].self, forKey: .coursePlans)
+        coursePlans = try container.decode([LearningPlan].self, forKey: .coursePlans)
         planPhases = try container.decode([PlanPhase].self, forKey: .planPhases)
         plannedSessions = try container.decode([PlannedSession].self, forKey: .plannedSessions)
         availabilityRules = try container.decode([AvailabilityRule].self, forKey: .availabilityRules)

@@ -28,6 +28,9 @@
 "review.decision.archive" = "归档";
 "review.decision.abandon" = "放弃";
 "review.decision.complete" = "完成";
+"learning_plan.title" = "学习计划";
+"learning_plan.adjust" = "调整计划";
+"learning_plan.revision_history" = "已被替代的学习计划修订";
 "migration.title" = "迁移检查";
 "migration.attach_evidence" = "补充证据";
 "migration.convert_note" = "转为学习记录";

@@ -269,6 +269,42 @@ final class CloudRecordMapperTests: XCTestCase {
         }
     }
 
+    func testLegacyCoursePlanRecordDecodesAsLearningPlanAndPreservesAliasType() throws {
+        let id = UUID(uuidString: "00000000-0000-0000-0000-0000000007c1")!
+        let projectID = UUID(uuidString: "00000000-0000-0000-0000-0000000007c2")!
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let record = CKRecord(
+            recordType: "CoursePlan",
+            recordID: CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
+        )
+        record["projectId"] = projectID.uuidString
+        record["revision"] = 2
+        record["status"] = CoursePlanStatus.active.rawValue
+        record["courseTitle"] = "Legacy Course"
+        record["courseOutline"] = "Outline"
+        record["goal"] = "Learn"
+        record["expectedOutcome"] = "Proof"
+        record["startsOn"] = timestamp
+        record["weeklyBudgetMinutes"] = 120
+        record["summary"] = "Summary"
+        record["createdAt"] = timestamp
+        record["updatedAt"] = timestamp
+        record["schemaVersion"] = 1
+
+        let entity = try CloudRecordMapper().entity(from: record)
+        guard case let .coursePlan(plan) = entity else {
+            return XCTFail("Expected the legacy CoursePlan record to remain a coursePlan compatibility alias")
+        }
+        XCTAssertEqual(plan.courseTitle, "Legacy Course")
+        XCTAssertEqual(plan.planSeriesID, id)
+        XCTAssertEqual(plan.revisionID, id)
+
+        let canonical = try CloudRecordMapper().record(for: entity, zoneID: zoneID)
+        XCTAssertEqual(canonical.recordType, "CoursePlan")
+        XCTAssertEqual(canonical["planSeriesID"] as? String, id.uuidString)
+        XCTAssertEqual(canonical["revisionID"] as? String, id.uuidString)
+    }
+
     func testAvailabilityAndPreferencesRoundTripWithoutCalendarBindings() throws {
         let timestamp = Date(timeIntervalSince1970: 10_000)
         let availability = try AvailabilityRule(
