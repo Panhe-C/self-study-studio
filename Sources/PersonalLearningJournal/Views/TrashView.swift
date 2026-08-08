@@ -48,9 +48,8 @@ public struct TrashView: View {
                     Text("Some attachment files still need cleanup. This local retry queue survives leaving and reopening Trash.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    if viewModel.attachmentCleanupQueueError == .invalidQueue
-                        || viewModel.attachmentCleanupQueueError == .quarantineFailed {
-                        Button("Quarantine corrupt queue") {
+                    if shouldQuarantineAttachmentQueue {
+                        Button(attachmentQueueQuarantineButtonTitle) {
                             pendingCorruptQueueQuarantineConfirmation = true
                         }
                     } else if viewModel.attachmentCleanupQueueError != nil {
@@ -182,7 +181,7 @@ public struct TrashView: View {
         } message: {
             Text("Only these paths under trusted attachment roots will be deleted:\n\(pendingOrphanCleanupPaths.joined(separator: "\n"))")
         }
-        .alert("Quarantine corrupt queue?", isPresented: $pendingCorruptQueueQuarantineConfirmation) {
+        .alert(attachmentQueueQuarantineAlertTitle, isPresented: $pendingCorruptQueueQuarantineConfirmation) {
             Button("Cancel", role: .cancel) { pendingCorruptQueueQuarantineConfirmation = false }
             Button("Quarantine", role: .destructive) {
                 do {
@@ -194,7 +193,7 @@ public struct TrashView: View {
                 pendingCorruptQueueQuarantineConfirmation = false
             }
         } message: {
-            Text("The original corrupt queue will be moved to a timestamped quarantine file and kept for sharing. New cleanup work can continue only after this operation succeeds.")
+            Text(attachmentQueueQuarantineAlertMessage)
         }
         .alert("Could not complete action", isPresented: Binding(
             get: { errorMessage != nil },
@@ -246,6 +245,37 @@ public struct TrashView: View {
 
     private var trashedProjects: [Project] {
         viewModel.projects.filter(\.isTrashed).sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private var shouldQuarantineAttachmentQueue: Bool {
+        guard let error = viewModel.attachmentCleanupQueueError else { return false }
+        switch error {
+        case .invalidQueue, .legacyQueueNeedsReview, .quarantineFailed:
+            return true
+        case .orphanCleanupRequiresConfirmation, .orphanCleanupFailed:
+            return false
+        }
+    }
+
+    private var isLegacyQueueNeedsReview: Bool {
+        guard let error = viewModel.attachmentCleanupQueueError else { return false }
+        if case .legacyQueueNeedsReview = error { return true }
+        return false
+    }
+
+    private var attachmentQueueQuarantineButtonTitle: String {
+        isLegacyQueueNeedsReview ? "Quarantine unsafe legacy queue" : "Quarantine corrupt queue"
+    }
+
+    private var attachmentQueueQuarantineAlertTitle: String {
+        isLegacyQueueNeedsReview ? "Quarantine unsafe legacy queue?" : "Quarantine corrupt queue?"
+    }
+
+    private var attachmentQueueQuarantineAlertMessage: String {
+        if isLegacyQueueNeedsReview {
+            return "This legacy queue contains paths that cannot be safely assigned to a project. The original bytes will be preserved in a timestamped quarantine file for review and sharing."
+        }
+        return "The original corrupt queue will be moved to a timestamped quarantine file and kept for sharing. New cleanup work can continue only after this operation succeeds."
     }
 
     private func restore(_ project: Project) {

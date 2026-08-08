@@ -167,6 +167,118 @@ final class JournalViewModelTests: XCTestCase {
         XCTAssertNoThrow(try viewModel.permanentlyDelete(projectId: project.id))
     }
 
+    func testUnrecoverableLegacyQueueQuarantineRecoveryUnblocksPermanentDelete() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queueURL = root
+            .appendingPathComponent("LearningJournal/Private/attachment-cleanup-queue.json")
+        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let legacyPath = root.appendingPathComponent("unknown/proof.txt").path
+        let legacyData = try JSONEncoder().encode([legacyPath])
+        try legacyData.write(to: queueURL, options: [.atomic])
+        let project = Project(
+            name: "Legacy quarantine project",
+            area: "Test",
+            goal: "Recover legacy queue",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let journalService = JournalService(repository: repository)
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            attachmentStore: AttachmentStore(rootDirectory: root),
+            cleanupQueue: AttachmentCleanupQueue(rootDirectory: root),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore()),
+            syncRepository: repository
+        )
+
+        XCTAssertEqual(viewModel.attachmentCleanupQueueError, .legacyQueueNeedsReview([legacyPath]))
+        XCTAssertThrowsError(try viewModel.permanentlyDelete(projectId: project.id))
+        try viewModel.recoverAttachmentCleanupQueue()
+        let quarantinedURL = try XCTUnwrap(viewModel.attachmentCleanupQueueQuarantineURL)
+        XCTAssertEqual(try Data(contentsOf: quarantinedURL), legacyData)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: queueURL.path))
+        XCTAssertNoThrow(try viewModel.permanentlyDelete(projectId: project.id))
+    }
+
+    func testUnrecoverableLegacyQueueQuarantineFailureRemainsBlocked() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queueURL = root
+            .appendingPathComponent("LearningJournal/Private/attachment-cleanup-queue.json")
+        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let legacyPath = root.appendingPathComponent("unknown/proof.txt").path
+        let legacyData = try JSONEncoder().encode([legacyPath])
+        try legacyData.write(to: queueURL, options: [.atomic])
+        let project = Project(
+            name: "Blocked legacy quarantine project",
+            area: "Test",
+            goal: "Keep queue blocked",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let journalService = JournalService(repository: repository)
+        let queue = AttachmentCleanupQueue(
+            fileURL: queueURL,
+            moveItem: { _, _ in throw InjectedLegacyQueueQuarantineFailure() }
+        )
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            attachmentStore: AttachmentStore(rootDirectory: root),
+            cleanupQueue: queue,
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore()),
+            syncRepository: repository
+        )
+
+        XCTAssertThrowsError(try viewModel.recoverAttachmentCleanupQueue()) { error in
+            XCTAssertEqual(error as? AttachmentCleanupQueueError, .quarantineFailed)
+        }
+        XCTAssertEqual(viewModel.attachmentCleanupQueueError, AttachmentCleanupQueueError.quarantineFailed)
+        XCTAssertEqual(try Data(contentsOf: queueURL), legacyData)
+        XCTAssertThrowsError(try viewModel.permanentlyDelete(projectId: project.id))
+        XCTAssertEqual(
+            viewModel.attachmentCleanupQueueError,
+            AttachmentCleanupQueueError.legacyQueueNeedsReview([legacyPath])
+        )
+    }
+
+    func testUnrecoverableLegacyQueueRecoveryCancellationPreservesOriginalQueue() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queueURL = root
+            .appendingPathComponent("LearningJournal/Private/attachment-cleanup-queue.json")
+        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let legacyPath = root.appendingPathComponent("unknown/proof.txt").path
+        let legacyData = try JSONEncoder().encode([legacyPath])
+        try legacyData.write(to: queueURL, options: [.atomic])
+
+        let viewModel = makeViewModel(attachmentRoot: root)
+
+        try viewModel.recoverAttachmentCleanupQueue(confirmed: false)
+
+        XCTAssertEqual(try Data(contentsOf: queueURL), legacyData)
+        XCTAssertEqual(
+            viewModel.attachmentCleanupQueueError,
+            AttachmentCleanupQueueError.legacyQueueNeedsReview([legacyPath])
+        )
+        XCTAssertNil(viewModel.attachmentCleanupQueueQuarantineURL)
+    }
+
     @MainActor
     func testSyncSummaryShowsQueuedChangesAndConflictCount() async throws {
         let repository = InMemoryJournalRepository()
@@ -720,6 +832,7 @@ final class JournalViewModelTests: XCTestCase {
 }
 
 private struct InjectedAttachmentDeletionFailure: Error {}
+private struct InjectedLegacyQueueQuarantineFailure: Error {}
 
 @MainActor
 private final class ViewModelPracticeTimerStateStore: PracticeTimerStateStore {

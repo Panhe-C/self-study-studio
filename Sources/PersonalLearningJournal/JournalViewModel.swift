@@ -409,11 +409,17 @@ public final class JournalViewModel: ObservableObject {
         }
     }
 
-    public func recoverAttachmentCleanupQueue() throws {
+    public func recoverAttachmentCleanupQueue(confirmed: Bool = true) throws {
+        guard confirmed else { return }
         do {
             try reloadAttachmentCleanupQueue()
-        } catch AttachmentCleanupQueueError.invalidQueue {
-            _ = try quarantineCorruptQueue()
+        } catch let error as AttachmentCleanupQueueError {
+            switch error {
+            case .invalidQueue, .legacyQueueNeedsReview:
+                _ = try quarantineCorruptQueue()
+            default:
+                throw error
+            }
         }
     }
 

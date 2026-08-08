@@ -26,7 +26,7 @@ extension AttachmentCleanupQueueError: LocalizedError {
         case .invalidQueue:
             return "The attachment cleanup queue is unreadable. Repair or remove the queue file before retrying."
         case let .legacyQueueNeedsReview(paths):
-            return "The legacy attachment cleanup queue contains paths without a safely identifiable project: \(paths.joined(separator: ", "))."
+            return "The legacy attachment cleanup queue contains paths without a safely identifiable project: \(paths.joined(separator: ", ")). Quarantine preserves the original bytes for review."
         case let .orphanCleanupRequiresConfirmation(paths):
             return "These attachment paths need explicit confirmation before deletion: \(paths.joined(separator: ", "))."
         case let .orphanCleanupFailed(paths):
