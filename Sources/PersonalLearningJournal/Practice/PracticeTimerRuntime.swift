@@ -33,25 +33,94 @@ public final class UserDefaultsPracticeTimerStateStore: PracticeTimerStateStore 
     }
 }
 
+public struct PracticeTimerBlockSnapshot: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let targetMinutes: Int
+    public let ordinal: Int
+    public let focus: String?
+    public let nextFocusCandidates: [String]
+    public let activeDurationSeconds: Int
+    public let visitCount: Int
+    public let wasSkipped: Bool
+    public let wasExtended: Bool
+
+    public init(
+        id: UUID,
+        name: String,
+        targetMinutes: Int,
+        ordinal: Int,
+        focus: String? = nil,
+        nextFocusCandidates: [String] = [],
+        activeDurationSeconds: Int = 0,
+        visitCount: Int = 0,
+        wasSkipped: Bool = false,
+        wasExtended: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.targetMinutes = targetMinutes
+        self.ordinal = ordinal
+        self.focus = focus
+        self.nextFocusCandidates = nextFocusCandidates
+        self.activeDurationSeconds = activeDurationSeconds
+        self.visitCount = visitCount
+        self.wasSkipped = wasSkipped
+        self.wasExtended = wasExtended
+    }
+
+    public init(
+        block: PracticeBlock,
+        activeDurationSeconds: Int = 0,
+        visitCount: Int = 0,
+        wasSkipped: Bool = false
+    ) {
+        self.init(
+            id: block.id,
+            name: block.name,
+            targetMinutes: block.targetMinutes,
+            ordinal: block.ordinal,
+            focus: block.focus,
+            nextFocusCandidates: block.nextFocusCandidates,
+            activeDurationSeconds: activeDurationSeconds,
+            visitCount: visitCount,
+            wasSkipped: wasSkipped,
+            wasExtended: activeDurationSeconds > block.targetMinutes * 60
+        )
+    }
+}
+
 public struct PracticeTimerSnapshot: Equatable, Sendable {
     public let activeRoutineId: UUID?
     public let startedAt: Date?
     public let activeElapsedSeconds: Int
     public let isRunning: Bool
     public let targetSeconds: Int
+    public let blocks: [PracticeTimerBlockSnapshot]
+    public let activeBlockID: UUID?
+
+    public var currentBlockID: UUID? { activeBlockID }
+    public var currentBlock: PracticeTimerBlockSnapshot? {
+        guard let activeBlockID else { return nil }
+        return blocks.first { $0.id == activeBlockID }
+    }
 
     public init(
         activeRoutineId: UUID?,
         startedAt: Date?,
         activeElapsedSeconds: Int,
         isRunning: Bool,
-        targetSeconds: Int
+        targetSeconds: Int,
+        blocks: [PracticeTimerBlockSnapshot] = [],
+        activeBlockID: UUID? = nil
     ) {
         self.activeRoutineId = activeRoutineId
         self.startedAt = startedAt
         self.activeElapsedSeconds = activeElapsedSeconds
         self.isRunning = isRunning
         self.targetSeconds = targetSeconds
+        self.blocks = blocks
+        self.activeBlockID = activeBlockID
     }
 
     static let inactive = PracticeTimerSnapshot(
@@ -68,17 +137,55 @@ public struct PracticeTimerCompletion: Codable, Equatable, Sendable {
     public let startedAt: Date
     public let endedAt: Date
     public let activeDurationSeconds: Int
+    public let blocks: [PracticeBlock]
+    public let segments: [PracticeSegment]
+    public let summary: PracticeSummary?
 
     public init(
         routineId: UUID,
         startedAt: Date,
         endedAt: Date,
-        activeDurationSeconds: Int
+        activeDurationSeconds: Int,
+        blocks: [PracticeBlock] = [],
+        segments: [PracticeSegment] = [],
+        summary: PracticeSummary? = nil
     ) {
         self.routineId = routineId
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.activeDurationSeconds = activeDurationSeconds
+        self.blocks = blocks
+        self.segments = segments
+        self.summary = summary
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case routineId, startedAt, endedAt, activeDurationSeconds
+        case blocks, segments, summary
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            routineId: try container.decode(UUID.self, forKey: .routineId),
+            startedAt: try container.decode(Date.self, forKey: .startedAt),
+            endedAt: try container.decode(Date.self, forKey: .endedAt),
+            activeDurationSeconds: try container.decode(Int.self, forKey: .activeDurationSeconds),
+            blocks: try container.decodeIfPresent([PracticeBlock].self, forKey: .blocks) ?? [],
+            segments: try container.decodeIfPresent([PracticeSegment].self, forKey: .segments) ?? [],
+            summary: try container.decodeIfPresent(PracticeSummary.self, forKey: .summary)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(routineId, forKey: .routineId)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encode(endedAt, forKey: .endedAt)
+        try container.encode(activeDurationSeconds, forKey: .activeDurationSeconds)
+        if !blocks.isEmpty { try container.encode(blocks, forKey: .blocks) }
+        if !segments.isEmpty { try container.encode(segments, forKey: .segments) }
+        try container.encodeIfPresent(summary, forKey: .summary)
     }
 }
 
@@ -123,6 +230,8 @@ public enum PracticeTimerRuntimeError: Error, Equatable, Sendable {
     case activeTimerAlreadyExists
     case pendingCompletionExists
     case pendingCompletionCouldNotClear
+    case invalidRoutineBlocks
+    case unknownBlock
 }
 
 @MainActor
@@ -154,6 +263,10 @@ struct PersistedPracticeTimerState: Codable, Equatable {
     let targetSeconds: Int
     var targetFeedbackConsumed: Bool
     let routinePresentation: PracticeRoutinePresentationSnapshot?
+    var blocks: [PracticeBlock]
+    var currentBlockID: UUID?
+    var segments: [PracticeSegment]
+    var skippedBlockIDs: Set<UUID>
 
     init(
         routineId: UUID,
@@ -162,7 +275,11 @@ struct PersistedPracticeTimerState: Codable, Equatable {
         resumedAt: Date?,
         targetSeconds: Int,
         targetFeedbackConsumed: Bool,
-        routinePresentation: PracticeRoutinePresentationSnapshot? = nil
+        routinePresentation: PracticeRoutinePresentationSnapshot? = nil,
+        blocks: [PracticeBlock] = [],
+        currentBlockID: UUID? = nil,
+        segments: [PracticeSegment] = [],
+        skippedBlockIDs: Set<UUID> = []
     ) {
         self.routineId = routineId
         self.startedAt = startedAt
@@ -171,6 +288,36 @@ struct PersistedPracticeTimerState: Codable, Equatable {
         self.targetSeconds = targetSeconds
         self.targetFeedbackConsumed = targetFeedbackConsumed
         self.routinePresentation = routinePresentation
+        self.blocks = blocks
+        self.currentBlockID = currentBlockID
+        self.segments = segments
+        self.skippedBlockIDs = skippedBlockIDs
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case routineId, startedAt, accumulatedActiveSeconds, resumedAt, targetSeconds
+        case targetFeedbackConsumed, routinePresentation, blocks, currentBlockID
+        case segments, skippedBlockIDs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            routineId: try container.decode(UUID.self, forKey: .routineId),
+            startedAt: try container.decode(Date.self, forKey: .startedAt),
+            accumulatedActiveSeconds: try container.decode(Int.self, forKey: .accumulatedActiveSeconds),
+            resumedAt: try container.decodeIfPresent(Date.self, forKey: .resumedAt),
+            targetSeconds: try container.decode(Int.self, forKey: .targetSeconds),
+            targetFeedbackConsumed: try container.decodeIfPresent(Bool.self, forKey: .targetFeedbackConsumed) ?? false,
+            routinePresentation: try container.decodeIfPresent(
+                PracticeRoutinePresentationSnapshot.self,
+                forKey: .routinePresentation
+            ),
+            blocks: try container.decodeIfPresent([PracticeBlock].self, forKey: .blocks) ?? [],
+            currentBlockID: try container.decodeIfPresent(UUID.self, forKey: .currentBlockID),
+            segments: try container.decodeIfPresent([PracticeSegment].self, forKey: .segments) ?? [],
+            skippedBlockIDs: try container.decodeIfPresent(Set<UUID>.self, forKey: .skippedBlockIDs) ?? []
+        )
     }
 }
 
@@ -179,10 +326,25 @@ private struct PersistedPracticeTimerLocalState: Codable, Equatable {
     var active: PersistedPracticeTimerState?
     var pending: PracticePendingCompletionDraft?
 
-    init(active: PersistedPracticeTimerState?, pending: PracticePendingCompletionDraft?) {
-        version = 1
+    init(
+        active: PersistedPracticeTimerState?,
+        pending: PracticePendingCompletionDraft?,
+        version: Int = 2
+    ) {
+        self.version = version
         self.active = active
         self.pending = pending
+    }
+
+    private enum CodingKeys: String, CodingKey { case version, active, pending }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            active: try container.decodeIfPresent(PersistedPracticeTimerState.self, forKey: .active),
+            pending: try container.decodeIfPresent(PracticePendingCompletionDraft.self, forKey: .pending),
+            version: try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        )
     }
 }
 
@@ -230,8 +392,41 @@ public final class PracticeTimerRuntime: ObservableObject {
         targetSeconds: Int,
         routinePresentation: PracticeRoutinePresentationSnapshot? = nil
     ) throws {
+        try start(
+            routineId: routineId,
+            targetSeconds: targetSeconds,
+            blocks: [],
+            routinePresentation: routinePresentation
+        )
+    }
+
+    public func start(
+        routine: PracticeRoutine,
+        routinePresentation: PracticeRoutinePresentationSnapshot? = nil
+    ) throws {
+        let blocks = routine.orderedBlocks
+        guard !blocks.isEmpty else {
+            throw PracticeTimerRuntimeError.invalidRoutineBlocks
+        }
+        try start(
+            routineId: routine.id,
+            targetSeconds: routine.targetMinutes * 60,
+            blocks: blocks,
+            routinePresentation: routinePresentation ?? PracticeRoutinePresentationSnapshot(routine: routine)
+        )
+    }
+
+    private func start(
+        routineId: UUID,
+        targetSeconds: Int,
+        blocks: [PracticeBlock],
+        routinePresentation: PracticeRoutinePresentationSnapshot?
+    ) throws {
         guard targetSeconds > 0 else {
             throw PracticeTimerRuntimeError.invalidTargetSeconds
+        }
+        guard Set(blocks.map(\.id)).count == blocks.count else {
+            throw PracticeTimerRuntimeError.invalidRoutineBlocks
         }
         guard pendingCompletion == nil else {
             throw PracticeTimerRuntimeError.pendingCompletionExists
@@ -254,7 +449,15 @@ public final class PracticeTimerRuntime: ObservableObject {
             resumedAt: timestamp,
             targetSeconds: targetSeconds,
             targetFeedbackConsumed: false,
-            routinePresentation: routinePresentation
+            routinePresentation: routinePresentation,
+            blocks: blocks.sorted {
+                if $0.ordinal != $1.ordinal { return $0.ordinal < $1.ordinal }
+                return $0.id.uuidString < $1.id.uuidString
+            },
+            currentBlockID: blocks.min {
+                if $0.ordinal != $1.ordinal { return $0.ordinal < $1.ordinal }
+                return $0.id.uuidString < $1.id.uuidString
+            }?.id
         )
         try save(state)
         activeState = state
@@ -264,11 +467,11 @@ public final class PracticeTimerRuntime: ObservableObject {
     public func pause() {
         let timestamp = now()
         lastRefreshDate = timestamp
-        guard var state = validActiveState(at: timestamp), let resumedAt = state.resumedAt else {
+        guard var state = validActiveState(at: timestamp), state.resumedAt != nil else {
             return
         }
 
-        state.accumulatedActiveSeconds += Self.elapsedSeconds(since: resumedAt, until: timestamp)
+        closeOpenSegment(&state, at: timestamp)
         state.resumedAt = nil
         persistTransition(state, at: timestamp)
     }
@@ -282,6 +485,75 @@ public final class PracticeTimerRuntime: ObservableObject {
 
         state.resumedAt = timestamp
         persistTransition(state, at: timestamp)
+    }
+
+    /// Selects a block directly. A running segment is closed before switching
+    /// so revisits remain separate segments and are combined only in summary.
+    @discardableResult
+    public func selectBlock(_ blockID: UUID) -> Bool {
+        let timestamp = now()
+        lastRefreshDate = timestamp
+        guard var state = validActiveState(at: timestamp),
+              state.blocks.contains(where: { $0.id == blockID }) else {
+            return false
+        }
+        if state.currentBlockID == blockID {
+            return true
+        }
+        if state.resumedAt != nil {
+            closeOpenSegment(&state, at: timestamp)
+        }
+        state.currentBlockID = blockID
+        if state.resumedAt != nil {
+            state.resumedAt = timestamp
+        }
+        return persistTransition(state, at: timestamp)
+    }
+
+    /// Marks the current block skipped and advances to the next ordered block.
+    /// If there is no next block the timer pauses until the learner chooses a
+    /// block again, preventing un-attributed active time.
+    @discardableResult
+    public func skipCurrentBlock() -> Bool {
+        let timestamp = now()
+        lastRefreshDate = timestamp
+        guard var state = validActiveState(at: timestamp),
+              let currentBlockID = state.currentBlockID,
+              let currentIndex = state.blocks.firstIndex(where: { $0.id == currentBlockID }) else {
+            return false
+        }
+        let wasRunning = state.resumedAt != nil
+        if wasRunning {
+            closeOpenSegment(&state, at: timestamp)
+        }
+        state.skippedBlockIDs.insert(currentBlockID)
+        let nextBlock = state.blocks.dropFirst(currentIndex + 1).first {
+            !state.skippedBlockIDs.contains($0.id)
+        }
+        state.currentBlockID = nextBlock?.id
+        if nextBlock == nil {
+            state.resumedAt = nil
+        } else if wasRunning {
+            state.resumedAt = timestamp
+        }
+        return persistTransition(state, at: timestamp)
+    }
+
+    @discardableResult
+    public func nextBlock() -> Bool {
+        let timestamp = now()
+        lastRefreshDate = timestamp
+        guard var state = validActiveState(at: timestamp),
+              let currentBlockID = state.currentBlockID,
+              let currentIndex = state.blocks.firstIndex(where: { $0.id == currentBlockID }),
+              currentIndex + 1 < state.blocks.count else {
+            return false
+        }
+        if state.resumedAt != nil {
+            closeOpenSegment(&state, at: timestamp)
+        }
+        state.currentBlockID = state.blocks[currentIndex + 1].id
+        return persistTransition(state, at: timestamp)
     }
 
     public func refresh() {
@@ -334,11 +606,23 @@ public final class PracticeTimerRuntime: ObservableObject {
             return nil
         }
 
+        var finishedState = state
+        closeOpenSegment(&finishedState, at: timestamp)
+        let segments = finishedState.segments
         let completion = PracticeTimerCompletion(
             routineId: state.routineId,
             startedAt: state.startedAt,
             endedAt: timestamp,
-            activeDurationSeconds: Self.elapsedSeconds(for: state, at: timestamp)
+            activeDurationSeconds: finishedState.accumulatedActiveSeconds,
+            blocks: finishedState.blocks,
+            segments: segments,
+            summary: finishedState.blocks.isEmpty
+                ? nil
+                : PracticeSummary.from(
+                    blocks: finishedState.blocks,
+                    segments: segments,
+                    attentionMarker: nil
+                )
         )
         let pending = PracticePendingCompletionDraft(
             completion: completion,
@@ -369,6 +653,12 @@ public final class PracticeTimerRuntime: ObservableObject {
             return
         }
         clearActiveState()
+    }
+
+    /// Explicit cancellation alias used by the Guided Routine Player. It
+    /// never creates a PracticeSession or pending completion.
+    public func cancel() {
+        discard()
     }
 
     @discardableResult
@@ -420,6 +710,26 @@ public final class PracticeTimerRuntime: ObservableObject {
             snapshot = nextSnapshot
         }
         return true
+    }
+
+    private func closeOpenSegment(
+        _ state: inout PersistedPracticeTimerState,
+        at timestamp: Date
+    ) {
+        guard let resumedAt = state.resumedAt else {
+            return
+        }
+        let activeDuration = Self.elapsedSeconds(since: resumedAt, until: timestamp)
+        state.accumulatedActiveSeconds += activeDuration
+        guard activeDuration > 0, let blockID = state.currentBlockID else { return }
+        state.segments.append(
+            PracticeSegment(
+                blockID: blockID,
+                startedAt: resumedAt,
+                endedAt: timestamp,
+                activeDurationSeconds: activeDuration
+            )
+        )
     }
 
     private func save(_ state: PersistedPracticeTimerState) throws {
@@ -476,8 +786,44 @@ public final class PracticeTimerRuntime: ObservableObject {
             startedAt: state.startedAt,
             activeElapsedSeconds: Self.elapsedSeconds(for: state, at: timestamp),
             isRunning: state.resumedAt != nil,
-            targetSeconds: state.targetSeconds
+            targetSeconds: state.targetSeconds,
+            blocks: blockSnapshots(for: state, at: timestamp),
+            activeBlockID: state.currentBlockID
         )
+    }
+
+    private static func blockSnapshots(
+        for state: PersistedPracticeTimerState,
+        at timestamp: Date
+    ) -> [PracticeTimerBlockSnapshot] {
+        var durations: [UUID: Int] = [:]
+        var visits: [UUID: Int] = [:]
+        for segment in state.segments where !segment.isPause {
+            durations[segment.blockID, default: 0] += segment.activeDurationSeconds
+            if segment.activeDurationSeconds > 0 {
+                visits[segment.blockID, default: 0] += 1
+            }
+        }
+        if let resumedAt = state.resumedAt,
+           let currentBlockID = state.currentBlockID {
+            let openDuration = elapsedSeconds(since: resumedAt, until: timestamp)
+            durations[currentBlockID, default: 0] += openDuration
+            if openDuration > 0 {
+                visits[currentBlockID, default: 0] += 1
+            }
+        }
+        return state.blocks.sorted {
+            if $0.ordinal != $1.ordinal { return $0.ordinal < $1.ordinal }
+            return $0.id.uuidString < $1.id.uuidString
+        }.map { block in
+            PracticeTimerBlockSnapshot(
+                block: block,
+                activeDurationSeconds: durations[block.id, default: 0],
+                visitCount: visits[block.id, default: 0],
+                wasSkipped: state.skippedBlockIDs.contains(block.id)
+                    && durations[block.id, default: 0] == 0
+            )
+        }
     }
 
     private static func elapsedSeconds(for state: PersistedPracticeTimerState, at timestamp: Date) -> Int {
@@ -498,20 +844,34 @@ public final class PracticeTimerRuntime: ObservableObject {
             return PersistedPracticeTimerLocalState(active: nil, pending: nil)
         }
 
-        if let localState = try? JSONDecoder().decode(PersistedPracticeTimerLocalState.self, from: data),
+        let object = try? JSONSerialization.jsonObject(with: data)
+        let isLocalState = (object as? [String: Any])?.keys.contains {
+            $0 == "version" || $0 == "active" || $0 == "pending"
+        } == true
+        if isLocalState,
+           let localState = try? JSONDecoder().decode(PersistedPracticeTimerLocalState.self, from: data),
+           localState.version == 1 || localState.version == 2,
            isValid(localState, at: now) {
-            return localState
+            var migrated = localState
+            if let active = migrated.active {
+                migrated.active = normalized(active)
+            }
+            return migrated
         }
 
         if let legacyActive = try? JSONDecoder().decode(PersistedPracticeTimerState.self, from: data),
            isValid(legacyActive, at: now) {
-            return PersistedPracticeTimerLocalState(active: legacyActive, pending: nil)
+            return PersistedPracticeTimerLocalState(
+                active: normalized(legacyActive),
+                pending: nil
+            )
         }
         return nil
     }
 
     private static func isValid(_ state: PersistedPracticeTimerLocalState, at now: Date) -> Bool {
-        guard state.version == 1, state.active == nil || state.pending == nil else { return false }
+        guard (state.version == 1 || state.version == 2),
+              state.active == nil || state.pending == nil else { return false }
         let activeIsValid = state.active.map { isValid($0, at: now) } ?? true
         let pendingIsValid = state.pending.map { isValid($0) } ?? true
         return activeIsValid && pendingIsValid
@@ -534,6 +894,24 @@ public final class PracticeTimerRuntime: ObservableObject {
             return false
         }
 
+        if !state.blocks.isEmpty {
+            guard Set(state.blocks.map(\.id)).count == state.blocks.count,
+                  state.blocks.allSatisfy({
+                      (try? $0.validated()) != nil
+                  }),
+                  state.currentBlockID == nil
+                    || state.blocks.contains(where: { $0.id == state.currentBlockID }),
+                  state.skippedBlockIDs.isSubset(of: Set(state.blocks.map(\.id))) else {
+                return false
+            }
+            guard state.segments.allSatisfy({ segment in
+                (try? segment.validated()) != nil
+                    && state.blocks.contains(where: { $0.id == segment.blockID })
+            }) else {
+                return false
+            }
+        }
+
         if let resumedAt = state.resumedAt {
             guard resumedAt >= state.startedAt, resumedAt <= now else {
                 return false
@@ -543,6 +921,24 @@ public final class PracticeTimerRuntime: ObservableObject {
         let activeElapsed = Double(state.accumulatedActiveSeconds) + (state.resumedAt.map {
             max(0, now.timeIntervalSince($0))
         } ?? 0)
+        let segmentDuration = state.segments.reduce(0) { $0 + $1.activeDurationSeconds }
         return activeElapsed <= now.timeIntervalSince(state.startedAt) + 1
+            && Double(segmentDuration) <= activeElapsed + 1
+    }
+
+    private static func normalized(
+        _ state: PersistedPracticeTimerState
+    ) -> PersistedPracticeTimerState {
+        guard state.blocks.isEmpty else { return state }
+        var migrated = state
+        let block = PracticeBlock(
+            id: state.routineId,
+            name: state.routinePresentation?.name ?? "Practice",
+            targetMinutes: max(1, (state.targetSeconds + 59) / 60),
+            ordinal: 0
+        )
+        migrated.blocks = [block]
+        migrated.currentBlockID = state.currentBlockID ?? block.id
+        return migrated
     }
 }

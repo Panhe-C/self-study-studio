@@ -191,4 +191,51 @@ final class PracticeServiceTests: XCTestCase {
 
         XCTAssertTrue(try repository.snapshot().practiceRoutines.isEmpty)
     }
+
+    func testSaveSessionPersistsSegmentsAndSummaryInOneTransaction() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = PracticeService(repository: repository)
+        let first = PracticeBlock(name: "Theory", targetMinutes: 5, ordinal: 0)
+        let second = PracticeBlock(name: "Technique", targetMinutes: 10, ordinal: 1)
+        let routine = try service.createRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 15,
+            weekdays: [2],
+            blocks: [first, second]
+        )
+        let startedAt = Date(timeIntervalSince1970: 100)
+        let endedAt = Date(timeIntervalSince1970: 130)
+        let segments = [
+            PracticeSegment(
+                blockID: first.id,
+                startedAt: startedAt,
+                endedAt: startedAt.addingTimeInterval(10),
+                activeDurationSeconds: 10
+            ),
+            PracticeSegment(
+                blockID: second.id,
+                startedAt: startedAt.addingTimeInterval(10),
+                endedAt: endedAt,
+                activeDurationSeconds: 20
+            )
+        ]
+        let summary = PracticeSummary.from(blocks: routine.blocks, segments: segments, attentionMarker: "Needs tempo")
+
+        let result = try service.saveSession(
+            routineId: routine.id,
+            linkedProjectId: nil,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 30,
+            segments: segments,
+            summary: summary,
+            note: "Practice"
+        )
+
+        XCTAssertEqual(result.session.segments, segments)
+        XCTAssertEqual(result.session.summary, summary)
+        XCTAssertEqual(try repository.snapshot().practiceSessions, [result.session])
+    }
 }

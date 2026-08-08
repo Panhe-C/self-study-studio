@@ -62,7 +62,8 @@ public final class PracticeService {
         color: PracticeSemanticColor,
         targetMinutes: Int,
         weekdays: Set<Int>,
-        reminderTime: PracticeReminderTime? = nil
+        reminderTime: PracticeReminderTime? = nil,
+        blocks: [PracticeBlock] = []
     ) throws -> PracticeRoutine {
         let projects = try repository.snapshot().projects.filter { $0.deletedAt == nil && !$0.isTrashed }
         guard projects.count == 1 else { throw PracticeValidationError.missingProject }
@@ -73,7 +74,8 @@ public final class PracticeService {
             color: color,
             targetMinutes: targetMinutes,
             weekdays: weekdays,
-            reminderTime: reminderTime
+            reminderTime: reminderTime,
+            blocks: blocks
         )
     }
 
@@ -85,7 +87,8 @@ public final class PracticeService {
         color: PracticeSemanticColor,
         targetMinutes: Int,
         weekdays: Set<Int>,
-        reminderTime: PracticeReminderTime? = nil
+        reminderTime: PracticeReminderTime? = nil,
+        blocks: [PracticeBlock] = []
     ) throws -> PracticeRoutine {
         let snapshot = try repository.snapshot()
         guard let projectId,
@@ -100,6 +103,7 @@ public final class PracticeService {
             color: color,
             targetMinutes: targetMinutes,
             weekdays: weekdays,
+            blocks: blocks,
             reminderTime: reminderTime,
             createdAt: timestamp,
             updatedAt: timestamp
@@ -122,7 +126,8 @@ public final class PracticeService {
         color: PracticeSemanticColor,
         targetMinutes: Int,
         weekdays: Set<Int>,
-        reminderTime: PracticeReminderTime? = nil
+        reminderTime: PracticeReminderTime? = nil,
+        blocks: [PracticeBlock]? = nil
     ) throws -> PracticeRoutine {
         let snapshot = try repository.snapshot()
         guard let existing = liveRoutine(id: routineId, in: snapshot) else {
@@ -135,11 +140,15 @@ public final class PracticeService {
         let updated = try PracticeRoutine(
             id: existing.id,
             projectId: existing.projectId,
+            planRevisionID: existing.planRevisionID,
+            planSeriesID: existing.planSeriesID,
+            isStructuralLocked: existing.isStructuralLocked,
             name: name,
             symbolName: symbolName,
             color: color,
             targetMinutes: targetMinutes,
             weekdays: weekdays,
+            blocks: blocks ?? existing.blocks,
             reminderTime: reminderTime,
             isArchived: existing.isArchived,
             createdAt: existing.createdAt,
@@ -188,6 +197,8 @@ public final class PracticeService {
         startedAt: Date,
         endedAt: Date,
         activeDurationSeconds: Int,
+        segments: [PracticeSegment] = [],
+        summary: PracticeSummary? = nil,
         note: String?
     ) throws -> PracticeSessionSaveResult {
         let snapshot = try repository.snapshot()
@@ -223,6 +234,8 @@ public final class PracticeService {
             startedAt: startedAt,
             endedAt: endedAt,
             activeDurationSeconds: activeDurationSeconds,
+            segments: segments,
+            summary: summary,
             note: note,
             createdAt: timestamp,
             updatedAt: timestamp

@@ -223,30 +223,25 @@ existing EventKit preview and confirmation boundary untouched.
 
 ### B3. Practice Blocks, Focus, and Segments
 
-**Status (2026-08-09, partial).** The domain/contract slice now carries ordered Practice Blocks,
-optional Focus and Next Focus candidates, per-Block Segments/Summaries, and a dry-run/backup/
-idempotent explicit merge-or-archive migration. The Guided Routine Player and service/UI wiring
-remain out of this partial slice.
+**Status (2026-08-09, complete for the iOS slice).** The domain/contract and migration layers now
+carry ordered Practice Blocks, optional Focus and Next Focus candidates, per-Block Segments and
+Summaries, and a dry-run/backup/idempotent explicit merge-or-archive migration. The Guided Routine
+Player, durable runtime recovery, service transaction, authoring UI, and startup gate are wired.
 
-**Current.** Runtime behavior is still legacy: the timer records only `activeDurationSeconds`,
-and there is no production Block authoring, Focus capture, or per-Block attribution. Multiple
-active Routines are represented by a migration gate rather than silently resolved.
+**Current.** PracticeTimerRuntime persists the ordered blocks, current Block, active segments,
+skip state, and pending completion. Pause time is excluded; direct selection, skip, extension,
+and revisits remain attributable to one session. Finishing writes the Practice Session, segments,
+and summary in one repository transaction and clears local timer state. Existing flat timers
+recover as one stable Block; corrupt or impossible state fails closed. Published plan revisions
+keep their routine structure locked and require a new revision. Web remains history/configuration
+only for practice timing.
 
-**Remaining work.** Wire the Guided Routine Player and service/UI behavior. Add ordered Practice Blocks with soft targets, one current Practice Focus per Block,
-and optional Next Focus candidates (`docs/adr/0005`–`0007`, `0021`). Add Practice Segments so
-active time is attributed per Block, excluding pauses and combining repeated visits
-(`docs/adr/0022`). Add the Practice Summary with per-Block time, skipped or extended targets,
-the Focus used, and one optional Attention Marker, saved before any optional reflection
-(`docs/adr/0023`). Enforce at most one active Routine per Project (`docs/adr/0006`), migrating
-Projects that currently have several through an explicit merge-or-archive decision — the
-existing `PracticeMigrationResolution` type is the right place. Extend the Guided Routine
-Player in `PracticeTimerView` and `PracticeTimerRuntime`, which already handle pause, resume,
-and crash recovery.
+**Remaining work.** Physical-device and real CloudKit acceptance remain separate release checks.
 
-**Independent verification.** This is spec §12.3: one guided session records correct total and
-per-Block active time across pause, skip, direct Block selection, revisit, and extension.
-Existing flat Routines migrate to a single Block with no loss of target or history. No Block
-rating is required to save.
+**Independent verification.** swift test passes 393 tests with 0 failures, including runtime
+pause/skip/revisit/relaunch and legacy recovery tests, service atomic-save coverage, migration-gate
+backup/resolution coverage, and existing end-to-end practice workflows. No Block rating is
+required to save.
 
 **Risk.** High — the largest single model change, and the one the Web Practice view already
 assumes. Local crash recovery must keep working for in-progress sessions across the migration.

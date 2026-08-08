@@ -984,6 +984,16 @@ public final class JournalViewModel: ObservableObject {
             color: presentation?.color ?? syncedRoutine?.color ?? .teal,
             targetMinutes: max(1, (timerSnapshot.targetSeconds + 59) / 60),
             weekdays: Set(1...7),
+            blocks: syncedRoutine?.orderedBlocks ?? timerSnapshot.blocks.map { block in
+                PracticeBlock(
+                    id: block.id,
+                    name: block.name,
+                    targetMinutes: max(1, block.targetMinutes),
+                    ordinal: block.ordinal,
+                    focus: block.focus,
+                    nextFocusCandidates: block.nextFocusCandidates
+                )
+            },
             reminderTime: syncedRoutine?.reminderTime,
             isArchived: false,
             createdAt: syncedRoutine?.createdAt ?? timerSnapshot.startedAt ?? now,
@@ -1000,7 +1010,8 @@ public final class JournalViewModel: ObservableObject {
         color: PracticeSemanticColor,
         targetMinutes: Int,
         weekdays: Set<Int>,
-        reminderTime: PracticeReminderTime? = nil
+        reminderTime: PracticeReminderTime? = nil,
+        blocks: [PracticeBlock] = []
     ) throws -> PracticeRoutine {
         let projects = snapshot.projects.filter { $0.deletedAt == nil && !$0.isTrashed }
         guard projects.count == 1 else { throw PracticeValidationError.missingProject }
@@ -1011,7 +1022,8 @@ public final class JournalViewModel: ObservableObject {
             color: color,
             targetMinutes: targetMinutes,
             weekdays: weekdays,
-            reminderTime: reminderTime
+            reminderTime: reminderTime,
+            blocks: blocks
         )
     }
 
@@ -1023,7 +1035,8 @@ public final class JournalViewModel: ObservableObject {
         color: PracticeSemanticColor,
         targetMinutes: Int,
         weekdays: Set<Int>,
-        reminderTime: PracticeReminderTime? = nil
+        reminderTime: PracticeReminderTime? = nil,
+        blocks: [PracticeBlock] = []
     ) throws -> PracticeRoutine {
         let routine = try practiceService.createRoutine(
             projectId: projectId,
@@ -1032,7 +1045,8 @@ public final class JournalViewModel: ObservableObject {
             color: color,
             targetMinutes: targetMinutes,
             weekdays: weekdays,
-            reminderTime: reminderTime
+            reminderTime: reminderTime,
+            blocks: blocks
         )
         refresh()
         return routine
@@ -1046,7 +1060,8 @@ public final class JournalViewModel: ObservableObject {
         color: PracticeSemanticColor,
         targetMinutes: Int,
         weekdays: Set<Int>,
-        reminderTime: PracticeReminderTime? = nil
+        reminderTime: PracticeReminderTime? = nil,
+        blocks: [PracticeBlock]? = nil
     ) throws -> PracticeRoutine {
         guard practiceTimer.snapshot.activeRoutineId != routineId else {
             throw PracticeServiceError.activeRoutineCannotBeModified
@@ -1058,7 +1073,8 @@ public final class JournalViewModel: ObservableObject {
             color: color,
             targetMinutes: targetMinutes,
             weekdays: weekdays,
-            reminderTime: reminderTime
+            reminderTime: reminderTime,
+            blocks: blocks
         )
         refresh()
         return routine
@@ -1083,21 +1099,38 @@ public final class JournalViewModel: ObservableObject {
     }
 
     public func startPractice(_ routine: PracticeRoutine) throws {
-        try practiceTimer.start(
-            routineId: routine.id,
-            targetSeconds: routine.targetMinutes * 60,
-            routinePresentation: PracticeRoutinePresentationSnapshot(routine: routine)
-        )
+        if routine.orderedBlocks.isEmpty {
+            try practiceTimer.start(
+                routineId: routine.id,
+                targetSeconds: routine.targetMinutes * 60,
+                routinePresentation: PracticeRoutinePresentationSnapshot(routine: routine)
+            )
+        } else {
+            try practiceTimer.start(
+                routine: routine,
+                routinePresentation: PracticeRoutinePresentationSnapshot(routine: routine)
+            )
+        }
     }
 
     @discardableResult
     public func savePracticeCompletion(
         _ completion: PracticeTimerCompletion,
         linkedProjectId: UUID?,
-        note: String?
+        note: String?,
+        attentionMarker: String? = nil
     ) throws -> PracticeSessionSaveResult {
         let pending = practiceTimer.pendingCompletion
         let pendingMatchesCompletion = pending?.completion == completion
+        let summary = if let attentionMarker, !completion.blocks.isEmpty {
+            PracticeSummary.from(
+                blocks: completion.blocks,
+                segments: completion.segments,
+                attentionMarker: attentionMarker
+            )
+        } else {
+            completion.summary
+        }
         let result = try practiceService.saveSession(
             sessionId: pendingMatchesCompletion ? pending!.id : UUID(),
             routineId: completion.routineId,
@@ -1107,6 +1140,8 @@ public final class JournalViewModel: ObservableObject {
             startedAt: completion.startedAt,
             endedAt: completion.endedAt,
             activeDurationSeconds: completion.activeDurationSeconds,
+            segments: completion.segments,
+            summary: summary,
             note: note
         )
         refresh()
@@ -1114,6 +1149,24 @@ public final class JournalViewModel: ObservableObject {
             throw PracticeTimerRuntimeError.pendingCompletionCouldNotClear
         }
         return result
+    }
+
+    /// Finishes and persists a guided practice session in one user action.
+    /// Optional reflection is applied after the session payload is prepared;
+    /// repository failures leave the pending completion recoverable.
+    @discardableResult
+    public func finishAndSavePractice(
+        linkedProjectId: UUID? = nil,
+        note: String? = nil,
+        attentionMarker: String? = nil
+    ) throws -> PracticeSessionSaveResult? {
+        guard let completion = practiceTimer.finish() else { return nil }
+        return try savePracticeCompletion(
+            completion,
+            linkedProjectId: linkedProjectId,
+            note: note,
+            attentionMarker: attentionMarker
+        )
     }
 
     public func discardPractice() {

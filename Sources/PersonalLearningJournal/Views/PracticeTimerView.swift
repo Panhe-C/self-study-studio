@@ -80,6 +80,7 @@ public struct PracticeTimerView: View {
         ScrollView {
             VStack(spacing: 28) {
                 timerSummary
+                blockNavigator
                 timerControls
             }
             .frame(maxWidth: .infinity)
@@ -160,6 +161,18 @@ public struct PracticeTimerView: View {
             .tint(StudioTheme.practiceColor(routine.color))
             .accessibilityLabel("Finish practice")
 
+            Button {
+                if !timer.skipCurrentBlock() {
+                    timerError = "Choose another practice block before continuing."
+                }
+            } label: {
+                Image(systemName: "forward.end.fill")
+                    .frame(width: StudioTheme.practiceControlSize, height: StudioTheme.practiceControlSize)
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Skip current practice block")
+
             Button(role: .destructive, action: requestDiscard) {
                 Image(systemName: "trash")
                     .frame(width: StudioTheme.practiceControlSize, height: StudioTheme.practiceControlSize)
@@ -169,6 +182,55 @@ public struct PracticeTimerView: View {
             .accessibilityLabel("Discard practice")
         }
         .frame(height: StudioTheme.practiceControlSize + 18)
+    }
+
+    private var blockNavigator: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let current = timer.snapshot.currentBlock {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Current block")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(current.name)
+                        .font(.headline)
+                    if let focus = current.focus, !focus.isEmpty {
+                        Label(focus, systemImage: "scope")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("\(StudioDurationFormat.compact(seconds: current.activeDurationSeconds)) / \(current.targetMinutes) min soft target")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            ForEach(timer.snapshot.blocks) { block in
+                Button {
+                    guard timer.selectBlock(block.id) else {
+                        timerError = "That practice block is no longer available."
+                        return
+                    }
+                } label: {
+                    HStack {
+                        Text(block.name)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(StudioDurationFormat.compact(seconds: block.activeDurationSeconds))
+                            .font(.caption.monospacedDigit())
+                        if block.id == timer.snapshot.activeBlockID {
+                            Image(systemName: "checkmark.circle.fill")
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+                .buttonStyle(.bordered)
+                .tint(block.id == timer.snapshot.activeBlockID ? StudioTheme.accent : nil)
+                .accessibilityLabel(
+                    "\(block.name), \(StudioDurationFormat.compact(seconds: block.activeDurationSeconds)), \(block.id == timer.snapshot.activeBlockID ? "current" : "select")"
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var elapsedTextStyle: Font.TextStyle {
@@ -292,9 +354,19 @@ public struct PracticeTimerView: View {
 
     private func finishPractice() {
         refreshTimer()
-        guard timer.finish() != nil else {
+        guard let completion = timer.finish() else {
             timerError = "The timer could not finish. Your active practice is still available to retry."
             return
+        }
+        do {
+            _ = try viewModel.savePracticeCompletion(
+                completion,
+                linkedProjectId: routine.projectId,
+                note: nil
+            )
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
         }
     }
 

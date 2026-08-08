@@ -69,6 +69,33 @@ public struct PersonalLearningJournalApp: App {
                     } message: {
                         Text(session.migrationError ?? "")
                     }
+                } else if let pendingPracticeMigration = session.pendingPracticeBlocksMigration {
+                    NavigationStack {
+                        PracticeBlocksMigrationReviewView(
+                            snapshot: session.viewModel.snapshot,
+                            dryRun: pendingPracticeMigration,
+                            onContinue: { resolutions in
+                                session.continuePracticeBlocksMigration(with: resolutions)
+                            },
+                            onResolution: { projectID, resolution in
+                                session.resolvePracticeBlocks(
+                                    projectID: projectID,
+                                    resolution: resolution
+                                )
+                            }
+                        )
+                    }
+                    .alert(
+                        "Practice blocks migration could not continue",
+                        isPresented: Binding(
+                            get: { session.migrationError != nil },
+                            set: { if !$0 { session.clearMigrationError() } }
+                        )
+                    ) {
+                        Button("OK") { session.clearMigrationError() }
+                    } message: {
+                        Text(session.migrationError ?? "")
+                    }
                 } else if session.migrationGateBlocked {
                     NavigationStack {
                         VStack(spacing: 16) {

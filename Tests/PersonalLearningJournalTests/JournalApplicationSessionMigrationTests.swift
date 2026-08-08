@@ -65,6 +65,78 @@ final class JournalApplicationSessionMigrationTests: XCTestCase {
         XCTAssertNotNil(session.migrationError)
     }
 
+    func testPracticeBlocksMigrationGateRequiresExplicitSurvivorAndWritesBackup() throws {
+        let project = Project(name: "Guitar", area: "Music", goal: "Play", currentNextStep: "Practice")
+        let first = PracticeRoutine(
+            projectId: project.id,
+            name: "Technique",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 20,
+            weekdays: [2]
+        )
+        let second = PracticeRoutine(
+            projectId: project.id,
+            name: "Repertoire",
+            symbolName: "music.note",
+            color: .teal,
+            targetMinutes: 30,
+            weekdays: [4]
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(
+                projects: [project],
+                practiceRoutines: [first, second]
+            )
+        )
+        try repository.commit(
+            JournalTransaction(
+                origin: .migration,
+                completedMigrationIdentifiers: [
+                    ProductConvergenceMigration.identifier,
+                    ProductConvergenceMigration.statusMigrationIdentifier,
+                    PlanRevisionMigration.identifier
+                ]
+            )
+        )
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let session = JournalApplicationSession(
+            documentsDirectory: root,
+            accountProvider: LocalOnlyAccountProvider(),
+            repositoryOverride: repository
+        )
+
+        XCTAssertEqual(
+            session.pendingPracticeBlocksMigration?.issues,
+            [.multipleActiveRoutines(project.id, [first.id, second.id].sorted { $0.uuidString < $1.uuidString })]
+        )
+        XCTAssertTrue(session.isMigrationBlockingSync)
+
+        session.continuePracticeBlocksMigration(
+            with: [.merge(survivorID: first.id)]
+        )
+
+        XCTAssertNil(session.migrationError)
+        XCTAssertNil(session.pendingPracticeBlocksMigration)
+        XCTAssertFalse(session.isMigrationBlockingSync)
+        XCTAssertTrue(try repository.hasCompletedMigration(identifier: PracticeBlocksMigration.identifier))
+        let migrated = try repository.snapshot()
+        let active = migrated.practiceRoutines.filter { !$0.isArchived && $0.deletedAt == nil }
+        XCTAssertEqual(active.count, 1)
+        XCTAssertEqual(active.first?.id, first.id)
+        XCTAssertEqual(active.first?.orderedBlocks.count, 2)
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: root
+                    .appendingPathComponent("LearningJournal/Migrations/B3/practice-blocks-v1-backup.json")
+                    .path
+            )
+        )
+    }
+
 }
 
 private actor LocalOnlyAccountProvider: CloudAccountProviding {

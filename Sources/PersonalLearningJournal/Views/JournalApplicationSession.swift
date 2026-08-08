@@ -7,6 +7,7 @@ public final class JournalApplicationSession: ObservableObject {
     @Published public private(set) var calendarViewModel: CalendarViewModel
     @Published public private(set) var pendingMigration: MigrationDryRun?
     @Published public private(set) var pendingPlanRevisionMigration: PlanRevisionMigrationDryRun?
+    @Published public private(set) var pendingPracticeBlocksMigration: PracticeBlocksMigrationDryRun?
     @Published public private(set) var migrationError: String?
     @Published public private(set) var migrationGateBlocked = false
 
@@ -19,6 +20,7 @@ public final class JournalApplicationSession: ObservableObject {
     private var migrationResolutions: [UUID: ProjectStatusMigrationResolution] = [:]
     private var proofMigrationResolutions: [UUID: ProofMigrationResolution] = [:]
     private var practiceMigrationResolutions: [UUID: PracticeMigrationResolution] = [:]
+    private var practiceBlocksMigrationResolutions: [UUID: PracticeBlocksMigrationResolution] = [:]
 
     public init(
         documentsDirectory: URL,
@@ -42,6 +44,7 @@ public final class JournalApplicationSession: ObservableObject {
         self.migrationRepository = repository
         self.pendingMigration = nil
         self.pendingPlanRevisionMigration = nil
+        self.pendingPracticeBlocksMigration = nil
         self.migrationError = nil
         self.migrationGateBlocked = false
         self.calendarViewModel = CalendarViewModel(
@@ -73,7 +76,8 @@ public final class JournalApplicationSession: ObservableObject {
         if case .cloud = accountCoordinator.state.mode,
            !migrationGateBlocked,
            pendingMigration == nil,
-           pendingPlanRevisionMigration == nil {
+           pendingPlanRevisionMigration == nil,
+           pendingPracticeBlocksMigration == nil {
             await viewModel.refreshSyncSummary()
             try? await viewModel.syncNow()
         } else if !migrationGateBlocked {
@@ -102,12 +106,22 @@ public final class JournalApplicationSession: ObservableObject {
         practiceMigrationResolutions[routineID] = resolution
     }
 
+    public func resolvePracticeBlocks(
+        projectID: UUID,
+        resolution: PracticeBlocksMigrationResolution
+    ) {
+        practiceBlocksMigrationResolutions[projectID] = resolution
+    }
+
     public func retryMigrationGate() {
         prepareMigrationGate(for: migrationRepository)
     }
 
     public var isMigrationBlockingSync: Bool {
-        migrationGateBlocked || pendingMigration != nil || pendingPlanRevisionMigration != nil
+        migrationGateBlocked
+            || pendingMigration != nil
+            || pendingPlanRevisionMigration != nil
+            || pendingPracticeBlocksMigration != nil
     }
 
     public func clearMigrationError() {
@@ -141,8 +155,10 @@ public final class JournalApplicationSession: ObservableObject {
             migrationResolutions = [:]
             proofMigrationResolutions = [:]
             practiceMigrationResolutions = [:]
+            practiceBlocksMigrationResolutions = [:]
             pendingMigration = nil
             pendingPlanRevisionMigration = nil
+            pendingPracticeBlocksMigration = nil
             rebuildViewModels(using: migrationRepository)
             // B2 has no user-choice prompts: once B1 is complete, map legacy
             // CoursePlan revisions to stable Learning Plan identities with a
@@ -171,6 +187,7 @@ public final class JournalApplicationSession: ObservableObject {
                     if !planDryRun.issues.isEmpty {
                         pendingPlanRevisionMigration = planDryRun
                         pendingMigration = nil
+                        pendingPracticeBlocksMigration = nil
                         migrationGateBlocked = false
                         migrationError = nil
                         return
@@ -185,8 +202,32 @@ public final class JournalApplicationSession: ObservableObject {
                         backupDirectory: backupDirectory
                     )
                 }
+
+                if try !repository.hasCompletedMigration(identifier: PracticeBlocksMigration.identifier) {
+                    let snapshot = try repository.snapshot()
+                    let practiceMigration = PracticeBlocksMigration()
+                    let practiceDryRun = practiceMigration.dryRun(snapshot: snapshot)
+                    if !practiceDryRun.issues.isEmpty {
+                        pendingPracticeBlocksMigration = practiceDryRun
+                        pendingMigration = nil
+                        pendingPlanRevisionMigration = nil
+                        migrationGateBlocked = false
+                        migrationError = nil
+                        return
+                    }
+                    let backupDirectory = documentsDirectory
+                        .appendingPathComponent("LearningJournal", isDirectory: true)
+                        .appendingPathComponent("Migrations", isDirectory: true)
+                        .appendingPathComponent("B3", isDirectory: true)
+                    _ = try practiceMigration.execute(
+                        snapshot: snapshot,
+                        repository: repository,
+                        backupDirectory: backupDirectory
+                    )
+                }
                 pendingMigration = nil
                 pendingPlanRevisionMigration = nil
+                pendingPracticeBlocksMigration = nil
                 migrationGateBlocked = false
                 migrationError = nil
                 return
@@ -196,6 +237,7 @@ public final class JournalApplicationSession: ObservableObject {
             migrationError = "Could not inspect migration state: \(error.localizedDescription)"
             pendingMigration = nil
             pendingPlanRevisionMigration = nil
+            pendingPracticeBlocksMigration = nil
             return
         }
 
@@ -207,6 +249,7 @@ public final class JournalApplicationSession: ObservableObject {
             migrationError = "Could not inspect journal data: \(error.localizedDescription)"
             pendingMigration = nil
             pendingPlanRevisionMigration = nil
+            pendingPracticeBlocksMigration = nil
             return
         }
         let dryRun = ProductConvergenceMigration().dryRun(snapshot: snapshot)
@@ -215,6 +258,7 @@ public final class JournalApplicationSession: ObservableObject {
         }
         pendingMigration = dryRun.issues.isEmpty && !hasLegacyStatus ? nil : dryRun
         pendingPlanRevisionMigration = nil
+        pendingPracticeBlocksMigration = nil
         migrationGateBlocked = false
         if pendingMigration == nil { migrationError = nil }
     }
@@ -234,9 +278,44 @@ public final class JournalApplicationSession: ObservableObject {
                 activePlanSurvivors: survivors
             )
             pendingPlanRevisionMigration = nil
+            pendingPracticeBlocksMigration = nil
             migrationError = nil
             migrationGateBlocked = false
             rebuildViewModels(using: migrationRepository)
+            prepareMigrationGate(for: migrationRepository)
+        } catch {
+            migrationError = error.localizedDescription
+        }
+    }
+
+    public func continuePracticeBlocksMigration(
+        with resolutions: [PracticeBlocksMigrationResolution]
+    ) {
+        guard pendingPracticeBlocksMigration != nil else { return }
+        do {
+            let snapshot = try migrationRepository.snapshot()
+            let backupDirectory = documentsDirectory
+                .appendingPathComponent("LearningJournal", isDirectory: true)
+                .appendingPathComponent("Migrations", isDirectory: true)
+                .appendingPathComponent("B3", isDirectory: true)
+            _ = try PracticeBlocksMigration().execute(
+                snapshot: snapshot,
+                repository: migrationRepository,
+                backupDirectory: backupDirectory,
+                resolutions: resolutions
+            )
+            pendingPracticeBlocksMigration = nil
+            practiceBlocksMigrationResolutions = [:]
+            migrationError = nil
+            migrationGateBlocked = false
+            rebuildViewModels(using: migrationRepository)
+            prepareMigrationGate(for: migrationRepository)
+            if case .cloud = accountCoordinator.state.mode {
+                Task { [weak self] in
+                    guard let self, !self.isMigrationBlockingSync else { return }
+                    try? await self.viewModel.syncNow()
+                }
+            }
         } catch {
             migrationError = error.localizedDescription
         }

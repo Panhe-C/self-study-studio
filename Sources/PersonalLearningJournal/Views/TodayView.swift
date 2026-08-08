@@ -455,6 +455,7 @@ public struct TodayView: View {
             targetMinutes: syncedRoutine?.targetMinutes
                 ?? max(1, pending.completion.activeDurationSeconds / 60),
             weekdays: syncedRoutine?.weekdays ?? Set(1...7),
+            blocks: syncedRoutine?.orderedBlocks ?? pending.completion.blocks,
             reminderTime: syncedRoutine?.reminderTime,
             isArchived: syncedRoutine?.isArchived ?? true,
             createdAt: syncedRoutine?.createdAt ?? pending.completion.startedAt,

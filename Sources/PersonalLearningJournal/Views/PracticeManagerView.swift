@@ -10,6 +10,7 @@ struct PracticeRoutineDraft: Equatable {
     var color: PracticeSemanticColor
     var targetMinutes: Int
     var weekdays: Set<Int>
+    var blocks: [PracticeBlock]
 
     init(routine: PracticeRoutine? = nil) {
         routineId = routine?.id
@@ -21,6 +22,17 @@ struct PracticeRoutineDraft: Equatable {
         color = routine?.color ?? .coral
         targetMinutes = routine?.targetMinutes ?? 30
         weekdays = routine?.weekdays ?? Set(1...7)
+        if let orderedBlocks = routine?.orderedBlocks, !orderedBlocks.isEmpty {
+            blocks = orderedBlocks
+        } else {
+            blocks = [
+                PracticeBlock(
+                    name: routine?.name ?? "Practice Block",
+                    targetMinutes: routine?.targetMinutes ?? 30,
+                    ordinal: 0
+                )
+            ]
+        }
     }
 
     var trimmedName: String {
@@ -37,7 +49,13 @@ struct PracticeRoutineDraft: Equatable {
               projectId != nil,
               (1...1_440).contains(targetMinutes),
               !weekdays.isEmpty,
-              weekdays.allSatisfy({ (1...7).contains($0) }) else {
+              weekdays.allSatisfy({ (1...7).contains($0) }),
+              !blocks.isEmpty,
+              Set(blocks.map(\.id)).count == blocks.count,
+              blocks.allSatisfy({
+                  !$0.name.trimmedForJournal.isEmpty
+                      && (1...1_440).contains($0.targetMinutes)
+              }) else {
             return false
         }
         return !hasDuplicateActiveName(comparedWith: routines)
@@ -360,6 +378,12 @@ private struct PracticeRoutineEditorView: View {
                 }
                 .disabled(isActiveRoutine)
 
+                practiceBlocksSection
+
+                if let routineId = draft.routineId {
+                    sessionHistorySection(for: routineId)
+                }
+
                 Section("Color") {
                     LazyVGrid(
                         columns: [GridItem(.adaptive(minimum: 44, maximum: 44), spacing: 8)],
@@ -476,6 +500,127 @@ private struct PracticeRoutineEditorView: View {
         return nil
     }
 
+    @ViewBuilder
+    private var practiceBlocksSection: some View {
+        Section("Practice Blocks") {
+            ForEach($draft.blocks) { $block in
+                practiceBlockRow($block)
+            }
+            .onMove { source, destination in
+                draft.blocks.move(fromOffsets: source, toOffset: destination)
+                normalizeBlockOrdinals()
+            }
+
+            Button {
+                let nextOrdinal = draft.blocks.count
+                draft.blocks.append(
+                    PracticeBlock(
+                        name: "Practice Block \(nextOrdinal + 1)",
+                        targetMinutes: max(1, draft.targetMinutes / max(1, nextOrdinal + 1)),
+                        ordinal: nextOrdinal
+                    )
+                )
+            } label: {
+                Label("Add Block", systemImage: "plus.circle")
+            }
+            .disabled(isActiveRoutine)
+        }
+        .disabled(isActiveRoutine)
+    }
+
+    private func practiceBlockRow(_ block: Binding<PracticeBlock>) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                TextField("Block name", text: block.name)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.words)
+                    #endif
+                if draft.blocks.count > 1 {
+                    Button(role: .destructive) {
+                        draft.blocks.removeAll { $0.id == block.wrappedValue.id }
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .accessibilityLabel("Remove \(block.wrappedValue.name)")
+                }
+            }
+            Stepper(
+                "Soft target \(block.wrappedValue.targetMinutes) minutes",
+                value: block.targetMinutes,
+                in: 1...1_440
+            )
+            TextField("Current focus (optional)", text: focusBinding(for: block))
+            TextField(
+                "Next focus candidates, comma separated",
+                text: nextFocusBinding(for: block)
+            )
+            .font(.footnote)
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func sessionHistorySection(for routineId: UUID) -> some View {
+        let sessions = viewModel.practiceSessions
+            .filter { $0.routineId == routineId && $0.deletedAt == nil }
+            .sorted { $0.endedAt > $1.endedAt }
+        Section("Session History") {
+            if sessions.isEmpty {
+                Text("No completed sessions")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(sessions.prefix(12)) { session in
+                    sessionHistoryRow(session)
+                }
+            }
+        }
+    }
+
+    private func sessionHistoryRow(_ session: PracticeSession) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(session.endedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text(StudioDurationFormat.compact(seconds: session.activeDurationSeconds))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            if let summary = session.summary {
+                ForEach(summary.blockSummaries, id: \PracticeBlockSummary.blockID) { blockSummary in
+                    let name = draft.blocks.first(where: { $0.id == blockSummary.blockID })?.name
+                        ?? "Practice block"
+                    HStack(spacing: 6) {
+                        Text(name)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(StudioDurationFormat.compact(seconds: blockSummary.activeDurationSeconds))
+                            .font(.caption.monospacedDigit())
+                        if blockSummary.wasSkipped {
+                            Text("Skipped")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        } else if blockSummary.wasExtended {
+                            Text("Extended")
+                                .font(.caption2)
+                                .foregroundStyle(StudioTheme.notice)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(
+                        "\(name), \(StudioDurationFormat.compact(seconds: blockSummary.activeDurationSeconds)), \(blockSummary.visitCount) visits\(blockSummary.wasSkipped ? ", skipped" : blockSummary.wasExtended ? ", extended" : "")"
+                    )
+                }
+                if let marker = summary.attentionMarker, !marker.isEmpty {
+                    Label(marker, systemImage: "scope")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
     private var isActiveRoutine: Bool {
         guard let activeRoutineId = practiceTimer.snapshot.activeRoutineId else { return false }
         return draft.routineId == activeRoutineId
@@ -552,7 +697,8 @@ private struct PracticeRoutineEditorView: View {
                     symbolName: draft.symbolName,
                     color: draft.color,
                     targetMinutes: draft.targetMinutes,
-                    weekdays: draft.weekdays
+                    weekdays: draft.weekdays,
+                    blocks: draft.normalizedBlocks()
                 )
             } else {
                 guard let projectId = draft.projectId else { return }
@@ -562,7 +708,8 @@ private struct PracticeRoutineEditorView: View {
                     symbolName: draft.symbolName,
                     color: draft.color,
                     targetMinutes: draft.targetMinutes,
-                    weekdays: draft.weekdays
+                    weekdays: draft.weekdays,
+                    blocks: draft.normalizedBlocks()
                 )
             }
             dismiss()
@@ -598,10 +745,57 @@ private struct PracticeRoutineEditorView: View {
         default: "Language"
         }
     }
+
+    private func focusBinding(for block: Binding<PracticeBlock>) -> Binding<String> {
+        Binding(
+            get: { block.wrappedValue.focus ?? "" },
+            set: { block.wrappedValue.focus = $0.nilIfEmpty }
+        )
+    }
+
+    private func nextFocusBinding(for block: Binding<PracticeBlock>) -> Binding<String> {
+        Binding(
+            get: { block.wrappedValue.nextFocusCandidates.joined(separator: ", ") },
+            set: {
+                block.wrappedValue.nextFocusCandidates = $0
+                    .split(separator: ",")
+                    .map { String($0).trimmedForJournal }
+                    .filter { !$0.isEmpty }
+            }
+        )
+    }
+
+    private func normalizeBlockOrdinals() {
+        for index in draft.blocks.indices {
+            draft.blocks[index].ordinal = index
+        }
+    }
 }
 
 private struct PracticeWeekdayOption {
     let value: Int
     let shortName: String
     let fullName: String
+}
+
+private extension PracticeRoutineDraft {
+    func normalizedBlocks() -> [PracticeBlock] {
+        blocks.enumerated().map { index, block in
+            var normalized = block
+            normalized.ordinal = index
+            normalized.name = block.name.trimmedForJournal
+            normalized.focus = block.focus?.trimmedForJournal.nilIfEmpty
+            normalized.nextFocusCandidates = block.nextFocusCandidates
+                .map { $0.trimmedForJournal }
+                .filter { !$0.isEmpty }
+            return normalized
+        }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        let value = trimmedForJournal
+        return value.isEmpty ? nil : value
+    }
 }
