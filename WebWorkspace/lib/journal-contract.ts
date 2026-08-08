@@ -150,6 +150,14 @@ export function decodeJournalRecord(
     normalized.planSeriesID ??= normalized.id;
     normalized.revisionID ??= normalized.id;
   }
+  if ((kind === "planPhase" || kind === "plannedSession") && typeof normalized.planId === "string") {
+    // Legacy child records predate explicit revision identity and structural
+    // locks. Match the iPhone decoder's safe fallback so both surfaces
+    // normalize the same payload before merge or presentation.
+    normalized.planRevisionID ??= normalized.planId;
+    normalized.planSeriesID ??= normalized.planId;
+    normalized.isStructuralLocked ??= false;
+  }
   validateCrossFieldRules(normalized, kind, contract);
   return { kind, payload: normalized };
 }

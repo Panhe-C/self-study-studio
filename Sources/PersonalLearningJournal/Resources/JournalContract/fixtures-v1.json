@@ -462,6 +462,9 @@
       "expectedNormalized": {
         "id": "00000000-0000-0000-0000-000000000011",
         "planId": "00000000-0000-0000-0000-000000000010",
+        "planRevisionID": "00000000-0000-0000-0000-000000000010",
+        "planSeriesID": "00000000-0000-0000-0000-000000000010",
+        "isStructuralLocked": false,
         "title": "Tokenizer",
         "objective": "Build and explain BPE",
         "expectedProof": "Passing round-trip fixtures",
@@ -492,6 +495,9 @@
       "expectedNormalized": {
         "id": "00000000-0000-0000-0000-000000000012",
         "planId": "00000000-0000-0000-0000-000000000010",
+        "planRevisionID": "00000000-0000-0000-0000-000000000010",
+        "planSeriesID": "00000000-0000-0000-0000-000000000010",
+        "isStructuralLocked": false,
         "phaseId": "00000000-0000-0000-0000-000000000011",
         "projectId": "00000000-0000-0000-0000-000000000001",
         "title": "Implement BPE merge loop",

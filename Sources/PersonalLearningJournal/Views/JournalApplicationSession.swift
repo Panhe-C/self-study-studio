@@ -6,6 +6,7 @@ public final class JournalApplicationSession: ObservableObject {
     @Published public private(set) var viewModel: JournalViewModel
     @Published public private(set) var calendarViewModel: CalendarViewModel
     @Published public private(set) var pendingMigration: MigrationDryRun?
+    @Published public private(set) var pendingPlanRevisionMigration: PlanRevisionMigrationDryRun?
     @Published public private(set) var migrationError: String?
     @Published public private(set) var migrationGateBlocked = false
 
@@ -40,6 +41,7 @@ public final class JournalApplicationSession: ObservableObject {
         let repository = repositoryOverride ?? accountCoordinator.activeRepository ?? InMemoryJournalRepository()
         self.migrationRepository = repository
         self.pendingMigration = nil
+        self.pendingPlanRevisionMigration = nil
         self.migrationError = nil
         self.migrationGateBlocked = false
         self.calendarViewModel = CalendarViewModel(
@@ -70,7 +72,8 @@ public final class JournalApplicationSession: ObservableObject {
         prepareMigrationGate(for: repository)
         if case .cloud = accountCoordinator.state.mode,
            !migrationGateBlocked,
-           pendingMigration == nil {
+           pendingMigration == nil,
+           pendingPlanRevisionMigration == nil {
             await viewModel.refreshSyncSummary()
             try? await viewModel.syncNow()
         } else if !migrationGateBlocked {
@@ -104,7 +107,7 @@ public final class JournalApplicationSession: ObservableObject {
     }
 
     public var isMigrationBlockingSync: Bool {
-        migrationGateBlocked || pendingMigration != nil
+        migrationGateBlocked || pendingMigration != nil || pendingPlanRevisionMigration != nil
     }
 
     public func clearMigrationError() {
@@ -139,6 +142,7 @@ public final class JournalApplicationSession: ObservableObject {
             proofMigrationResolutions = [:]
             practiceMigrationResolutions = [:]
             pendingMigration = nil
+            pendingPlanRevisionMigration = nil
             rebuildViewModels(using: migrationRepository)
             // B2 has no user-choice prompts: once B1 is complete, map legacy
             // CoursePlan revisions to stable Learning Plan identities with a
@@ -162,17 +166,27 @@ public final class JournalApplicationSession: ObservableObject {
             ) {
                 if try !repository.hasCompletedMigration(identifier: PlanRevisionMigration.identifier) {
                     let snapshot = try repository.snapshot()
+                    let planMigration = PlanRevisionMigration()
+                    let planDryRun = planMigration.dryRun(snapshot: snapshot)
+                    if !planDryRun.issues.isEmpty {
+                        pendingPlanRevisionMigration = planDryRun
+                        pendingMigration = nil
+                        migrationGateBlocked = false
+                        migrationError = nil
+                        return
+                    }
                     let backupDirectory = documentsDirectory
                         .appendingPathComponent("LearningJournal", isDirectory: true)
                         .appendingPathComponent("Migrations", isDirectory: true)
                         .appendingPathComponent("B2", isDirectory: true)
-                    _ = try PlanRevisionMigration().execute(
+                    _ = try planMigration.execute(
                         snapshot: snapshot,
                         repository: repository,
                         backupDirectory: backupDirectory
                     )
                 }
                 pendingMigration = nil
+                pendingPlanRevisionMigration = nil
                 migrationGateBlocked = false
                 migrationError = nil
                 return
@@ -181,6 +195,7 @@ public final class JournalApplicationSession: ObservableObject {
             migrationGateBlocked = true
             migrationError = "Could not inspect migration state: \(error.localizedDescription)"
             pendingMigration = nil
+            pendingPlanRevisionMigration = nil
             return
         }
 
@@ -191,6 +206,7 @@ public final class JournalApplicationSession: ObservableObject {
             migrationGateBlocked = true
             migrationError = "Could not inspect journal data: \(error.localizedDescription)"
             pendingMigration = nil
+            pendingPlanRevisionMigration = nil
             return
         }
         let dryRun = ProductConvergenceMigration().dryRun(snapshot: snapshot)
@@ -198,8 +214,32 @@ public final class JournalApplicationSession: ObservableObject {
             $0.status.isLegacy || $0.isTrashed
         }
         pendingMigration = dryRun.issues.isEmpty && !hasLegacyStatus ? nil : dryRun
+        pendingPlanRevisionMigration = nil
         migrationGateBlocked = false
         if pendingMigration == nil { migrationError = nil }
+    }
+
+    public func continuePlanRevisionMigration(with survivors: [UUID: UUID]) {
+        guard pendingPlanRevisionMigration != nil else { return }
+        do {
+            let snapshot = try migrationRepository.snapshot()
+            let backupDirectory = documentsDirectory
+                .appendingPathComponent("LearningJournal", isDirectory: true)
+                .appendingPathComponent("Migrations", isDirectory: true)
+                .appendingPathComponent("B2", isDirectory: true)
+            _ = try PlanRevisionMigration().execute(
+                snapshot: snapshot,
+                repository: migrationRepository,
+                backupDirectory: backupDirectory,
+                activePlanSurvivors: survivors
+            )
+            pendingPlanRevisionMigration = nil
+            migrationError = nil
+            migrationGateBlocked = false
+            rebuildViewModels(using: migrationRepository)
+        } catch {
+            migrationError = error.localizedDescription
+        }
     }
 
     private func rebuildViewModels(using repository: any JournalRepository) {

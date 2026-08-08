@@ -11,7 +11,7 @@ final class LearningPlanRevisionMigrationTests: XCTestCase {
             id: firstID,
             projectID: projectID,
             revision: 1,
-            status: .active,
+            status: .archived,
             date: timestamp
         )
         let second = try plan(

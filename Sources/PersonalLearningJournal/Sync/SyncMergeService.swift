@@ -44,29 +44,54 @@ public struct SyncMergeService {
         case let (.trailEvent(base), .trailEvent(local), .trailEvent(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.trailEvent, now: now)
         case let (.coursePlan(base), .coursePlan(local), .coursePlan(server)):
-            // A revision is immutable. If any identity edge changed on the
-            // same record, surface a conflict instead of combining fields into
-            // an in-place structural overwrite.
-            if base.revisionID != local.revisionID || base.revisionID != server.revisionID
-                || base.planSeriesID != local.planSeriesID || base.planSeriesID != server.planSeriesID
-                || base.baseRevisionID != local.baseRevisionID || base.baseRevisionID != server.baseRevisionID
-                || base.supersedesID != local.supersedesID || base.supersedesID != server.supersedesID {
-                return .conflict(
-                    SyncConflict(
-                        entity: JournalEntity.coursePlan(base).reference,
-                        basePayload: try JSONEncoder.journal.encode(JournalEntity.coursePlan(base)),
-                        localPayload: try JSONEncoder.journal.encode(JournalEntity.coursePlan(local)),
-                        serverPayload: try JSONEncoder.journal.encode(JournalEntity.coursePlan(server)),
-                        proposedPayload: try JSONEncoder.journal.encode(JournalEntity.coursePlan(base)),
-                        conflictingFields: ["revisionID", "planSeriesID", "baseRevisionID", "supersedesID"],
-                        createdAt: now
-                    )
-                )
+            let structuralFields = [
+                "revisionID", "planSeriesID", "baseRevisionID", "supersedesID",
+                "projectId", "revision", "courseURL", "courseTitle", "courseOutline",
+                "goal", "expectedOutcome", "startsOn", "deadline", "weeklyBudgetMinutes", "summary"
+            ]
+            if base.isPublished || local.isPublished || server.isPublished,
+               let conflict = try immutableConflict(
+                   base: base,
+                   local: local,
+                   server: server,
+                   structuralFields: structuralFields,
+                   wrap: JournalEntity.coursePlan,
+                   now: now
+               ) {
+                return .conflict(conflict)
             }
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.coursePlan, now: now)
         case let (.planPhase(base), .planPhase(local), .planPhase(server)):
+            if base.isStructuralLocked || local.isStructuralLocked || server.isStructuralLocked,
+               let conflict = try immutableConflict(
+                   base: base,
+                   local: local,
+                   server: server,
+                   structuralFields: [
+                       "planId", "planRevisionID", "planSeriesID", "title", "objective",
+                       "expectedProof", "ordinal", "targetStart", "targetEnd"
+                   ],
+                   wrap: JournalEntity.planPhase,
+                   now: now
+               ) {
+                return .conflict(conflict)
+            }
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.planPhase, now: now)
         case let (.plannedSession(base), .plannedSession(local), .plannedSession(server)):
+            if base.isStructuralLocked || local.isStructuralLocked || server.isStructuralLocked,
+               let conflict = try immutableConflict(
+                   base: base,
+                   local: local,
+                   server: server,
+                   structuralFields: [
+                       "planId", "planRevisionID", "planSeriesID", "phaseId", "projectId",
+                       "title", "actionType", "expectedProof", "durationMinutes", "deadline"
+                   ],
+                   wrap: JournalEntity.plannedSession,
+                   now: now
+               ) {
+                return .conflict(conflict)
+            }
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.plannedSession, now: now)
         case let (.availabilityRule(base), .availabilityRule(local), .availabilityRule(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.availabilityRule, now: now)
@@ -142,6 +167,38 @@ public struct SyncMergeService {
             throw SyncMergeError.invalidEntityPayload
         }
         return fields
+    }
+
+    private func immutableConflict<Value: Codable & Equatable>(
+        base: Value,
+        local: Value,
+        server: Value,
+        structuralFields: [String],
+        wrap: (Value) -> JournalEntity,
+        now: Date
+    ) throws -> SyncConflict? {
+        let baseFields = try fields(for: base)
+        let localFields = try fields(for: local)
+        let serverFields = try fields(for: server)
+        let changed = structuralFields.filter { key in
+            let baseValue = baseFields[key] ?? NSNull()
+            let localChanged = !valuesEqual(localFields[key] ?? NSNull(), baseValue)
+            let serverChanged = !valuesEqual(serverFields[key] ?? NSNull(), baseValue)
+            return localChanged || serverChanged
+        }.sorted()
+        guard !changed.isEmpty else { return nil }
+        let baseEntity = wrap(base)
+        let localEntity = wrap(local)
+        let serverEntity = wrap(server)
+        return SyncConflict(
+            entity: baseEntity.reference,
+            basePayload: try JSONEncoder.journal.encode(baseEntity),
+            localPayload: try JSONEncoder.journal.encode(localEntity),
+            serverPayload: try JSONEncoder.journal.encode(serverEntity),
+            proposedPayload: try JSONEncoder.journal.encode(baseEntity),
+            conflictingFields: changed,
+            createdAt: now
+        )
     }
 
     private func valuesEqual(_ left: Any, _ right: Any) -> Bool {

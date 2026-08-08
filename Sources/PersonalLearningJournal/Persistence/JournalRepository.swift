@@ -183,14 +183,26 @@ public final class InMemoryJournalRepository: JournalRepository {
                     entityOrder.append(reference)
                 }
                 entities[reference] = entity
-                enqueueIfNeeded(reference, operation: .save, origin: transaction.origin)
+                enqueueIfNeeded(
+                    reference,
+                    operation: .save,
+                    origin: transaction.origin,
+                    transactionID: transaction.transactionID,
+                    revisionExpectation: transaction.revisionExpectations[reference]
+                )
             }
 
             for reference in transaction.deletions {
                 if let entity = entities[reference] {
                     entities[reference] = entity.deleting(at: now())
                 }
-                enqueueIfNeeded(reference, operation: .delete, origin: transaction.origin)
+                enqueueIfNeeded(
+                    reference,
+                    operation: .delete,
+                    origin: transaction.origin,
+                    transactionID: transaction.transactionID,
+                    revisionExpectation: transaction.revisionExpectations[reference]
+                )
             }
             if let metadata = transaction.stateMetadata {
                 stateMetadata = metadata
@@ -235,7 +247,13 @@ public final class InMemoryJournalRepository: JournalRepository {
                 entityOrder.append(reference)
             }
             entities[reference] = entity
-            enqueueIfNeeded(reference, operation: .save, origin: .user)
+            enqueueIfNeeded(
+                reference,
+                operation: .save,
+                origin: .user,
+                transactionID: UUID(),
+                revisionExpectation: nil
+            )
         }
     }
 
@@ -316,13 +334,17 @@ public final class InMemoryJournalRepository: JournalRepository {
     private func enqueueIfNeeded(
         _ entity: JournalEntityReference,
         operation: SyncOperation,
-        origin: MutationOrigin
+        origin: MutationOrigin,
+        transactionID: UUID,
+        revisionExpectation: RevisionGuardExpectation?
     ) {
         guard case .user = origin else { return }
         outbox.append(
             PendingMutation(
+                transactionID: transactionID,
                 entity: entity,
                 operation: operation,
+                revisionExpectation: revisionExpectation,
                 enqueuedAt: now()
             )
         )

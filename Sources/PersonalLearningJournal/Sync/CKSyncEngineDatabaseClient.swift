@@ -55,7 +55,7 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
 
     public func send(
         _ mutations: [CloudMutation],
-        revisionExpectations: [JournalEntityReference: String]
+        revisionExpectations: [JournalEntityReference: CloudRevisionExpectation]
     ) async throws -> CloudSendResult {
         guard !mutations.isEmpty else { return CloudSendResult() }
 
@@ -63,23 +63,25 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
         var recordsToSave: [CKRecord] = []
         var recordIDsToDelete: [CKRecord.ID] = []
 
-        for mutation in mutations {
-            switch mutation {
-            case let .save(_, entity):
-                let record = try await recordForSave(
-                    entity,
-                    expectedRecordChangeTag: revisionExpectations[entity.reference]
-                )
-                mutationByRecordID[record.recordID] = mutation
-                recordsToSave.append(record)
-            case let .delete(_, reference):
-                let recordID = CKRecord.ID(recordName: reference.id.uuidString, zoneID: zoneID)
-                mutationByRecordID[recordID] = mutation
-                recordIDsToDelete.append(recordID)
-            }
-        }
-
         do {
+            // Guarded preflight belongs to the same error-store boundary as
+            // modifyRecords: a stale/missing tag becomes a terminal result
+            // for this atomic transaction instead of an untracked throw.
+            for mutation in mutations {
+                switch mutation {
+                case let .save(_, entity):
+                    let record = try await recordForSave(
+                        entity,
+                        expectation: revisionExpectations[entity.reference]
+                    )
+                    mutationByRecordID[record.recordID] = mutation
+                    recordsToSave.append(record)
+                case let .delete(_, reference):
+                    let recordID = CKRecord.ID(recordName: reference.id.uuidString, zoneID: zoneID)
+                    mutationByRecordID[recordID] = mutation
+                    recordIDsToDelete.append(recordID)
+                }
+            }
             let result = try await database.modifyRecords(
                 saving: recordsToSave,
                 deleting: recordIDsToDelete,
@@ -146,28 +148,44 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
 
     private func recordForSave(
         _ entity: JournalEntity,
-        expectedRecordChangeTag: String?
+        expectation: CloudRevisionExpectation?
     ) async throws -> CKRecord {
         let encoded = try mapper.record(for: entity, zoneID: zoneID)
-        let results = try await database.records(for: [encoded.recordID])
-        guard case let .success(existing)? = results[encoded.recordID] else {
-            if let expectedRecordChangeTag {
-                throw CloudRevisionGuardError.stale(
-                    entity: entity.reference,
-                    expectedRecordChangeTag: expectedRecordChangeTag,
-                    actualRecordChangeTag: nil
+        let targetResult = try await database.records(for: [encoded.recordID])[encoded.recordID]
+        if let expectation {
+            if let baseRevisionID = expectation.baseRevisionID,
+               baseRevisionID.uuidString != encoded.recordID.recordName {
+                let baseID = CKRecord.ID(recordName: baseRevisionID.uuidString, zoneID: zoneID)
+                let baseResult = try await database.records(for: [baseID])[baseID]
+                guard case let .success(baseRecord)? = baseResult,
+                      baseRecord.recordChangeTag == expectation.recordChangeTag else {
+                    throw CloudRevisionGuardError.stale(
+                        entity: entity.reference,
+                        expectedRecordChangeTag: expectation.recordChangeTag,
+                        actualRecordChangeTag: (try? actualTag(from: baseResult)) ?? nil
+                    )
+                }
+                let targetExists = if case .success? = targetResult { true } else { false }
+                try validateTarget(
+                    expectation: expectation,
+                    entity: entity,
+                    currentExists: targetExists,
+                    currentTag: (try? actualTag(from: targetResult)) ?? nil
+                )
+            } else {
+                let currentExists = if case .success? = targetResult { true } else { false }
+                let currentTag = try? actualTag(from: targetResult)
+                try validateTarget(
+                    expectation: expectation,
+                    entity: entity,
+                    currentExists: currentExists,
+                    currentTag: currentTag ?? nil
                 )
             }
-            return encoded
         }
 
-        if let expectedRecordChangeTag,
-           existing.recordChangeTag != expectedRecordChangeTag {
-            throw CloudRevisionGuardError.stale(
-                entity: entity.reference,
-                expectedRecordChangeTag: expectedRecordChangeTag,
-                actualRecordChangeTag: existing.recordChangeTag
-            )
+        guard case let .success(existing)? = targetResult else {
+            return encoded
         }
 
         let encodedKeys = Set(encoded.allKeys())
@@ -178,6 +196,39 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
             existing[key] = encoded[key]
         }
         return existing
+    }
+
+    private func validateTarget(
+        expectation: CloudRevisionExpectation,
+        entity: JournalEntity,
+        currentExists: Bool,
+        currentTag: String?
+    ) throws {
+        switch expectation.targetRecordState {
+        case .newRecord where currentExists:
+            throw CloudRevisionGuardError.stale(
+                entity: entity.reference,
+                expectedRecordChangeTag: expectation.recordChangeTag,
+                actualRecordChangeTag: currentTag
+            )
+        case .existingRecord:
+            guard currentExists, currentTag == expectation.recordChangeTag else {
+                throw CloudRevisionGuardError.stale(
+                    entity: entity.reference,
+                    expectedRecordChangeTag: expectation.recordChangeTag,
+                    actualRecordChangeTag: currentTag
+                )
+            }
+        default:
+            break
+        }
+    }
+
+    private func actualTag(
+        from result: Result<CKRecord, Error>?
+    ) throws -> String? {
+        guard case let .success(record)? = result else { return nil }
+        return record.recordChangeTag
     }
 
     private func makeSendResult(

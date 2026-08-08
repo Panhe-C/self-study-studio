@@ -19,26 +19,64 @@ public enum SyncState: String, Codable, Sendable {
 
 public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
+    /// All mutations emitted by one JournalTransaction share this ID, which
+    /// lets CloudKit preserve transaction-level atomicity without coupling
+    /// unrelated outbox entries.
+    public var transactionID: UUID
     public var entity: JournalEntityReference
     public var operation: SyncOperation
+    /// The caller's revision/tag expectation is frozen at enqueue time. It is
+    /// never refreshed from current metadata during a later push.
+    public var revisionExpectation: RevisionGuardExpectation?
     public var enqueuedAt: Date
     public var retryCount: Int
     public var lastError: String?
 
     public init(
         id: UUID = UUID(),
+        transactionID: UUID? = nil,
         entity: JournalEntityReference,
         operation: SyncOperation,
+        revisionExpectation: RevisionGuardExpectation? = nil,
         enqueuedAt: Date = Date(),
         retryCount: Int = 0,
         lastError: String? = nil
     ) {
         self.id = id
+        self.transactionID = transactionID ?? id
         self.entity = entity
         self.operation = operation
+        self.revisionExpectation = revisionExpectation
         self.enqueuedAt = enqueuedAt
         self.retryCount = retryCount
         self.lastError = lastError
+    }
+
+    public var expectedChangeTag: String? {
+        revisionExpectation?.recordChangeTag
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, transactionID, entity, operation, revisionExpectation
+        case enqueuedAt, retryCount, lastError
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let id = try container.decode(UUID.self, forKey: .id)
+        try self.init(
+            id: id,
+            transactionID: container.decodeIfPresent(UUID.self, forKey: .transactionID) ?? id,
+            entity: container.decode(JournalEntityReference.self, forKey: .entity),
+            operation: container.decode(SyncOperation.self, forKey: .operation),
+            revisionExpectation: container.decodeIfPresent(
+                RevisionGuardExpectation.self,
+                forKey: .revisionExpectation
+            ),
+            enqueuedAt: container.decode(Date.self, forKey: .enqueuedAt),
+            retryCount: container.decodeIfPresent(Int.self, forKey: .retryCount) ?? 0,
+            lastError: container.decodeIfPresent(String.self, forKey: .lastError)
+        )
     }
 }
 

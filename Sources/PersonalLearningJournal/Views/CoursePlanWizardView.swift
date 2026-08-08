@@ -10,7 +10,7 @@ struct CoursePlanWizardView: View {
 
         var title: String {
             switch self {
-            case .course: "Course"
+            case .course: "Source"
             case .time: "Time"
             case .draft: "Draft"
             case .confirm: "Confirm"
@@ -42,6 +42,7 @@ struct CoursePlanWizardView: View {
     @State private var activationComplete = false
     @State private var showingScheduleDraft = false
     @State private var isScheduling = false
+    @State private var revisionGuardExpectation: RevisionGuardExpectation?
 
     init(
         viewModel: JournalViewModel,
@@ -87,6 +88,7 @@ struct CoursePlanWizardView: View {
         _deadline = State(initialValue: source.deadline ?? Calendar.current.date(byAdding: .weekOfYear, value: 6, to: source.startsOn) ?? source.startsOn)
         _weeklyBudgetMinutes = State(initialValue: source.weeklyBudgetMinutes)
         _preferredSessionMinutes = State(initialValue: source.preferredSessionMinutes)
+        _revisionGuardExpectation = State(initialValue: nil)
 
         if let revisionSource {
             _draft = State(initialValue: Self.draft(from: revisionSource, viewModel: viewModel))
@@ -145,6 +147,9 @@ struct CoursePlanWizardView: View {
                     hasEditedDraft = true
                 }
             }
+            .task {
+                captureRevisionGuardExpectationIfNeeded()
+            }
             .sheet(isPresented: $showingAISettings) {
                 AIReviewSettingsView()
             }
@@ -161,10 +166,10 @@ struct CoursePlanWizardView: View {
 
     private var courseFields: some View {
         Group {
-            Section("Course") {
-                TextField("Course URL", text: $courseURLText)
-                TextField("Course title", text: $courseTitle)
-                TextField("Outline", text: $courseOutline, axis: .vertical)
+            Section("Learning source") {
+                TextField("Source URL (optional)", text: $courseURLText)
+                TextField("Learning Plan title", text: $courseTitle)
+                TextField("Outline (optional)", text: $courseOutline, axis: .vertical)
                     .lineLimit(4...8)
             }
             Section("Outcome") {
@@ -333,8 +338,24 @@ struct CoursePlanWizardView: View {
             } else {
                 plan = try viewModel.saveManualDraft(input: input, draft: draft)
             }
-            try viewModel.activateCoursePlan(draftPlanID: plan.id)
+            let expectation = try revisionGuardExpectation
+                ?? viewModel.revisionGuardExpectation(for: plan.id)
+            try viewModel.activateCoursePlan(
+                draftPlanID: plan.id,
+                expectation: expectation
+            )
             activationComplete = true
+        } catch {
+            errorMessage = errorText(error)
+        }
+    }
+
+    private func captureRevisionGuardExpectationIfNeeded() {
+        guard revisionGuardExpectation == nil else { return }
+        let sourceID = revisionSource?.id ?? persistedDraftPlan?.id
+        guard let sourceID else { return }
+        do {
+            revisionGuardExpectation = try viewModel.revisionGuardExpectation(for: sourceID)
         } catch {
             errorMessage = errorText(error)
         }
@@ -362,6 +383,10 @@ struct CoursePlanWizardView: View {
                 return errors.map(errorText).joined(separator: "\n")
             case .providerUnavailable:
                 return "The AI provider did not return a usable plan. Your input is still available."
+            case .projectMismatch:
+                return "Adjust this plan from its owning project."
+            case .multipleActivePlans:
+                return "Resolve the project's active Learning Plan revisions before activating another."
             }
         }
         if let error = error as? CoursePlanningValidationError {
@@ -372,16 +397,17 @@ struct CoursePlanWizardView: View {
 
     private func errorText(_ error: CoursePlanningValidationError) -> String {
         switch error {
-        case .emptyTitle: "Add a course and phase title."
+        case .emptyTitle: "Add a Learning Plan and phase title."
         case .emptyGoal: "Add a goal and phase objective."
         case .invalidWeeklyBudget: "Set a positive weekly budget."
         case .invalidDateRange: "Check the plan dates."
         case .unknownPhaseReference: "Assign every session to a phase."
         case .invalidDuration: "Set a positive session duration."
         case .duplicateDraftID: "Each phase and session needs a distinct identifier."
-        case .phaseOutsidePlan: "Keep phase dates within the course window."
+        case .phaseOutsidePlan: "Keep phase dates within the Learning Plan window."
         case .invalidRevision: "The plan revision is invalid."
         case .invalidOrdinal: "The phase order is invalid."
+        case .invalidRevisionIdentity: "The plan revision identity is invalid."
         }
     }
 

@@ -48,6 +48,27 @@ public struct PersonalLearningJournalApp: App {
                     } message: {
                         Text(session.migrationError ?? "")
                     }
+                } else if let pendingPlanMigration = session.pendingPlanRevisionMigration {
+                    NavigationStack {
+                        PlanRevisionMigrationReviewView(
+                            snapshot: session.viewModel.snapshot,
+                            dryRun: pendingPlanMigration,
+                            onContinue: { survivors in
+                                session.continuePlanRevisionMigration(with: survivors)
+                            }
+                        )
+                    }
+                    .alert(
+                        "Learning Plan migration could not continue",
+                        isPresented: Binding(
+                            get: { session.migrationError != nil },
+                            set: { if !$0 { session.clearMigrationError() } }
+                        )
+                    ) {
+                        Button("OK") { session.clearMigrationError() }
+                    } message: {
+                        Text(session.migrationError ?? "")
+                    }
                 } else if session.migrationGateBlocked {
                     NavigationStack {
                         VStack(spacing: 16) {

@@ -582,7 +582,7 @@ public final class JournalViewModel: ObservableObject {
     @discardableResult
     public func activateCoursePlan(
         draftPlanID: UUID,
-        expectation: RevisionGuardExpectation? = nil
+        expectation: RevisionGuardExpectation
     ) throws -> CanonicalNextStepProposal? {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
@@ -598,6 +598,27 @@ public final class JournalViewModel: ObservableObject {
         coursePlanGenerationState = .idle
         refresh()
         return proposal
+    }
+
+    /// Compatibility entry point for legacy callers. The real adjustment UI
+    /// captures and passes the expectation explicitly; this overload captures
+    /// it immediately before activation for older integrations.
+    @discardableResult
+    public func activateCoursePlan(
+        draftPlanID: UUID
+    ) throws -> CanonicalNextStepProposal? {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        let expectation = try coursePlanningService.revisionGuardExpectation(for: draftPlanID)
+        return try activateCoursePlan(draftPlanID: draftPlanID, expectation: expectation)
+    }
+
+    public func revisionGuardExpectation(for planID: UUID) throws -> RevisionGuardExpectation {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        return try coursePlanningService.revisionGuardExpectation(for: planID)
     }
 
     @discardableResult

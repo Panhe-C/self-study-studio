@@ -18,18 +18,53 @@ public enum CloudMutation: Sendable {
 /// separate map so old fakes and adapters continue to compile.
 public struct CloudRevisionExpectation: Equatable, Sendable {
     public let entity: JournalEntityReference
-    public let recordChangeTag: String
+    public let baseRevisionID: UUID?
+    public let recordChangeTag: String?
+    public let recordState: RevisionGuardRecordState
+    public let targetRecordState: RevisionGuardRecordState
 
     public init(entity: JournalEntityReference, recordChangeTag: String) {
+        self.init(
+            entity: entity,
+            baseRevisionID: nil,
+            recordChangeTag: recordChangeTag,
+            recordState: .existingRecord,
+            targetRecordState: .existingRecord
+        )
+    }
+
+    public init(
+        entity: JournalEntityReference,
+        revisionExpectation: RevisionGuardExpectation
+    ) {
+        self.init(
+            entity: entity,
+            baseRevisionID: revisionExpectation.baseRevisionID,
+            recordChangeTag: revisionExpectation.recordChangeTag,
+            recordState: revisionExpectation.recordState,
+            targetRecordState: revisionExpectation.targetRecordState
+        )
+    }
+
+    public init(
+        entity: JournalEntityReference,
+        baseRevisionID: UUID?,
+        recordChangeTag: String?,
+        recordState: RevisionGuardRecordState,
+        targetRecordState: RevisionGuardRecordState
+    ) {
         self.entity = entity
+        self.baseRevisionID = baseRevisionID
         self.recordChangeTag = recordChangeTag
+        self.recordState = recordState
+        self.targetRecordState = targetRecordState
     }
 }
 
 public enum CloudRevisionGuardError: Error, Equatable, Sendable {
     case stale(
         entity: JournalEntityReference,
-        expectedRecordChangeTag: String,
+        expectedRecordChangeTag: String?,
         actualRecordChangeTag: String?
     )
 }
@@ -79,7 +114,7 @@ public protocol CloudDatabaseClient: Sendable {
     func send(_ mutations: [CloudMutation]) async throws -> CloudSendResult
     func send(
         _ mutations: [CloudMutation],
-        revisionExpectations: [JournalEntityReference: String]
+        revisionExpectations: [JournalEntityReference: CloudRevisionExpectation]
     ) async throws -> CloudSendResult
     func fetchChanges(after tokenData: Data?) async throws -> CloudChangeBatch
 }
@@ -87,11 +122,21 @@ public protocol CloudDatabaseClient: Sendable {
 public extension CloudDatabaseClient {
     func send(
         _ mutations: [CloudMutation],
+        revisionExpectations: [JournalEntityReference: CloudRevisionExpectation]
+    ) async throws -> CloudSendResult {
+        // Legacy adapters that only implement the unguarded API remain
+        // source-compatible; the production CK client overrides this method.
+        try await send(mutations)
+    }
+
+    func send(
+        _ mutations: [CloudMutation],
         revisionExpectations: [JournalEntityReference: String]
     ) async throws -> CloudSendResult {
-        // Legacy adapters can ignore guards; the production CK client
-        // implements this overload and performs the compare-before-write.
-        try await send(mutations)
+        let converted = Dictionary(uniqueKeysWithValues: revisionExpectations.map { key, value in
+            (key, CloudRevisionExpectation(entity: key, recordChangeTag: value))
+        })
+        return try await send(mutations, revisionExpectations: converted)
     }
 }
 
@@ -172,35 +217,59 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
     }
 
     private func push(_ pending: [PendingMutation]) async throws {
-        var revisionExpectations: [JournalEntityReference: String] = [:]
-        let mutations = try pending.compactMap { mutation -> CloudMutation? in
-            switch mutation.operation {
-            case .save:
-                guard let entity = try repository.entity(for: mutation.entity) else { return nil }
-                if let recordChangeTag = try repository.metadata(for: mutation.entity)?.recordChangeTag {
-                    revisionExpectations[mutation.entity] = recordChangeTag
+        let groups = Dictionary(grouping: pending, by: \.transactionID)
+            .sorted { $0.key.uuidString < $1.key.uuidString }
+        var acknowledgedMutationIDs: Set<UUID> = []
+        var metadata: [SyncRecordMetadata] = []
+        var retryableErrors: [UUID: String] = [:]
+        var terminalErrors: [UUID: String] = [:]
+
+        for (_, group) in groups {
+            var revisionExpectations: [JournalEntityReference: CloudRevisionExpectation] = [:]
+            let mutations = try group.compactMap { mutation -> CloudMutation? in
+                switch mutation.operation {
+                case .save:
+                    guard let entity = try repository.entity(for: mutation.entity) else { return nil }
+                    if let expectation = mutation.revisionExpectation {
+                        revisionExpectations[mutation.entity] = CloudRevisionExpectation(
+                            entity: mutation.entity,
+                            revisionExpectation: expectation
+                        )
+                    }
+                    return .save(mutationID: mutation.id, entity: entity)
+                case .delete:
+                    return .delete(mutationID: mutation.id, entity: mutation.entity)
                 }
-                return .save(mutationID: mutation.id, entity: entity)
-            case .delete:
-                return .delete(mutationID: mutation.id, entity: mutation.entity)
+            }
+            guard !mutations.isEmpty else { continue }
+
+            do {
+                let result = try await client.send(
+                    mutations,
+                    revisionExpectations: revisionExpectations
+                )
+                acknowledgedMutationIDs.formUnion(result.acknowledgedMutationIDs)
+                metadata.append(contentsOf: result.metadata)
+                retryableErrors.merge(result.retryableErrors, uniquingKeysWith: { _, new in new })
+                terminalErrors.merge(result.terminalErrors, uniquingKeysWith: { _, new in new })
+            } catch let guardError as CloudRevisionGuardError {
+                let message = String(describing: guardError)
+                for mutation in group {
+                    terminalErrors[mutation.id] = message
+                }
             }
         }
-        guard !mutations.isEmpty else { return }
 
-        let result = try await client.send(
-            mutations,
-            revisionExpectations: revisionExpectations
-        )
-        if !result.acknowledgedMutationIDs.isEmpty {
+        if !acknowledgedMutationIDs.isEmpty {
             try repository.acknowledge(
-                result.acknowledgedMutationIDs,
-                metadata: result.metadata
+                acknowledgedMutationIDs,
+                metadata: metadata
             )
         }
-        if !result.retryableErrors.isEmpty || !result.terminalErrors.isEmpty {
+        if !retryableErrors.isEmpty || !terminalErrors.isEmpty {
             try repository.recordSyncFailures(
-                retryable: result.retryableErrors,
-                terminal: result.terminalErrors
+                retryable: retryableErrors,
+                terminal: terminalErrors
             )
         }
     }

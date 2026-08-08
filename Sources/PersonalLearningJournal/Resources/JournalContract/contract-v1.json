@@ -237,6 +237,9 @@
       "fields": {
         "id": { "type": "uuid", "required": true },
         "planId": { "type": "uuid", "required": true },
+        "planRevisionID": { "type": "uuid", "required": false },
+        "planSeriesID": { "type": "uuid", "required": false },
+        "isStructuralLocked": { "type": "boolean", "required": false },
         "title": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
         "objective": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
         "expectedProof": { "type": "string", "required": true, "trim": true },
@@ -254,6 +257,9 @@
       "fields": {
         "id": { "type": "uuid", "required": true },
         "planId": { "type": "uuid", "required": true },
+        "planRevisionID": { "type": "uuid", "required": false },
+        "planSeriesID": { "type": "uuid", "required": false },
+        "isStructuralLocked": { "type": "boolean", "required": false },
         "phaseId": { "type": "uuid", "required": true },
         "projectId": { "type": "uuid", "required": true },
         "title": { "type": "string", "required": true, "trim": true, "nonEmpty": true },

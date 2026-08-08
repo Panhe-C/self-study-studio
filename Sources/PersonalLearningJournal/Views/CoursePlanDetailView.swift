@@ -92,7 +92,54 @@ struct CoursePlanDetailView: View {
             if !superseded.isEmpty {
                 Section("Superseded learning-plan revisions") {
                     ForEach(superseded) { revision in
-                        LabeledContent("Revision \(revision.revision)", value: revision.status.rawValue.capitalized)
+                        NavigationLink {
+                            CoursePlanDetailView(
+                                viewModel: viewModel,
+                                project: project,
+                                plan: revision
+                            )
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                LabeledContent(
+                                    "Revision \(revision.revision)",
+                                    value: revision.status.rawValue.capitalized
+                                )
+                                Text(revision.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("Open phases, planned sessions, and linked proof")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            let revisionSessionIDs = Set(viewModel.plannedSessions(for: plan.id).compactMap(\.completedSessionId))
+            let linkedProofs = viewModel.proofs.filter {
+                $0.projectId == project.id && $0.sessionId.map(revisionSessionIDs.contains) == true
+            }
+            if !linkedProofs.isEmpty {
+                Section("Proof linked to this Learning Plan revision") {
+                    ForEach(linkedProofs) { proof in
+                        NavigationLink {
+                            ProofDetailView(
+                                viewModel: viewModel,
+                                proof: proof,
+                                projectName: project.name,
+                                sessionSummary: proof.sessionId
+                                    .flatMap { id in viewModel.sessions.first(where: { $0.id == id })?.note }
+                                    ?? "Linked learning session"
+                            )
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(proof.title).font(.headline)
+                                Text(proof.statement)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }

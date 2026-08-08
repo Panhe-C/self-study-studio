@@ -177,8 +177,8 @@ atomic migration markers and first-backup preservation, fail-closed startup retr
 project-scoped Trash export, retryable local attachment cleanup with legacy-queue recovery,
 explicitly confirmed orphan cleanup, corrupt/unsafe-legacy queue quarantine with shareable recovery artifacts,
 strict canonical transport rejection, and dependency-safe permanent deletion. Unencrypted Trash
-exports require an explicit trusted-location confirmation. Verification: `swift test` 330 tests / 0
-failures, `npm test` in `WebWorkspace` 48 tests / 0 failures, `npm run lint`, `swift build`,
+exports require an explicit trusted-location confirmation. B1 baseline verification: `swift test`
+330 tests / 0 failures, `npm test` in `WebWorkspace` 48 tests / 0 failures, `npm run lint`, `swift build`,
 unsigned iOS Simulator build, and `git diff --check` all pass. B2 is implemented below.
 
 ### B2. Learning Plan rename and explicit Plan Revisions
@@ -187,7 +187,9 @@ unsigned iOS Simulator build, and `git diff --check` all pass. B2 is implemented
 `CoursePlan`/`coursePlan`/`CoursePlan` CloudKit records remain read/write compatibility aliases.
 `PlanRevision` and `PlanRevisionDraft` now preserve immutable structural snapshots, stable
 series/revision identities, and queryable superseded history. `RevisionGuard` validates the
-base revision and caller-supplied CloudKit change tag before activation.
+base revision and caller-supplied CloudKit change tag before activation. The adjustment UI
+captures that expectation when it opens, pending mutations freeze it with their transaction,
+and grouped stale writes become terminal without blocking unrelated transactions.
 
 **Implemented.** User-visible plan language is Learning Plan across Wizard, Detail, Today,
 Projects, Review/Calendar consumers, with an explicit `Adjust Plan` entry. Structural edits
@@ -195,16 +197,21 @@ create a draft linked by `baseRevisionID`/`supersedesID`; completing or reschedu
 session remains a direct execution update. Cloud pushes use conditional writes with atomic
 custom-zone batches, preserve server change tags on pull, and map stale writes without LWW.
 The idempotent migration performs dry-run, backup, stable-series mapping, active-revision
-validation, and rollback-safe persistence.
+validation, and rollback-safe persistence. Ambiguous multiple-active projects stop at an
+explicit survivor-selection review; unresolved choices never execute. Published plan/phase
+structure is immutable in sync merges while planned-session execution fields remain mergeable,
+and historical revisions open with their phases, planned sessions, and linked proof.
 
 **Independent verification.** Existing `coursePlan` records load and display under the new
 language with no data loss. Activating a draft built from stale state fails and does not
 overwrite the newer revision. Superseded revisions remain readable and explain historical
 decisions.
 
-Verification: targeted B2 compatibility, planning-service, migration, Cloud sync, and contract
-tests pass; Web build/tests pass. Real CloudKit conditional-write behavior and physical-device
-acceptance remain outside this local verification.
+Verification: `swift test` (348 tests / 0 failures), `swift build`, Web `npm test` (48 tests / 0
+failures), `npm run lint`, and `git diff --check` pass. The unsigned iOS simulator build reaches
+asset compilation but this machine has no available simulator runtime; local and fake-client
+Revision Guard paths are verified, while real CloudKit conditional-write behavior and
+physical-device acceptance remain outside this local verification.
 
 **Risk.** Medium-high. Touches planning, scheduling, and the Calendar draft pipeline. Keep the
 existing EventKit preview and confirmation boundary untouched.

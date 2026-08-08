@@ -197,9 +197,12 @@ public struct JournalStateMetadata: Codable, Equatable, Sendable {
 }
 
 public struct JournalTransaction: Sendable {
+    public var transactionID: UUID
     public var upserts: [JournalEntity]
     public var deletions: [JournalEntityReference]
     public var origin: MutationOrigin
+    /// Expectations are copied into each user outbox mutation at commit time.
+    public var revisionExpectations: [JournalEntityReference: RevisionGuardExpectation]
     public var stateMetadata: JournalStateMetadata?
     public var completedMigrationIdentifiers: [String]
     public var removedMigrationIdentifiers: [String]
@@ -212,15 +215,19 @@ public struct JournalTransaction: Sendable {
         upserts: [JournalEntity] = [],
         deletions: [JournalEntityReference] = [],
         origin: MutationOrigin,
+        transactionID: UUID = UUID(),
+        revisionExpectations: [JournalEntityReference: RevisionGuardExpectation] = [:],
         stateMetadata: JournalStateMetadata? = nil,
         completedMigrationIdentifier: String? = nil,
         completedMigrationIdentifiers: [String] = [],
         removedMigrationIdentifier: String? = nil,
         removedMigrationIdentifiers: [String] = []
     ) {
+        self.transactionID = transactionID
         self.upserts = upserts
         self.deletions = deletions
         self.origin = origin
+        self.revisionExpectations = revisionExpectations
         self.stateMetadata = stateMetadata
         var identifiers = completedMigrationIdentifiers
         if let completedMigrationIdentifier,

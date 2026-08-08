@@ -114,8 +114,8 @@ _Gap_: implemented for iPhone-to-iPhone; Web is not yet a writer.
 A same-field or structural collision that cannot be merged without changing user intent; it remains unresolved until the learner chooses or combines the competing values.
 _Avoid_: Sync error, newest version, duplicate record
 
-**Revision Guard** `[planned]`:
-A freshness check applied before consequential publication operations such as activating a Learning Plan or publishing a Review; stale input must be refreshed or resolved instead of overwriting newer canonical state.
+**Revision Guard** `[partial]`:
+A freshness check applied before consequential publication operations such as activating a Learning Plan or publishing a Review; stale input must be refreshed or resolved instead of overwriting newer canonical state. Local repository paths and fake Cloud clients verify captured base revisions, frozen outbox change tags, terminal stale writes, and grouped transactions; real CloudKit conditional-write behavior remains unverified here.
 _Avoid_: Background merge, last-write-wins, warning-only check
 
 **Online-First Workspace** `[partial]`:

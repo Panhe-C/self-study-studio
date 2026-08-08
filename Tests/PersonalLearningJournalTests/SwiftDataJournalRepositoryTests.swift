@@ -140,6 +140,53 @@ final class SwiftDataJournalRepositoryTests: XCTestCase {
         XCTAssertEqual(try second.pendingMutations(limit: 10).count, 1)
     }
 
+    func testGuardExpectationStaysFrozenAcrossMetadataRefreshAndRestart() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("guarded-outbox.store")
+        let project = Project(
+            name: "Guarded",
+            area: "AI",
+            goal: "Learn",
+            currentNextStep: "Read"
+        )
+        let expectation = RevisionGuardExpectation.existing(
+            baseRevisionID: project.id,
+            recordChangeTag: "server-v1"
+        )
+        let reference = JournalEntityReference(.project, project.id)
+        let transactionID = UUID()
+
+        try autoreleasepool {
+            let first = try SwiftDataJournalRepository(url: url)
+            try first.commit(
+                JournalTransaction(
+                    upserts: [.project(project)],
+                    origin: .user,
+                    transactionID: transactionID,
+                    revisionExpectations: [reference: expectation]
+                )
+            )
+            try first.acknowledge(
+                [],
+                metadata: [
+                    SyncRecordMetadata(
+                        entity: reference,
+                        zoneName: CloudSyncCoordinator.zoneName,
+                        recordName: project.id.uuidString,
+                        recordChangeTag: "server-v2",
+                        state: .synced
+                    )
+                ]
+            )
+        }
+
+        let reopened = try SwiftDataJournalRepository(url: url)
+        let mutation = try XCTUnwrap(reopened.pendingMutations(limit: 1).first)
+        XCTAssertEqual(mutation.transactionID, transactionID)
+        XCTAssertEqual(mutation.revisionExpectation, expectation)
+    }
+
     func testRemoteTransactionPersistsWithoutCreatingOutbox() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

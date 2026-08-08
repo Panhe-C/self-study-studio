@@ -62,13 +62,23 @@ public final class SwiftDataJournalRepository: JournalRepository {
             for entity in transaction.upserts {
                 try upsert(entity)
                 if case .user = transaction.origin {
-                    insertMutation(for: entity.reference, operation: .save)
+                    insertMutation(
+                        for: entity.reference,
+                        operation: .save,
+                        transactionID: transaction.transactionID,
+                        revisionExpectation: transaction.revisionExpectations[entity.reference]
+                    )
                 }
             }
             for reference in transaction.deletions {
                 try markDeleted(reference)
                 if case .user = transaction.origin {
-                    insertMutation(for: reference, operation: .delete)
+                    insertMutation(
+                        for: reference,
+                        operation: .delete,
+                        transactionID: transaction.transactionID,
+                        revisionExpectation: transaction.revisionExpectations[reference]
+                    )
                 }
             }
             if let metadata = transaction.stateMetadata {
@@ -146,7 +156,12 @@ public final class SwiftDataJournalRepository: JournalRepository {
             value.resolvedAt = conflict.resolvedAt
             conflict.payload = try JSONEncoder.journal.encode(value)
             try upsert(entity)
-            insertMutation(for: entity.reference, operation: .save)
+            insertMutation(
+                for: entity.reference,
+                operation: .save,
+                transactionID: UUID(),
+                revisionExpectation: nil
+            )
             try context.save()
         } catch {
             context.rollback()
@@ -533,14 +548,18 @@ public final class SwiftDataJournalRepository: JournalRepository {
 
     private func insertMutation(
         for entity: JournalEntityReference,
-        operation: SyncOperation
+        operation: SyncOperation,
+        transactionID: UUID,
+        revisionExpectation: RevisionGuardExpectation?
     ) {
         context.insert(
             StoredPendingMutationV2(
                 id: UUID(),
+                transactionID: transactionID,
                 entityKindRaw: entity.kind.rawValue,
                 entityID: entity.id,
                 operationRaw: operation.rawValue,
+                revisionExpectation: revisionExpectation,
                 enqueuedAt: now(),
                 retryCount: 0
             )
@@ -838,26 +857,32 @@ private protocol StoredEntityV2: PersistentModel {
 
 @Model private final class StoredPendingMutationV2 {
     @Attribute(.unique) var id: UUID
+    var transactionID: UUID
     var entityKindRaw: String
     var entityID: UUID
     var operationRaw: String
+    var revisionExpectationPayload: Data?
     var enqueuedAt: Date
     var retryCount: Int
     var lastError: String?
 
     init(
         id: UUID,
+        transactionID: UUID,
         entityKindRaw: String,
         entityID: UUID,
         operationRaw: String,
+        revisionExpectation: RevisionGuardExpectation?,
         enqueuedAt: Date,
         retryCount: Int,
         lastError: String? = nil
     ) {
         self.id = id
+        self.transactionID = transactionID
         self.entityKindRaw = entityKindRaw
         self.entityID = entityID
         self.operationRaw = operationRaw
+        self.revisionExpectationPayload = try? revisionExpectation.map(JSONEncoder.journal.encode)
         self.enqueuedAt = enqueuedAt
         self.retryCount = retryCount
         self.lastError = lastError
@@ -870,8 +895,12 @@ private protocol StoredEntityV2: PersistentModel {
         }
         return PendingMutation(
             id: id,
+            transactionID: transactionID,
             entity: .init(kind, entityID),
             operation: operation,
+            revisionExpectation: revisionExpectationPayload.flatMap {
+                try? JSONDecoder.journal.decode(RevisionGuardExpectation.self, from: $0)
+            },
             enqueuedAt: enqueuedAt,
             retryCount: retryCount,
             lastError: lastError

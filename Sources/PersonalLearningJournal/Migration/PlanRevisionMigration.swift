@@ -6,12 +6,23 @@ public struct PlanRevisionMigrationDryRun: Equatable, Sendable {
     public let planCount: Int
     public let seriesCount: Int
     public let activeSeriesCount: Int
+    public let issues: [PlanRevisionMigrationIssue]
 
-    public init(planCount: Int, seriesCount: Int, activeSeriesCount: Int) {
+    public init(
+        planCount: Int,
+        seriesCount: Int,
+        activeSeriesCount: Int,
+        issues: [PlanRevisionMigrationIssue] = []
+    ) {
         self.planCount = planCount
         self.seriesCount = seriesCount
         self.activeSeriesCount = activeSeriesCount
+        self.issues = issues
     }
+}
+
+public enum PlanRevisionMigrationIssue: Equatable, Hashable, Sendable {
+    case multipleActivePlans(UUID)
 }
 
 public struct PlanRevisionMigrationReport: Equatable, Sendable {
@@ -37,6 +48,7 @@ public enum PlanRevisionMigrationError: Error, Equatable, Sendable {
     case invalidRelationship
     case duplicateRevisionIdentifier(UUID)
     case repositoryValidationFailed
+    case multipleActivePlans(UUID)
 }
 
 public struct PlanRevisionMigration {
@@ -53,10 +65,15 @@ public struct PlanRevisionMigration {
         let activeSeriesCount = groups.values.filter { plans in
             plans.contains(where: { $0.status == .active })
         }.count
+        let issues = Dictionary(grouping: snapshot.coursePlans, by: \.projectId)
+            .filter { $0.value.filter { $0.status == .active }.count > 1 }
+            .map { PlanRevisionMigrationIssue.multipleActivePlans($0.key) }
+            .sorted { String(describing: $0) < String(describing: $1) }
         return PlanRevisionMigrationDryRun(
             planCount: snapshot.coursePlans.count,
             seriesCount: groups.count,
-            activeSeriesCount: activeSeriesCount
+            activeSeriesCount: activeSeriesCount,
+            issues: issues
         )
     }
 
@@ -64,7 +81,8 @@ public struct PlanRevisionMigration {
     public func execute(
         snapshot: JournalSnapshot,
         repository: any JournalRepository,
-        backupDirectory: URL
+        backupDirectory: URL,
+        activePlanSurvivors: [UUID: UUID] = [:]
     ) throws -> PlanRevisionMigrationReport {
         let expectedPlanCount = snapshot.coursePlans.count
         if try repository.hasCompletedMigration(identifier: Self.identifier) {
@@ -77,8 +95,22 @@ public struct PlanRevisionMigration {
             )
         }
 
+        for issue in dryRun(snapshot: snapshot).issues {
+            switch issue {
+            case let .multipleActivePlans(projectID):
+                guard let survivorID = activePlanSurvivors[projectID],
+                      snapshot.coursePlans.contains(where: {
+                          $0.id == survivorID && $0.projectId == projectID && $0.status == .active
+                      }) else {
+                    // Ambiguous history must be resolved in the migration UI.
+                    // Do not write a backup, marker, or inferred survivor.
+                    throw PlanRevisionMigrationError.multipleActivePlans(projectID)
+                }
+            }
+        }
+
         try writeBackup(snapshot: snapshot, to: backupDirectory)
-        let migrated = try transformed(snapshot: snapshot)
+        let migrated = try transformed(snapshot: snapshot, activePlanSurvivors: activePlanSurvivors)
         try validate(snapshot: migrated, expectedPlanCount: expectedPlanCount)
 
         let targetEntities = entities(in: migrated)
@@ -119,7 +151,10 @@ public struct PlanRevisionMigration {
         }
     }
 
-    private func transformed(snapshot: JournalSnapshot) throws -> JournalSnapshot {
+    private func transformed(
+        snapshot: JournalSnapshot,
+        activePlanSurvivors: [UUID: UUID]
+    ) throws -> JournalSnapshot {
         var migrated = snapshot
         let groups = seriesGroups(snapshot.coursePlans)
         let planIDs = Set(snapshot.coursePlans.map(\.id))
@@ -135,7 +170,13 @@ public struct PlanRevisionMigration {
             guard let first = sorted.first else { continue }
             let seriesID = sorted.first(where: { $0.planSeriesID != $0.id })?.planSeriesID ?? first.id
             let activeCandidates = sorted.filter { $0.status == .active }
-            let activeWinner = activeCandidates.max(by: revisionOrder)
+            let hasExplicitProjectSurvivor = activePlanSurvivors[first.projectId] != nil
+            let activeWinner: LearningPlan?
+            if let survivorID = activePlanSurvivors[first.projectId] {
+                activeWinner = activeCandidates.first { $0.id == survivorID }
+            } else {
+                activeWinner = activeCandidates.max(by: revisionOrder)
+            }
             if let activeWinner {
                 activePlanByProject[activeWinner.projectId] = activeWinner.id
             }
@@ -149,7 +190,10 @@ public struct PlanRevisionMigration {
                 value.revisionID = plan.id
                 value.baseRevisionID = previousRevisionID
                 value.supersedesID = previousRevisionID
-                if let activeWinner, value.status == .active, value.id != activeWinner.id {
+                let shouldArchiveActive = value.status == .active && (
+                    activeWinner.map { value.id != $0.id } ?? hasExplicitProjectSurvivor
+                )
+                if shouldArchiveActive {
                     value.status = .archived
                     // Preserve legacy timestamps for metadata-only changes. A
                     // status transition is the one case where the migration
@@ -164,6 +208,22 @@ public struct PlanRevisionMigration {
             throw PlanRevisionMigrationError.invalidRelationship
         }
         migrated.coursePlans = transformedPlans
+        for index in migrated.planPhases.indices {
+            guard let plan = transformedPlans.first(where: { $0.id == migrated.planPhases[index].planId }) else {
+                throw PlanRevisionMigrationError.invalidRelationship
+            }
+            migrated.planPhases[index].planRevisionID = plan.revisionID
+            migrated.planPhases[index].planSeriesID = plan.planSeriesID
+            migrated.planPhases[index].isStructuralLocked = plan.isPublished
+        }
+        for index in migrated.plannedSessions.indices {
+            guard let plan = transformedPlans.first(where: { $0.id == migrated.plannedSessions[index].planId }) else {
+                throw PlanRevisionMigrationError.invalidRelationship
+            }
+            migrated.plannedSessions[index].planRevisionID = plan.revisionID
+            migrated.plannedSessions[index].planSeriesID = plan.planSeriesID
+            migrated.plannedSessions[index].isStructuralLocked = plan.isPublished
+        }
         for index in migrated.projects.indices {
             let projectID = migrated.projects[index].id
             migrated.projects[index].activeCoursePlanId = activePlanByProject[projectID]
@@ -184,6 +244,12 @@ public struct PlanRevisionMigration {
             throw PlanRevisionMigrationError.invalidRelationship
         }
         for plans in seriesGroups(snapshot.coursePlans).values {
+            let activeCount = plans.filter { $0.status == .active }.count
+            guard activeCount <= 1 else {
+                throw PlanRevisionMigrationError.repositoryValidationFailed
+            }
+        }
+        for plans in Dictionary(grouping: snapshot.coursePlans, by: \.projectId).values {
             let activeCount = plans.filter { $0.status == .active }.count
             guard activeCount <= 1 else {
                 throw PlanRevisionMigrationError.repositoryValidationFailed

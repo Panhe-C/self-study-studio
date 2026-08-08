@@ -4,6 +4,8 @@ public enum CoursePlanningError: Error, Equatable, Sendable {
     case configurationRequired
     case invalidDraft([CoursePlanningValidationError])
     case providerUnavailable
+    case projectMismatch
+    case multipleActivePlans(UUID)
 }
 
 public protocol CoursePlanningProvider: Sendable {

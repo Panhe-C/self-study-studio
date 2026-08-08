@@ -40,6 +40,47 @@ public enum CoursePlanningValidationError: Error, Equatable, Sendable {
     case phaseOutsidePlan(String)
     case invalidRevision
     case invalidOrdinal
+    case invalidRevisionIdentity
+}
+
+public enum PlanRevisionIdentityError: Error, Equatable, Sendable {
+    case baseRevisionCannotReferenceSelf
+    case supersededRevisionCannotReferenceSelf
+    case supersededRevisionRequiresBase
+}
+
+/// The four edges that make a Learning Plan revision immutable and
+/// addressable. Keeping them together prevents individual fields from
+/// drifting during local edits, Cloud merges, or migration.
+public struct PlanRevisionIdentity: Codable, Equatable, Hashable, Sendable {
+    public let revisionID: UUID
+    public let planSeriesID: UUID
+    public let baseRevisionID: UUID?
+    public let supersedesID: UUID?
+
+    public init(
+        revisionID: UUID,
+        planSeriesID: UUID,
+        baseRevisionID: UUID? = nil,
+        supersedesID: UUID? = nil
+    ) {
+        self.revisionID = revisionID
+        self.planSeriesID = planSeriesID
+        self.baseRevisionID = baseRevisionID
+        self.supersedesID = supersedesID
+    }
+
+    public func validate() throws {
+        if baseRevisionID == revisionID {
+            throw PlanRevisionIdentityError.baseRevisionCannotReferenceSelf
+        }
+        if supersedesID == revisionID {
+            throw PlanRevisionIdentityError.supersededRevisionCannotReferenceSelf
+        }
+        if supersedesID != nil, baseRevisionID == nil {
+            throw PlanRevisionIdentityError.supersededRevisionRequiresBase
+        }
+    }
 }
 
 /// The canonical learning-plan aggregate root.
@@ -73,6 +114,15 @@ public struct LearningPlan: Codable, Equatable, Identifiable, Sendable {
     public var activatedAt: Date?
     public var deletedAt: Date?
     public var schemaVersion: Int
+
+    public var isPublished: Bool {
+        switch status {
+        case .active, .archived, .completed:
+            return true
+        case .draft:
+            return false
+        }
+    }
 
     public init(
         id: UUID = UUID(),
@@ -136,6 +186,21 @@ public struct LearningPlan: Codable, Equatable, Identifiable, Sendable {
         self.activatedAt = activatedAt
         self.deletedAt = deletedAt
         self.schemaVersion = schemaVersion
+
+        do {
+            try revisionIdentity.validate()
+        } catch {
+            throw CoursePlanningValidationError.invalidRevisionIdentity
+        }
+    }
+
+    public var revisionIdentity: PlanRevisionIdentity {
+        PlanRevisionIdentity(
+            revisionID: revisionID,
+            planSeriesID: planSeriesID,
+            baseRevisionID: baseRevisionID,
+            supersedesID: supersedesID
+        )
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -215,6 +280,12 @@ public struct LearningPlan: Codable, Equatable, Identifiable, Sendable {
 /// Compatibility alias for pre-B2 source and persisted API callers.
 public typealias CoursePlan = LearningPlan
 
+public extension LearningPlan {
+    var reference: JournalEntityReference {
+        JournalEntityReference(.coursePlan, id)
+    }
+}
+
 /// Immutable snapshot of a learning-plan revision and its structural children.
 public struct PlanRevision: Codable, Equatable, Identifiable, Sendable {
     public let revisionID: UUID
@@ -254,6 +325,9 @@ public struct PlanRevisionDraft: Codable, Equatable, Identifiable, Sendable {
     public var plan: LearningPlan
     public var phases: [PlanPhase]
     public var sessions: [PlannedSession]
+    /// Captured when the adjustment UI opens. It is persisted with the draft
+    /// so a restart cannot silently replace the caller's base/tag expectation.
+    public var guardExpectation: RevisionGuardExpectation
 
     public var id: UUID { revisionID }
 
@@ -264,7 +338,8 @@ public struct PlanRevisionDraft: Codable, Equatable, Identifiable, Sendable {
         revisionID: UUID? = nil,
         planSeriesID: UUID? = nil,
         baseRevisionID: UUID? = nil,
-        supersedesID: UUID? = nil
+        supersedesID: UUID? = nil,
+        guardExpectation: RevisionGuardExpectation = .newRecord()
     ) {
         self.revisionID = revisionID ?? plan.revisionID
         self.planSeriesID = planSeriesID ?? plan.planSeriesID
@@ -273,10 +348,41 @@ public struct PlanRevisionDraft: Codable, Equatable, Identifiable, Sendable {
         self.plan = plan
         self.phases = phases
         self.sessions = sessions
+        self.guardExpectation = guardExpectation
     }
 
     public func materializedRevision() -> PlanRevision {
-        PlanRevision(plan: plan, phases: phases, sessions: sessions)
+        var value = plan
+        value.revisionID = revisionID
+        value.planSeriesID = planSeriesID
+        value.baseRevisionID = baseRevisionID
+        value.supersedesID = supersedesID
+        return PlanRevision(plan: value, phases: phases, sessions: sessions)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case revisionID, planSeriesID, baseRevisionID, supersedesID
+        case plan, phases, sessions, guardExpectation
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let plan = try container.decode(LearningPlan.self, forKey: .plan)
+        self.init(
+            plan: plan,
+            phases: try container.decode([PlanPhase].self, forKey: .phases),
+            sessions: try container.decode([PlannedSession].self, forKey: .sessions),
+            revisionID: try container.decodeIfPresent(UUID.self, forKey: .revisionID) ?? plan.revisionID,
+            planSeriesID: try container.decodeIfPresent(UUID.self, forKey: .planSeriesID) ?? plan.planSeriesID,
+            baseRevisionID: try container.decodeIfPresent(UUID.self, forKey: .baseRevisionID) ?? plan.baseRevisionID,
+            supersedesID: try container.decodeIfPresent(UUID.self, forKey: .supersedesID) ?? plan.supersedesID,
+            guardExpectation: try container.decodeIfPresent(
+                RevisionGuardExpectation.self,
+                forKey: .guardExpectation
+            ) ?? (plan.baseRevisionID.map {
+                .existing(baseRevisionID: $0, recordChangeTag: nil)
+            } ?? .newRecord())
+        )
     }
 }
 
@@ -343,20 +449,78 @@ public extension JournalSnapshot {
     }
 }
 
+public enum RevisionGuardRecordState: String, Codable, Sendable {
+    case newRecord
+    case existingRecord
+}
+
 public struct RevisionGuardExpectation: Equatable, Codable, Sendable {
-    public let baseRevisionID: UUID
-    public let recordChangeTag: String
+    public let baseRevisionID: UUID?
+    public let recordChangeTag: String?
+    public let recordState: RevisionGuardRecordState
+    /// The record being written may be new even when the base record is
+    /// existing (the normal adjustment flow).
+    public let targetRecordState: RevisionGuardRecordState
 
     public init(baseRevisionID: UUID, recordChangeTag: String) {
+        self.init(
+            baseRevisionID: baseRevisionID,
+            recordChangeTag: recordChangeTag,
+            recordState: .existingRecord,
+            targetRecordState: .newRecord
+        )
+    }
+
+    public init(
+        baseRevisionID: UUID?,
+        recordChangeTag: String?,
+        recordState: RevisionGuardRecordState,
+        targetRecordState: RevisionGuardRecordState = .newRecord
+    ) {
         self.baseRevisionID = baseRevisionID
         self.recordChangeTag = recordChangeTag
+        self.recordState = recordState
+        self.targetRecordState = targetRecordState
+    }
+
+    public static func existing(
+        baseRevisionID: UUID,
+        recordChangeTag: String?
+    ) -> RevisionGuardExpectation {
+        RevisionGuardExpectation(
+            baseRevisionID: baseRevisionID,
+            recordChangeTag: recordChangeTag,
+            recordState: .existingRecord,
+            targetRecordState: .newRecord
+        )
+    }
+
+    public static func existingTarget(
+        revisionID: UUID,
+        recordChangeTag: String?
+    ) -> RevisionGuardExpectation {
+        RevisionGuardExpectation(
+            baseRevisionID: revisionID,
+            recordChangeTag: recordChangeTag,
+            recordState: .existingRecord,
+            targetRecordState: .existingRecord
+        )
+    }
+
+    public static func newRecord() -> RevisionGuardExpectation {
+        RevisionGuardExpectation(
+            baseRevisionID: nil,
+            recordChangeTag: nil,
+            recordState: .newRecord,
+            targetRecordState: .newRecord
+        )
     }
 }
 
 public enum RevisionGuardError: Error, Equatable, Sendable {
     case stale(
         baseRevisionID: UUID,
-        expectedRecordChangeTag: String,
+        expectedRecordChangeTag: String?,
         actualRecordChangeTag: String?
     )
     case missingBaseRevision(UUID)
@@ -367,21 +531,36 @@ public enum RevisionGuard {
     public static func validate(
         expectation: RevisionGuardExpectation,
         currentRevisionID: UUID,
-        currentRecordChangeTag: String?
+        currentRecordChangeTag: String?,
+        currentRecordExists: Bool = true
     ) throws {
-        guard expectation.baseRevisionID == currentRevisionID else {
+        if expectation.recordState == .newRecord {
+            guard !currentRecordExists, currentRecordChangeTag == nil else {
+                throw RevisionGuardError.stale(
+                    baseRevisionID: currentRevisionID,
+                    expectedRecordChangeTag: nil,
+                    actualRecordChangeTag: currentRecordChangeTag
+                )
+            }
+            return
+        }
+
+        guard let baseRevisionID = expectation.baseRevisionID,
+              baseRevisionID == currentRevisionID,
+              currentRecordExists else {
             throw RevisionGuardError.stale(
-                baseRevisionID: expectation.baseRevisionID,
+                baseRevisionID: expectation.baseRevisionID ?? currentRevisionID,
                 expectedRecordChangeTag: expectation.recordChangeTag,
                 actualRecordChangeTag: currentRecordChangeTag
             )
         }
-        guard let currentRecordChangeTag else {
-            throw RevisionGuardError.missingRecordChangeTag(expectation.baseRevisionID)
-        }
-        guard currentRecordChangeTag == expectation.recordChangeTag else {
+
+        if expectation.recordChangeTag != currentRecordChangeTag {
+            if expectation.recordChangeTag != nil, currentRecordChangeTag == nil {
+                throw RevisionGuardError.missingRecordChangeTag(baseRevisionID)
+            }
             throw RevisionGuardError.stale(
-                baseRevisionID: expectation.baseRevisionID,
+                baseRevisionID: baseRevisionID,
                 expectedRecordChangeTag: expectation.recordChangeTag,
                 actualRecordChangeTag: currentRecordChangeTag
             )
@@ -392,6 +571,12 @@ public enum RevisionGuard {
 public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var planId: UUID
+    /// Revision/series identity is copied from the owning plan. Legacy phase
+    /// archives omit these keys and safely fall back to `planId`.
+    public var planRevisionID: UUID
+    public var planSeriesID: UUID
+    /// Published revisions lock structural phase fields in sync merges.
+    public var isStructuralLocked: Bool
     public var title: String
     public var objective: String
     public var expectedProof: String
@@ -406,6 +591,9 @@ public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
     public init(
         id: UUID = UUID(),
         planId: UUID,
+        planRevisionID: UUID? = nil,
+        planSeriesID: UUID? = nil,
+        isStructuralLocked: Bool = false,
         title: String,
         objective: String,
         expectedProof: String,
@@ -432,6 +620,9 @@ public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
 
         self.id = id
         self.planId = planId
+        self.planRevisionID = planRevisionID ?? planId
+        self.planSeriesID = planSeriesID ?? planId
+        self.isStructuralLocked = isStructuralLocked
         self.title = title.trimmedForJournal
         self.objective = objective.trimmedForJournal
         self.expectedProof = expectedProof.trimmedForJournal
@@ -443,11 +634,44 @@ public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
         self.deletedAt = deletedAt
         self.schemaVersion = schemaVersion
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, planId, planRevisionID, planSeriesID, isStructuralLocked
+        case title, objective, expectedProof, ordinal, targetStart, targetEnd
+        case createdAt, updatedAt, deletedAt, schemaVersion
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            id: container.decode(UUID.self, forKey: .id),
+            planId: container.decode(UUID.self, forKey: .planId),
+            planRevisionID: container.decodeIfPresent(UUID.self, forKey: .planRevisionID),
+            planSeriesID: container.decodeIfPresent(UUID.self, forKey: .planSeriesID),
+            isStructuralLocked: container.decodeIfPresent(Bool.self, forKey: .isStructuralLocked) ?? false,
+            title: container.decode(String.self, forKey: .title),
+            objective: container.decode(String.self, forKey: .objective),
+            expectedProof: container.decode(String.self, forKey: .expectedProof),
+            ordinal: container.decode(Int.self, forKey: .ordinal),
+            targetStart: container.decode(Date.self, forKey: .targetStart),
+            targetEnd: container.decode(Date.self, forKey: .targetEnd),
+            createdAt: container.decode(Date.self, forKey: .createdAt),
+            updatedAt: container.decode(Date.self, forKey: .updatedAt),
+            deletedAt: container.decodeIfPresent(Date.self, forKey: .deletedAt),
+            schemaVersion: container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+                ?? JournalSchema.currentVersion
+        )
+    }
 }
 
 public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var planId: UUID
+    public var planRevisionID: UUID
+    public var planSeriesID: UUID
+    /// Published revision sessions allow execution-only changes but lock
+    /// structural fields such as title, phase, and duration.
+    public var isStructuralLocked: Bool
     public var phaseId: UUID
     public var projectId: UUID
     public var title: String
@@ -465,6 +689,9 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
     public init(
         id: UUID = UUID(),
         planId: UUID,
+        planRevisionID: UUID? = nil,
+        planSeriesID: UUID? = nil,
+        isStructuralLocked: Bool = false,
         phaseId: UUID,
         projectId: UUID,
         title: String,
@@ -488,6 +715,9 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
 
         self.id = id
         self.planId = planId
+        self.planRevisionID = planRevisionID ?? planId
+        self.planSeriesID = planSeriesID ?? planId
+        self.isStructuralLocked = isStructuralLocked
         self.phaseId = phaseId
         self.projectId = projectId
         self.title = title.trimmedForJournal
@@ -501,6 +731,38 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
         self.schemaVersion = schemaVersion
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, planId, planRevisionID, planSeriesID, isStructuralLocked
+        case phaseId, projectId, title, actionType, expectedProof, durationMinutes
+        case deadline, status, completedSessionId, createdAt, updatedAt, deletedAt
+        case schemaVersion
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            id: container.decode(UUID.self, forKey: .id),
+            planId: container.decode(UUID.self, forKey: .planId),
+            planRevisionID: container.decodeIfPresent(UUID.self, forKey: .planRevisionID),
+            planSeriesID: container.decodeIfPresent(UUID.self, forKey: .planSeriesID),
+            isStructuralLocked: container.decodeIfPresent(Bool.self, forKey: .isStructuralLocked) ?? false,
+            phaseId: container.decode(UUID.self, forKey: .phaseId),
+            projectId: container.decode(UUID.self, forKey: .projectId),
+            title: container.decode(String.self, forKey: .title),
+            actionType: container.decode(ActionType.self, forKey: .actionType),
+            expectedProof: container.decodeIfPresent(String.self, forKey: .expectedProof),
+            durationMinutes: container.decode(Int.self, forKey: .durationMinutes),
+            deadline: container.decodeIfPresent(Date.self, forKey: .deadline),
+            status: container.decode(PlannedSessionStatus.self, forKey: .status),
+            completedSessionId: container.decodeIfPresent(UUID.self, forKey: .completedSessionId),
+            createdAt: container.decode(Date.self, forKey: .createdAt),
+            updatedAt: container.decode(Date.self, forKey: .updatedAt),
+            deletedAt: container.decodeIfPresent(Date.self, forKey: .deletedAt),
+            schemaVersion: container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+                ?? JournalSchema.currentVersion
+        )
     }
 }
 
