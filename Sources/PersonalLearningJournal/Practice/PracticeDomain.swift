@@ -26,6 +26,12 @@ public struct PracticeReminderTime: Codable, Equatable, Sendable {
 public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var projectId: UUID?
+    /// Optional revision scope. Nil keeps legacy project-owned routines
+    /// readable while a published plan revision can carry an immutable
+    /// routine structure alongside its phases and sessions.
+    public var planRevisionID: UUID?
+    public var planSeriesID: UUID?
+    public var isStructuralLocked: Bool
     public var name: String
     public var symbolName: String
     public var color: PracticeSemanticColor
@@ -41,6 +47,9 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
     public init(
         id: UUID = UUID(),
         projectId: UUID? = nil,
+        planRevisionID: UUID? = nil,
+        planSeriesID: UUID? = nil,
+        isStructuralLocked: Bool = false,
         name: String,
         symbolName: String,
         color: PracticeSemanticColor,
@@ -55,6 +64,9 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
     ) {
         self.id = id
         self.projectId = projectId
+        self.planRevisionID = planRevisionID
+        self.planSeriesID = planSeriesID
+        self.isStructuralLocked = isStructuralLocked
         self.name = name.trimmedForJournal
         self.symbolName = symbolName.trimmedForJournal
         self.color = color
@@ -93,7 +105,8 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, name, symbolName, color, targetMinutes, weekdays, reminderTime
+        case id, projectId, planRevisionID, planSeriesID, isStructuralLocked
+        case name, symbolName, color, targetMinutes, weekdays, reminderTime
         case isArchived, createdAt, updatedAt, deletedAt, schemaVersion
     }
 
@@ -102,6 +115,9 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
         self.init(
             id: try container.decode(UUID.self, forKey: .id),
             projectId: try container.decodeIfPresent(UUID.self, forKey: .projectId),
+            planRevisionID: try container.decodeIfPresent(UUID.self, forKey: .planRevisionID),
+            planSeriesID: try container.decodeIfPresent(UUID.self, forKey: .planSeriesID),
+            isStructuralLocked: try container.decodeIfPresent(Bool.self, forKey: .isStructuralLocked) ?? false,
             name: try container.decode(String.self, forKey: .name),
             symbolName: try container.decode(String.self, forKey: .symbolName),
             color: try container.decode(PracticeSemanticColor.self, forKey: .color),

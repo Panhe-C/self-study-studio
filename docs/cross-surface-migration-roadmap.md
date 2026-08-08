@@ -189,7 +189,9 @@ unsigned iOS Simulator build, and `git diff --check` all pass. B2 is implemented
 series/revision identities, and queryable superseded history. `RevisionGuard` validates the
 base revision and caller-supplied CloudKit change tag before activation. The adjustment UI
 captures that expectation when it opens, pending mutations freeze it with their transaction,
-and grouped stale writes become terminal without blocking unrelated transactions.
+and grouped stale writes become terminal without blocking unrelated transactions. Terminal
+mutations are persisted for manual recovery and excluded from automatic retries; same-record
+draft/activation writes coalesce to the latest payload before grouping.
 
 **Implemented.** User-visible plan language is Learning Plan across Wizard, Detail, Today,
 Projects, Review/Calendar consumers, with an explicit `Adjust Plan` entry. Structural edits
@@ -201,13 +203,16 @@ validation, and rollback-safe persistence. Ambiguous multiple-active projects st
 explicit survivor-selection review; unresolved choices never execute. Published plan/phase
 structure is immutable in sync merges while planned-session execution fields remain mergeable,
 and historical revisions open with their phases, planned sessions, and linked proof.
+Revision-scoped Practice Routine snapshots carry the same series/revision identity and lock on
+activation; legacy project-owned routines are bound to the surviving published revision during
+migration, while B3 still owns Blocks and cadence redesign.
 
 **Independent verification.** Existing `coursePlan` records load and display under the new
 language with no data loss. Activating a draft built from stale state fails and does not
 overwrite the newer revision. Superseded revisions remain readable and explain historical
 decisions.
 
-Verification: `swift test` (348 tests / 0 failures), `swift build`, Web `npm test` (48 tests / 0
+Verification: `swift test` (357 tests / 0 failures), `swift build`, Web `npm test` (48 tests / 0
 failures), `npm run lint`, and `git diff --check` pass. The unsigned iOS simulator build reaches
 asset compilation but this machine has no available simulator runtime; local and fake-client
 Revision Guard paths are verified, while real CloudKit conditional-write behavior and

@@ -114,16 +114,34 @@ public final class CoursePlanningService {
             )
         }
 
+        let revisionRoutines: [PracticeRoutine] = basePlan.map { base in
+            snapshot.practiceRoutines
+                .filter { $0.planRevisionID == base.revisionID }
+                .map { routine in
+                    var value = routine
+                    value.id = UUID()
+                    value.planRevisionID = plan.revisionID
+                    value.planSeriesID = plan.planSeriesID
+                    value.isStructuralLocked = false
+                    value.createdAt = createdAt
+                    value.updatedAt = createdAt
+                    value.deletedAt = nil
+                    return value
+                }
+        } ?? []
+
         let newRecordExpectations = Dictionary(uniqueKeysWithValues: (
             [plan.reference]
                 + phases.map { JournalEntity.planPhase($0).reference }
                 + plannedSessions.map { JournalEntity.plannedSession($0).reference }
+                + revisionRoutines.map { JournalEntity.practiceRoutine($0).reference }
         ).map { ($0, RevisionGuardExpectation.newRecord()) })
         try repository.commit(
             JournalTransaction(
                 upserts: [.coursePlan(plan)]
                     + phases.map(JournalEntity.planPhase)
-                    + plannedSessions.map(JournalEntity.plannedSession),
+                    + plannedSessions.map(JournalEntity.plannedSession)
+                    + revisionRoutines.map(JournalEntity.practiceRoutine),
                 origin: .user,
                 revisionExpectations: newRecordExpectations
             )
@@ -196,9 +214,19 @@ public final class CoursePlanningService {
             value.isStructuralLocked = true
             return value
         }
+        let activatedRoutines = snapshot.practiceRoutines
+            .filter { $0.planRevisionID == activatedPlan.revisionID }
+            .map { routine -> PracticeRoutine in
+                var value = routine
+                value.planRevisionID = activatedPlan.revisionID
+                value.planSeriesID = activatedPlan.planSeriesID
+                value.isStructuralLocked = true
+                return value
+            }
         var upserts: [JournalEntity] = [.coursePlan(activatedPlan), .project(project)]
             + activatedPhases.map(JournalEntity.planPhase)
             + activatedSessions.map(JournalEntity.plannedSession)
+            + activatedRoutines.map(JournalEntity.practiceRoutine)
         let activePlans = snapshot.coursePlans.filter {
             $0.projectId == project.id && $0.status == .active && $0.id != activatedPlan.id
         }
@@ -224,6 +252,11 @@ public final class CoursePlanningService {
                 var value = session
                 value.isStructuralLocked = true
                 upserts.append(.plannedSession(value))
+            }
+            for routine in snapshot.practiceRoutines where routine.planRevisionID == archived.revisionID {
+                var value = routine
+                value.isStructuralLocked = true
+                upserts.append(.practiceRoutine(value))
             }
         }
         let trailEvent = TrailEvent(
@@ -359,6 +392,9 @@ public final class CoursePlanningService {
             plan: plan,
             phases: snapshot.planPhases.filter { $0.planId == plan.id },
             sessions: snapshot.plannedSessions.filter { $0.planId == plan.id },
+            practiceRoutines: snapshot.practiceRoutines.filter {
+                $0.planRevisionID == plan.revisionID
+            },
             guardExpectation: expectation
         )
     }

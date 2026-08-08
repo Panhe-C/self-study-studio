@@ -62,6 +62,28 @@ struct CoursePlanDetailView: View {
                 }
             }
 
+            let revisionRoutines = viewModel.practiceRoutines.filter {
+                $0.planRevisionID == plan.revisionID
+            }
+            if !revisionRoutines.isEmpty {
+                Section("Practice routines in this revision") {
+                    ForEach(revisionRoutines) { routine in
+                        HStack {
+                            Label(routine.name, systemImage: routine.symbolName)
+                            Spacer()
+                            Text("\(routine.targetMinutes) min")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if routine.isStructuralLocked {
+                            Text("Structure locked after publication")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
             Section("Planned sessions") {
                 ForEach(viewModel.plannedSessions(for: plan.id)) { session in
                     VStack(alignment: .leading, spacing: 4) {

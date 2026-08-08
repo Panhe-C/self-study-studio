@@ -158,6 +158,9 @@ export function decodeJournalRecord(
     normalized.planSeriesID ??= normalized.planId;
     normalized.isStructuralLocked ??= false;
   }
+  if (kind === "practiceRoutine") {
+    normalized.isStructuralLocked ??= false;
+  }
   validateCrossFieldRules(normalized, kind, contract);
   return { kind, payload: normalized };
 }

@@ -31,6 +31,10 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
     public var enqueuedAt: Date
     public var retryCount: Int
     public var lastError: String?
+    /// A terminal mutation is retained for manual recovery but excluded from
+    /// automatic sync attempts. This bit is persisted so a restart cannot
+    /// resurrect a stale write into the retry queue.
+    public var isTerminal: Bool
 
     public init(
         id: UUID = UUID(),
@@ -40,7 +44,8 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
         revisionExpectation: RevisionGuardExpectation? = nil,
         enqueuedAt: Date = Date(),
         retryCount: Int = 0,
-        lastError: String? = nil
+        lastError: String? = nil,
+        isTerminal: Bool = false
     ) {
         self.id = id
         self.transactionID = transactionID ?? id
@@ -50,6 +55,7 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
         self.enqueuedAt = enqueuedAt
         self.retryCount = retryCount
         self.lastError = lastError
+        self.isTerminal = isTerminal
     }
 
     public var expectedChangeTag: String? {
@@ -58,7 +64,7 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, transactionID, entity, operation, revisionExpectation
-        case enqueuedAt, retryCount, lastError
+        case enqueuedAt, retryCount, lastError, isTerminal
     }
 
     public init(from decoder: Decoder) throws {
@@ -75,7 +81,8 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
             ),
             enqueuedAt: container.decode(Date.self, forKey: .enqueuedAt),
             retryCount: container.decodeIfPresent(Int.self, forKey: .retryCount) ?? 0,
-            lastError: container.decodeIfPresent(String.self, forKey: .lastError)
+            lastError: container.decodeIfPresent(String.self, forKey: .lastError),
+            isTerminal: container.decodeIfPresent(Bool.self, forKey: .isTerminal) ?? false
         )
     }
 }

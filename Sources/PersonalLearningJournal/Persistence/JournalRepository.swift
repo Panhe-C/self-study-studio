@@ -4,6 +4,12 @@ public protocol JournalRepository: AnyObject {
     func snapshot() throws -> JournalSnapshot
     func commit(_ transaction: JournalTransaction) throws
     func pendingMutations(limit: Int) throws -> [PendingMutation]
+    /// Terminal mutations remain available for a deliberate recovery UI but
+    /// are never returned by the automatic pending queue.
+    func terminalMutations(limit: Int) throws -> [PendingMutation]
+    /// Re-enables selected terminal mutations after a user has resolved the
+    /// conflict or refreshed its guard expectation.
+    func requeueTerminalMutations(_ mutationIDs: Set<UUID>) throws
     func acknowledge(_ mutationIDs: Set<UUID>, metadata: [SyncRecordMetadata]) throws
     func conflicts() throws -> [SyncConflict]
     func resolveConflict(id: UUID, with entity: JournalEntity) throws
@@ -30,6 +36,9 @@ public protocol JournalRepository: AnyObject {
 }
 
 public extension JournalRepository {
+    func terminalMutations(limit: Int) throws -> [PendingMutation] { [] }
+    func requeueTerminalMutations(_ mutationIDs: Set<UUID>) throws {}
+
     func saveCalendarBinding(_ binding: CalendarBinding) throws {}
     func calendarBinding(for plannedSessionID: UUID) throws -> CalendarBinding? { nil }
     func calendarBindings() throws -> [CalendarBinding] { [] }
@@ -217,7 +226,25 @@ public final class InMemoryJournalRepository: JournalRepository {
     }
 
     public func pendingMutations(limit: Int) throws -> [PendingMutation] {
-        withLock { Array(outbox.prefix(max(0, limit))) }
+        withLock {
+            Array(outbox.filter { !$0.isTerminal }.prefix(max(0, limit)))
+        }
+    }
+
+    public func terminalMutations(limit: Int) throws -> [PendingMutation] {
+        withLock {
+            Array(outbox.filter(\.isTerminal).prefix(max(0, limit)))
+        }
+    }
+
+    public func requeueTerminalMutations(_ mutationIDs: Set<UUID>) throws {
+        withLock {
+            for index in outbox.indices where mutationIDs.contains(outbox[index].id) {
+                guard outbox[index].isTerminal else { continue }
+                outbox[index].isTerminal = false
+                outbox[index].lastError = nil
+            }
+        }
     }
 
     public func acknowledge(
@@ -286,6 +313,7 @@ public final class InMemoryJournalRepository: JournalRepository {
                     outbox[index].lastError = message
                 } else if let message = terminal[outbox[index].id] {
                     outbox[index].lastError = message
+                    outbox[index].isTerminal = true
                 }
             }
         }
@@ -339,6 +367,18 @@ public final class InMemoryJournalRepository: JournalRepository {
         revisionExpectation: RevisionGuardExpectation?
     ) {
         guard case .user = origin else { return }
+        // Planning drafts and activation are separate local transactions but
+        // represent one final payload per planning record. Coalescing those
+        // records prevents CloudKit from racing a stale draft against its
+        // activation transaction. Other journal entities retain their
+        // historical append-only outbox semantics. Terminal entries are
+        // retained for manual recovery and are intentionally not coalesced.
+        if Self.shouldCoalesce(entity.kind),
+           let index = outbox.lastIndex(where: {
+               $0.entity == entity && !$0.isTerminal
+           }) {
+            outbox.remove(at: index)
+        }
         outbox.append(
             PendingMutation(
                 transactionID: transactionID,
@@ -354,5 +394,14 @@ public final class InMemoryJournalRepository: JournalRepository {
         lock.lock()
         defer { lock.unlock() }
         return try body()
+    }
+
+    private static func shouldCoalesce(_ kind: JournalEntityKind) -> Bool {
+        switch kind {
+        case .coursePlan, .planPhase, .plannedSession, .practiceRoutine:
+            return true
+        default:
+            return false
+        }
     }
 }

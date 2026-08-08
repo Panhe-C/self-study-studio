@@ -588,6 +588,7 @@
       "expectedNormalized": {
         "id": "00000000-0000-0000-0000-000000000015",
         "projectId": "00000000-0000-0000-0000-000000000001",
+        "isStructuralLocked": false,
         "name": "Focused build",
         "symbolName": "hammer",
         "color": "blue",

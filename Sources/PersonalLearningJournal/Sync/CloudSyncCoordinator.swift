@@ -88,6 +88,10 @@ public struct CloudSendResult: Sendable {
     }
 }
 
+private struct CloudSyncPushSummary: Sendable {
+    var terminalErrors: [UUID: String] = [:]
+}
+
 public enum CloudRemoteChange: @unchecked Sendable {
     case save(CKRecord)
     case delete(CKRecord.ID)
@@ -198,11 +202,24 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
 
     private func performSync() async throws {
         let pending = try repository.pendingMutations(limit: 100)
+        let terminal = try repository.terminalMutations(limit: 100)
         currentStatus = .syncing(pending: pending.count)
         do {
             try await client.ensureZone(named: Self.zoneName)
-            try await push(pending)
+            let pushSummary = try await push(pending)
             try await pullRemoteChanges()
+            if !pushSummary.terminalErrors.isEmpty || !terminal.isEmpty {
+                let conflicts = (try? repository.conflicts().count) ?? 0
+                let message = (
+                    pushSummary.terminalErrors.values + terminal.compactMap(\.lastError)
+                ).sorted().joined(separator: "; ")
+                currentStatus = .failed(
+                    pending: (try? repository.pendingMutations(limit: 100).count) ?? 0,
+                    conflicts: conflicts,
+                    message: message
+                )
+                return
+            }
             currentStatus = .synced(lastSuccess: now())
         } catch {
             let remaining = (try? repository.pendingMutations(limit: 100).count) ?? pending.count
@@ -216,7 +233,7 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
         }
     }
 
-    private func push(_ pending: [PendingMutation]) async throws {
+    private func push(_ pending: [PendingMutation]) async throws -> CloudSyncPushSummary {
         let groups = Dictionary(grouping: pending, by: \.transactionID)
             .sorted { $0.key.uuidString < $1.key.uuidString }
         var acknowledgedMutationIDs: Set<UUID> = []
@@ -226,10 +243,14 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
 
         for (_, group) in groups {
             var revisionExpectations: [JournalEntityReference: CloudRevisionExpectation] = [:]
+            var missingLocalEntity = false
             let mutations = try group.compactMap { mutation -> CloudMutation? in
                 switch mutation.operation {
                 case .save:
-                    guard let entity = try repository.entity(for: mutation.entity) else { return nil }
+                    guard let entity = try repository.entity(for: mutation.entity) else {
+                        missingLocalEntity = true
+                        return nil
+                    }
                     if let expectation = mutation.revisionExpectation {
                         revisionExpectations[mutation.entity] = CloudRevisionExpectation(
                             entity: mutation.entity,
@@ -240,6 +261,16 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
                 case .delete:
                     return .delete(mutationID: mutation.id, entity: mutation.entity)
                 }
+            }
+            if missingLocalEntity {
+                // A transaction cannot be split safely after one of its
+                // records disappeared locally. Retain every mutation as a
+                // terminal recovery item instead of silently retrying the
+                // surviving subset forever.
+                for mutation in group {
+                    terminalErrors[mutation.id] = "missing local entity (\(mutation.entity.id.uuidString))"
+                }
+                continue
             }
             guard !mutations.isEmpty else { continue }
 
@@ -272,6 +303,7 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
                 terminal: terminalErrors
             )
         }
+        return CloudSyncPushSummary(terminalErrors: terminalErrors)
     }
 
     private func pullRemoteChanges() async throws {

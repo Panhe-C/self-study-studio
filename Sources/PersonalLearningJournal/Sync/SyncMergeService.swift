@@ -98,6 +98,20 @@ public struct SyncMergeService {
         case let (.schedulingPreferences(base), .schedulingPreferences(local), .schedulingPreferences(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.schedulingPreferences, now: now)
         case let (.practiceRoutine(base), .practiceRoutine(local), .practiceRoutine(server)):
+            if base.isStructuralLocked || local.isStructuralLocked || server.isStructuralLocked,
+               let conflict = try immutableConflict(
+                   base: base,
+                   local: local,
+                   server: server,
+                   structuralFields: [
+                       "projectId", "planRevisionID", "planSeriesID", "name", "symbolName",
+                       "color", "targetMinutes", "weekdays", "reminderTime", "isArchived"
+                   ],
+                   wrap: JournalEntity.practiceRoutine,
+                   now: now
+               ) {
+                return .conflict(conflict)
+            }
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.practiceRoutine, now: now)
         case let (.practiceSession(base), .practiceSession(local), .practiceSession(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.practiceSession, now: now)

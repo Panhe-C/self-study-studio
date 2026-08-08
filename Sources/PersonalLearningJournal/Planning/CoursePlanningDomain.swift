@@ -295,6 +295,9 @@ public struct PlanRevision: Codable, Equatable, Identifiable, Sendable {
     public let plan: LearningPlan
     public let phases: [PlanPhase]
     public let sessions: [PlannedSession]
+    /// Revision-scoped Practice Routine snapshots. Legacy routines remain
+    /// project-owned when this collection is empty.
+    public let practiceRoutines: [PracticeRoutine]
 
     public var id: UUID { revisionID }
     public var isActive: Bool { plan.status == .active }
@@ -303,7 +306,8 @@ public struct PlanRevision: Codable, Equatable, Identifiable, Sendable {
     public init(
         plan: LearningPlan,
         phases: [PlanPhase],
-        sessions: [PlannedSession]
+        sessions: [PlannedSession],
+        practiceRoutines: [PracticeRoutine] = []
     ) {
         self.revisionID = plan.revisionID
         self.planSeriesID = plan.planSeriesID
@@ -312,6 +316,7 @@ public struct PlanRevision: Codable, Equatable, Identifiable, Sendable {
         self.plan = plan
         self.phases = phases
         self.sessions = sessions
+        self.practiceRoutines = practiceRoutines
     }
 }
 
@@ -325,6 +330,7 @@ public struct PlanRevisionDraft: Codable, Equatable, Identifiable, Sendable {
     public var plan: LearningPlan
     public var phases: [PlanPhase]
     public var sessions: [PlannedSession]
+    public var practiceRoutines: [PracticeRoutine]
     /// Captured when the adjustment UI opens. It is persisted with the draft
     /// so a restart cannot silently replace the caller's base/tag expectation.
     public var guardExpectation: RevisionGuardExpectation
@@ -335,6 +341,7 @@ public struct PlanRevisionDraft: Codable, Equatable, Identifiable, Sendable {
         plan: LearningPlan,
         phases: [PlanPhase],
         sessions: [PlannedSession],
+        practiceRoutines: [PracticeRoutine] = [],
         revisionID: UUID? = nil,
         planSeriesID: UUID? = nil,
         baseRevisionID: UUID? = nil,
@@ -348,6 +355,7 @@ public struct PlanRevisionDraft: Codable, Equatable, Identifiable, Sendable {
         self.plan = plan
         self.phases = phases
         self.sessions = sessions
+        self.practiceRoutines = practiceRoutines
         self.guardExpectation = guardExpectation
     }
 
@@ -357,12 +365,17 @@ public struct PlanRevisionDraft: Codable, Equatable, Identifiable, Sendable {
         value.planSeriesID = planSeriesID
         value.baseRevisionID = baseRevisionID
         value.supersedesID = supersedesID
-        return PlanRevision(plan: value, phases: phases, sessions: sessions)
+        return PlanRevision(
+            plan: value,
+            phases: phases,
+            sessions: sessions,
+            practiceRoutines: practiceRoutines
+        )
     }
 
     private enum CodingKeys: String, CodingKey {
         case revisionID, planSeriesID, baseRevisionID, supersedesID
-        case plan, phases, sessions, guardExpectation
+        case plan, phases, sessions, practiceRoutines, guardExpectation
     }
 
     public init(from decoder: Decoder) throws {
@@ -372,6 +385,7 @@ public struct PlanRevisionDraft: Codable, Equatable, Identifiable, Sendable {
             plan: plan,
             phases: try container.decode([PlanPhase].self, forKey: .phases),
             sessions: try container.decode([PlannedSession].self, forKey: .sessions),
+            practiceRoutines: try container.decodeIfPresent([PracticeRoutine].self, forKey: .practiceRoutines) ?? [],
             revisionID: try container.decodeIfPresent(UUID.self, forKey: .revisionID) ?? plan.revisionID,
             planSeriesID: try container.decodeIfPresent(UUID.self, forKey: .planSeriesID) ?? plan.planSeriesID,
             baseRevisionID: try container.decodeIfPresent(UUID.self, forKey: .baseRevisionID) ?? plan.baseRevisionID,
@@ -435,7 +449,10 @@ public extension JournalSnapshot {
                     PlanRevision(
                         plan: plan,
                         phases: planPhases.filter { $0.planId == plan.id },
-                        sessions: plannedSessions.filter { $0.planId == plan.id }
+                        sessions: plannedSessions.filter { $0.planId == plan.id },
+                        practiceRoutines: practiceRoutines.filter {
+                            $0.planRevisionID == plan.revisionID
+                        }
                     )
                 }
             )

@@ -168,7 +168,7 @@ _Gap_: Web authoring and publication remain a later C1/C2 responsibility.
 **Plan Revision** `[shipped]`:
 One immutable published structural version of a Learning Plan; only one revision is active, while superseded revisions remain available to explain historical learning decisions.
 _Avoid_: Backup, edit history, separate learning plan
-_Gap_: Web reads and writes arrive in C1/C2; the iPhone repository and Cloud sync now preserve immutable revision identity.
+_Gap_: Web reads and writes arrive in C1/C2; the iPhone repository and Cloud sync now preserve immutable revision identity and revision-scoped Practice Routine snapshots.
 
 **Learning Plan** `[shipped]`:
 A Project-owned plan that turns a learning goal into ordered Phases, Planned Sessions, and expected Proof; course material may inform it but is not required.
@@ -221,7 +221,7 @@ _Avoid_: Completed session, deleted session, missed practice occurrence
 **Practice Routine** `[partial]`:
 A repeatable, Project-owned practice format with one schedule, one overall target, and an ordered set of Practice Blocks; a Project has at most one active Routine.
 _Avoid_: Learning Plan, daily task list, collection of unrelated drills
-_Gap_: `PracticeRoutine` is flat with a single `targetMinutes`, has no Blocks, and a Project may hold several active Routines.
+_Gap_: `PracticeRoutine` is still flat with a single `targetMinutes` and has no Blocks; B2 now carries optional Plan Revision identity/structural locking while a Project may still hold several active Routines until B3.
 
 **Practice Block** `[planned]`:
 A named part of a Practice Routine that preserves a distinct training purpose and target duration while participating in one continuous practice experience.

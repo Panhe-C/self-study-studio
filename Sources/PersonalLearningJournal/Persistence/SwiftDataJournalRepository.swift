@@ -62,7 +62,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
             for entity in transaction.upserts {
                 try upsert(entity)
                 if case .user = transaction.origin {
-                    insertMutation(
+                    try insertMutation(
                         for: entity.reference,
                         operation: .save,
                         transactionID: transaction.transactionID,
@@ -73,7 +73,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
             for reference in transaction.deletions {
                 try markDeleted(reference)
                 if case .user = transaction.origin {
-                    insertMutation(
+                    try insertMutation(
                         for: reference,
                         operation: .delete,
                         transactionID: transaction.transactionID,
@@ -110,8 +110,30 @@ public final class SwiftDataJournalRepository: JournalRepository {
 
     public func pendingMutations(limit: Int) throws -> [PendingMutation] {
         let records = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+            .filter { !$0.isTerminal }
             .sorted { $0.enqueuedAt < $1.enqueuedAt }
         return try records.prefix(max(0, limit)).map { try $0.domain() }
+    }
+
+    public func terminalMutations(limit: Int) throws -> [PendingMutation] {
+        let records = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+            .filter(\.isTerminal)
+            .sorted { $0.enqueuedAt < $1.enqueuedAt }
+        return try records.prefix(max(0, limit)).map { try $0.domain() }
+    }
+
+    public func requeueTerminalMutations(_ mutationIDs: Set<UUID>) throws {
+        do {
+            let records = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+            for record in records where mutationIDs.contains(record.id) && record.isTerminal {
+                record.isTerminal = false
+                record.lastError = nil
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
     }
 
     public func acknowledge(
@@ -156,7 +178,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
             value.resolvedAt = conflict.resolvedAt
             conflict.payload = try JSONEncoder.journal.encode(value)
             try upsert(entity)
-            insertMutation(
+            try insertMutation(
                 for: entity.reference,
                 operation: .save,
                 transactionID: UUID(),
@@ -225,6 +247,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
                     record.lastError = message
                 } else if let message = terminal[record.id] {
                     record.lastError = message
+                    record.isTerminal = true
                 }
             }
             try context.save()
@@ -551,7 +574,18 @@ public final class SwiftDataJournalRepository: JournalRepository {
         operation: SyncOperation,
         transactionID: UUID,
         revisionExpectation: RevisionGuardExpectation?
-    ) {
+    ) throws {
+        if Self.shouldCoalesce(entity.kind) {
+            let existing = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+                .first {
+                    $0.entityKindRaw == entity.kind.rawValue &&
+                    $0.entityID == entity.id &&
+                    !$0.isTerminal
+                }
+            if let existing {
+                context.delete(existing)
+            }
+        }
         context.insert(
             StoredPendingMutationV2(
                 id: UUID(),
@@ -568,6 +602,15 @@ public final class SwiftDataJournalRepository: JournalRepository {
 
     private static func key(for reference: JournalEntityReference) -> String {
         "\(reference.kind.rawValue):\(reference.id.uuidString)"
+    }
+
+    private static func shouldCoalesce(_ kind: JournalEntityKind) -> Bool {
+        switch kind {
+        case .coursePlan, .planPhase, .plannedSession, .practiceRoutine:
+            return true
+        default:
+            return false
+        }
     }
 
     private func loadStateMetadata() throws -> JournalStateMetadata? {
@@ -865,6 +908,7 @@ private protocol StoredEntityV2: PersistentModel {
     var enqueuedAt: Date
     var retryCount: Int
     var lastError: String?
+    var isTerminal: Bool
 
     init(
         id: UUID,
@@ -875,7 +919,8 @@ private protocol StoredEntityV2: PersistentModel {
         revisionExpectation: RevisionGuardExpectation?,
         enqueuedAt: Date,
         retryCount: Int,
-        lastError: String? = nil
+        lastError: String? = nil,
+        isTerminal: Bool = false
     ) {
         self.id = id
         self.transactionID = transactionID
@@ -886,6 +931,7 @@ private protocol StoredEntityV2: PersistentModel {
         self.enqueuedAt = enqueuedAt
         self.retryCount = retryCount
         self.lastError = lastError
+        self.isTerminal = isTerminal
     }
 
     func domain() throws -> PendingMutation {
@@ -903,7 +949,8 @@ private protocol StoredEntityV2: PersistentModel {
             },
             enqueuedAt: enqueuedAt,
             retryCount: retryCount,
-            lastError: lastError
+            lastError: lastError,
+            isTerminal: isTerminal
         )
     }
 }

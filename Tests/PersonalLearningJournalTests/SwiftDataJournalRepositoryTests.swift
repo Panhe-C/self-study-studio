@@ -187,6 +187,34 @@ final class SwiftDataJournalRepositoryTests: XCTestCase {
         XCTAssertEqual(mutation.revisionExpectation, expectation)
     }
 
+    func testTerminalMutationPersistsAcrossRestartButIsExcludedFromPending() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("terminal-outbox.store")
+        let project = Project(name: "Terminal", area: "AI", goal: "Learn", currentNextStep: "Read")
+        let reference = JournalEntityReference(.project, project.id)
+        var mutationID = UUID()
+
+        try autoreleasepool {
+            let repository = try SwiftDataJournalRepository(url: url)
+            try repository.commit(JournalTransaction(upserts: [.project(project)], origin: .user))
+            mutationID = try XCTUnwrap(repository.pendingMutations(limit: 1).first?.id)
+            try repository.recordSyncFailures(
+                retryable: [:],
+                terminal: [mutationID: "stale guard"]
+            )
+            XCTAssertTrue(try repository.pendingMutations(limit: 10).isEmpty)
+            XCTAssertEqual(try repository.terminalMutations(limit: 10).map(\.entity), [reference])
+        }
+
+        let reopened = try SwiftDataJournalRepository(url: url)
+        XCTAssertTrue(try reopened.pendingMutations(limit: 10).isEmpty)
+        let terminal = try XCTUnwrap(reopened.terminalMutations(limit: 10).first)
+        XCTAssertEqual(terminal.id, mutationID)
+        XCTAssertTrue(terminal.isTerminal)
+        XCTAssertEqual(terminal.lastError, "stale guard")
+    }
+
     func testRemoteTransactionPersistsWithoutCreatingOutbox() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

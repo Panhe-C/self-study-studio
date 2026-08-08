@@ -225,6 +225,9 @@ public struct CloudRecordMapper {
 
     private func encode(_ value: PlanPhase, into record: CKRecord) {
         record["planId"] = value.planId.uuidString
+        record["planRevisionID"] = value.planRevisionID.uuidString
+        record["planSeriesID"] = value.planSeriesID.uuidString
+        record["isStructuralLocked"] = value.isStructuralLocked
         record["title"] = value.title
         record["objective"] = value.objective
         record["expectedProof"] = value.expectedProof
@@ -239,6 +242,9 @@ public struct CloudRecordMapper {
 
     private func encode(_ value: PlannedSession, into record: CKRecord) {
         record["planId"] = value.planId.uuidString
+        record["planRevisionID"] = value.planRevisionID.uuidString
+        record["planSeriesID"] = value.planSeriesID.uuidString
+        record["isStructuralLocked"] = value.isStructuralLocked
         record["phaseId"] = value.phaseId.uuidString
         record["projectId"] = value.projectId.uuidString
         record["title"] = value.title
@@ -282,6 +288,9 @@ public struct CloudRecordMapper {
 
     private func encode(_ value: PracticeRoutine, into record: CKRecord) {
         record["projectId"] = value.projectId?.uuidString
+        record["planRevisionID"] = value.planRevisionID?.uuidString
+        record["planSeriesID"] = value.planSeriesID?.uuidString
+        record["isStructuralLocked"] = value.isStructuralLocked
         record["name"] = value.name
         record["symbolName"] = value.symbolName
         record["color"] = value.color.rawValue
@@ -501,6 +510,9 @@ public struct CloudRecordMapper {
         try PlanPhase(
             id: id,
             planId: try uuid("planId", from: record),
+            planRevisionID: try optionalUUID("planRevisionID", from: record) ?? uuid("planId", from: record),
+            planSeriesID: try optionalUUID("planSeriesID", from: record) ?? uuid("planId", from: record),
+            isStructuralLocked: optionalBoolean("isStructuralLocked", from: record) ?? false,
             title: try string("title", from: record),
             objective: try string("objective", from: record),
             expectedProof: optionalString("expectedProof", from: record) ?? "",
@@ -522,6 +534,9 @@ public struct CloudRecordMapper {
         return try PlannedSession(
             id: id,
             planId: try uuid("planId", from: record),
+            planRevisionID: try optionalUUID("planRevisionID", from: record) ?? uuid("planId", from: record),
+            planSeriesID: try optionalUUID("planSeriesID", from: record) ?? uuid("planId", from: record),
+            isStructuralLocked: optionalBoolean("isStructuralLocked", from: record) ?? false,
             phaseId: try uuid("phaseId", from: record),
             projectId: try uuid("projectId", from: record),
             title: try string("title", from: record),
@@ -586,6 +601,9 @@ public struct CloudRecordMapper {
         return try PracticeRoutine(
             id: id,
             projectId: projectId,
+            planRevisionID: try optionalUUID("planRevisionID", from: record),
+            planSeriesID: try optionalUUID("planSeriesID", from: record),
+            isStructuralLocked: optionalBoolean("isStructuralLocked", from: record) ?? false,
             name: try string("name", from: record),
             symbolName: try string("symbolName", from: record),
             color: color,
@@ -637,6 +655,10 @@ public struct CloudRecordMapper {
 
     private func optionalInteger(_ key: String, from record: CKRecord) -> Int? {
         (record[key] as? NSNumber)?.intValue
+    }
+
+    private func optionalBoolean(_ key: String, from record: CKRecord) -> Bool? {
+        (record[key] as? NSNumber)?.boolValue
     }
 
     private func boolean(_ key: String, from record: CKRecord) throws -> Bool {

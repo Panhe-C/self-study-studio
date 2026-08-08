@@ -224,6 +224,29 @@ public struct PlanRevisionMigration {
             migrated.plannedSessions[index].planSeriesID = plan.planSeriesID
             migrated.plannedSessions[index].isStructuralLocked = plan.isPublished
         }
+        let activePlansByProject = Dictionary(
+            uniqueKeysWithValues: transformedPlans
+                .filter { $0.status == .active }
+                .map { ($0.projectId, $0) }
+        )
+        for index in migrated.practiceRoutines.indices {
+            var routine = migrated.practiceRoutines[index]
+            if let revisionID = routine.planRevisionID,
+               let plan = transformedPlans.first(where: { $0.revisionID == revisionID }) {
+                routine.planRevisionID = plan.revisionID
+                routine.planSeriesID = plan.planSeriesID
+                routine.isStructuralLocked = plan.isPublished
+            } else if let projectID = routine.projectId,
+                      let activePlan = activePlansByProject[projectID] {
+                // Legacy routines were project-owned. Bind them to the
+                // surviving active revision without duplicating or deleting
+                // their record; future structural edits can now be revisioned.
+                routine.planRevisionID = activePlan.revisionID
+                routine.planSeriesID = activePlan.planSeriesID
+                routine.isStructuralLocked = activePlan.isPublished
+            }
+            migrated.practiceRoutines[index] = routine
+        }
         for index in migrated.projects.indices {
             let projectID = migrated.projects[index].id
             migrated.projects[index].activeCoursePlanId = activePlanByProject[projectID]
