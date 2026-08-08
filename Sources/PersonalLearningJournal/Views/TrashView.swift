@@ -11,6 +11,8 @@ public struct TrashView: View {
     @State private var noticeMessage: String?
     @State private var exportDocument: TrashExportDocument?
     @State private var pendingUnencryptedExportProject: Project?
+    @State private var pendingOrphanCleanupPaths: [String] = []
+    @State private var pendingCorruptQueueQuarantineConfirmation = false
 
     public init(
         viewModel: JournalViewModel,
@@ -34,7 +36,9 @@ public struct TrashView: View {
                     .foregroundStyle(.secondary)
             }
             if !viewModel.pendingAttachmentCleanupPaths.isEmpty
-                || viewModel.attachmentCleanupQueueError != nil {
+                || !viewModel.pendingAttachmentCleanupOrphanPaths.isEmpty
+                || viewModel.attachmentCleanupQueueError != nil
+                || viewModel.attachmentCleanupQueueQuarantineURL != nil {
                 Section("Pending attachment cleanup") {
                     if let queueError = viewModel.attachmentCleanupQueueError {
                         Text(queueError.localizedDescription)
@@ -44,7 +48,12 @@ public struct TrashView: View {
                     Text("Some attachment files still need cleanup. This local retry queue survives leaving and reopening Trash.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    if viewModel.attachmentCleanupQueueError != nil {
+                    if viewModel.attachmentCleanupQueueError == .invalidQueue
+                        || viewModel.attachmentCleanupQueueError == .quarantineFailed {
+                        Button("Quarantine corrupt queue") {
+                            pendingCorruptQueueQuarantineConfirmation = true
+                        }
+                    } else if viewModel.attachmentCleanupQueueError != nil {
                         Button("Recover attachment cleanup queue") {
                             do {
                                 try viewModel.recoverAttachmentCleanupQueue()
@@ -52,6 +61,14 @@ public struct TrashView: View {
                             } catch {
                                 errorMessage = error.localizedDescription
                             }
+                        }
+                    }
+                    if !viewModel.pendingAttachmentCleanupOrphanPaths.isEmpty {
+                        Text("Orphan paths awaiting confirmation: \(viewModel.pendingAttachmentCleanupOrphanPaths.joined(separator: ", "))")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                        Button("Review orphan cleanup") {
+                            pendingOrphanCleanupPaths = viewModel.pendingAttachmentCleanupOrphanPaths
                         }
                     }
                     if !viewModel.pendingAttachmentCleanupPaths.isEmpty {
@@ -62,6 +79,14 @@ public struct TrashView: View {
                             } catch {
                                 errorMessage = error.localizedDescription
                             }
+                        }
+                    }
+                    if let quarantineURL = viewModel.attachmentCleanupQueueQuarantineURL {
+                        Text("Quarantined queue: \(quarantineURL.lastPathComponent)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        ShareLink(item: quarantineURL) {
+                            Label("Share quarantined queue", systemImage: "square.and.arrow.up")
                         }
                     }
                 }
@@ -138,6 +163,38 @@ public struct TrashView: View {
             }
         } message: {
             Text("This archive is unencrypted and may contain private learning history and attachments. Continue only if you will save or share it in a trusted location.")
+        }
+        .alert("Confirm orphan cleanup", isPresented: Binding(
+            get: { !pendingOrphanCleanupPaths.isEmpty },
+            set: { if !$0 { pendingOrphanCleanupPaths = [] } }
+        )) {
+            Button("Cancel", role: .cancel) { pendingOrphanCleanupPaths = [] }
+            Button("Delete confirmed paths", role: .destructive) {
+                let paths = pendingOrphanCleanupPaths
+                do {
+                    try viewModel.recoverLegacyOrphan(paths: paths, confirmed: true)
+                    errorMessage = nil
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+                pendingOrphanCleanupPaths = []
+            }
+        } message: {
+            Text("Only these paths under trusted attachment roots will be deleted:\n\(pendingOrphanCleanupPaths.joined(separator: "\n"))")
+        }
+        .alert("Quarantine corrupt queue?", isPresented: $pendingCorruptQueueQuarantineConfirmation) {
+            Button("Cancel", role: .cancel) { pendingCorruptQueueQuarantineConfirmation = false }
+            Button("Quarantine", role: .destructive) {
+                do {
+                    _ = try viewModel.quarantineCorruptQueue()
+                    noticeMessage = "The corrupt queue was preserved in quarantine. Use Share quarantined queue to export it."
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+                pendingCorruptQueueQuarantineConfirmation = false
+            }
+        } message: {
+            Text("The original corrupt queue will be moved to a timestamped quarantine file and kept for sharing. New cleanup work can continue only after this operation succeeds.")
         }
         .alert("Could not complete action", isPresented: Binding(
             get: { errorMessage != nil },

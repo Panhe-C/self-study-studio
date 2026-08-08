@@ -16,8 +16,14 @@ public final class JournalViewModel: ObservableObject {
     @Published public private(set) var pendingCanonicalNextStepProposal: CanonicalNextStepProposal?
     @Published public private(set) var pendingAttachmentCleanupEntries: [AttachmentCleanupEntry]
     @Published public private(set) var attachmentCleanupQueueError: AttachmentCleanupQueueError?
+    @Published public private(set) var attachmentCleanupQueueQuarantineURL: URL?
     public var pendingAttachmentCleanupPaths: [String] {
         pendingAttachmentCleanupEntries.flatMap(\.paths)
+    }
+    public var pendingAttachmentCleanupOrphanPaths: [String] {
+        pendingAttachmentCleanupEntries
+            .filter { $0.projectID == nil }
+            .flatMap(\.paths)
     }
     @Published private var rememberedCoursePlanningInputs: [UUID: CoursePlanningInput]
 
@@ -74,6 +80,7 @@ public final class JournalViewModel: ObservableObject {
         self.pendingCanonicalNextStepProposal = nil
         self.pendingAttachmentCleanupEntries = []
         self.attachmentCleanupQueueError = nil
+        self.attachmentCleanupQueueQuarantineURL = nil
         self.rememberedCoursePlanningInputs = [:]
         loadAttachmentCleanupQueue()
     }
@@ -376,24 +383,84 @@ public final class JournalViewModel: ObservableObject {
         guard let entry = pendingAttachmentCleanupEntries.first(where: {
             !Set(paths).isDisjoint(with: $0.paths)
         }) else { return }
-        try retryAttachmentCleanup(projectID: entry.projectID, paths: paths)
+        guard let projectID = entry.projectID else {
+            throw AttachmentCleanupQueueError.orphanCleanupRequiresConfirmation(
+                paths.filter { entry.paths.contains($0) }
+            )
+        }
+        try retryAttachmentCleanup(projectID: projectID, paths: paths)
     }
 
     public func retryPendingAttachmentCleanup() throws {
         try reloadAttachmentCleanupQueue()
+        let orphanPaths = pendingAttachmentCleanupOrphanPaths
         var firstError: Error?
         for entry in pendingAttachmentCleanupEntries {
+            guard let projectID = entry.projectID else { continue }
             do {
-                try retryAttachmentCleanup(projectID: entry.projectID, paths: entry.paths)
+                try retryAttachmentCleanup(projectID: projectID, paths: entry.paths)
             } catch {
                 firstError = firstError ?? error
             }
         }
         if let firstError { throw firstError }
+        if !orphanPaths.isEmpty {
+            throw AttachmentCleanupQueueError.orphanCleanupRequiresConfirmation(orphanPaths)
+        }
     }
 
     public func recoverAttachmentCleanupQueue() throws {
+        do {
+            try reloadAttachmentCleanupQueue()
+        } catch AttachmentCleanupQueueError.invalidQueue {
+            _ = try quarantineCorruptQueue()
+        }
+    }
+
+    public func recoverLegacyOrphan(paths: [String], confirmed: Bool) throws {
         try reloadAttachmentCleanupQueue()
+        let orphanPaths = Set(pendingAttachmentCleanupOrphanPaths)
+        let selectedPaths = paths.filter { orphanPaths.contains($0) }
+        guard confirmed else {
+            throw AttachmentCleanupQueueError.orphanCleanupRequiresConfirmation(
+                selectedPaths.isEmpty ? paths : selectedPaths
+            )
+        }
+        guard !selectedPaths.isEmpty else {
+            throw AttachmentCleanupQueueError.orphanCleanupRequiresConfirmation(paths)
+        }
+
+        var failedPaths: [String] = []
+        var removedPaths: [String] = []
+        for path in selectedPaths {
+            do {
+                try attachmentStore.removeAttachment(at: URL(fileURLWithPath: path))
+                removedPaths.append(path)
+            } catch {
+                failedPaths.append(path)
+            }
+        }
+        try cleanupQueue.removeOrphan(paths: removedPaths)
+        refresh()
+        if !failedPaths.isEmpty {
+            throw AttachmentCleanupQueueError.orphanCleanupFailed(failedPaths)
+        }
+    }
+
+    @discardableResult
+    public func quarantineCorruptQueue() throws -> URL {
+        do {
+            let quarantineURL = try cleanupQueue.quarantineCorruptQueue()
+            attachmentCleanupQueueQuarantineURL = quarantineURL
+            try reloadAttachmentCleanupQueue()
+            return quarantineURL
+        } catch let error as AttachmentCleanupQueueError {
+            attachmentCleanupQueueError = error
+            throw error
+        } catch {
+            attachmentCleanupQueueError = .quarantineFailed
+            throw AttachmentCleanupQueueError.quarantineFailed
+        }
     }
 
     @discardableResult

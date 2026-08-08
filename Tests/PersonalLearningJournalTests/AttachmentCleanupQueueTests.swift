@@ -203,10 +203,98 @@ final class AttachmentCleanupQueueTests: XCTestCase {
         }
         XCTAssertEqual(try Data(contentsOf: queueURL), corruptData)
     }
+
+    func testLegacyImportedAssetBecomesOrphanEntryAndRequiresConfirmation() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let assetURL = root
+            .appendingPathComponent("LearningJournal/ImportedAssets/cloud.bin")
+        try FileManager.default.createDirectory(at: assetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("cloud".utf8).write(to: assetURL)
+        let queueURL = root
+            .appendingPathComponent("LearningJournal/Private/attachment-cleanup-queue.json")
+        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode([assetURL.path]).write(to: queueURL, options: [.atomic])
+
+        let viewModel = makeCleanupViewModel(root: root)
+
+        XCTAssertEqual(viewModel.pendingAttachmentCleanupOrphanPaths, [assetURL.path])
+        XCTAssertThrowsError(
+            try viewModel.recoverLegacyOrphan(paths: [assetURL.path], confirmed: false)
+        ) { error in
+            XCTAssertEqual(
+                error as? AttachmentCleanupQueueError,
+                .orphanCleanupRequiresConfirmation([assetURL.path])
+            )
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: assetURL.path))
+        try viewModel.recoverLegacyOrphan(paths: [assetURL.path], confirmed: true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: assetURL.path))
+        XCTAssertTrue(viewModel.pendingAttachmentCleanupOrphanPaths.isEmpty)
+    }
+
+    func testCorruptQueueCanBeQuarantinedAndNewCleanupCanProceed() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queueURL = root
+            .appendingPathComponent("LearningJournal/Private/attachment-cleanup-queue.json")
+        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let corruptData = Data("{\"paths\": [".utf8)
+        try corruptData.write(to: queueURL, options: [.atomic])
+        let queue = AttachmentCleanupQueue(fileURL: queueURL)
+
+        let quarantinedURL = try queue.quarantineCorruptQueue()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: queueURL.path))
+        XCTAssertEqual(try Data(contentsOf: quarantinedURL), corruptData)
+        XCTAssertTrue(try queue.load().isEmpty)
+        try queue.enqueue(projectID: UUID(), paths: [root.appendingPathComponent("LearningJournal/Attachments/file").path])
+        XCTAssertFalse(try queue.load().isEmpty)
+    }
+
+    func testCorruptQueueQuarantineFailurePreservesBlockedQueue() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queueURL = root.appendingPathComponent("cleanup-queue.json")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let corruptData = Data("not-json".utf8)
+        try corruptData.write(to: queueURL, options: [.atomic])
+        let queue = AttachmentCleanupQueue(
+            fileURL: queueURL,
+            moveItem: { _, _ in throw InjectedQueueQuarantineFailure() }
+        )
+
+        XCTAssertThrowsError(try queue.quarantineCorruptQueue()) { error in
+            XCTAssertEqual(error as? AttachmentCleanupQueueError, .quarantineFailed)
+        }
+        XCTAssertEqual(try Data(contentsOf: queueURL), corruptData)
+        XCTAssertThrowsError(try queue.load()) { error in
+            XCTAssertEqual(error as? AttachmentCleanupQueueError, .invalidQueue)
+        }
+    }
+
+    private func makeCleanupViewModel(root: URL) -> JournalViewModel {
+        let repository = InMemoryJournalRepository()
+        let journalService = JournalService(repository: repository)
+        return JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            attachmentStore: AttachmentStore(rootDirectory: root),
+            cleanupQueue: AttachmentCleanupQueue(rootDirectory: root),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: QueuePracticeTimerStateStore()),
+            syncRepository: repository
+        )
+    }
 }
 
 private struct InjectedQueueDeletionFailure: Error {}
 private struct InjectedQueueCommitFailure: Error {}
+private struct InjectedQueueQuarantineFailure: Error {}
 
 @MainActor
 private final class QueuePracticeTimerStateStore: PracticeTimerStateStore {

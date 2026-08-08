@@ -130,6 +130,43 @@ final class JournalViewModelTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: queueURL.path))
     }
 
+    func testCorruptQueueQuarantineRecoveryUnblocksPermanentDelete() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queueURL = root
+            .appendingPathComponent("LearningJournal/Private/attachment-cleanup-queue.json")
+        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let corruptData = Data("not-json".utf8)
+        try corruptData.write(to: queueURL, options: [.atomic])
+        let project = Project(
+            name: "Quarantine project",
+            area: "Test",
+            goal: "Recover queue",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let journalService = JournalService(repository: repository)
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            attachmentStore: AttachmentStore(rootDirectory: root),
+            cleanupQueue: AttachmentCleanupQueue(rootDirectory: root),
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore()),
+            syncRepository: repository
+        )
+
+        XCTAssertThrowsError(try viewModel.permanentlyDelete(projectId: project.id))
+        let quarantinedURL = try viewModel.quarantineCorruptQueue()
+        XCTAssertEqual(try Data(contentsOf: quarantinedURL), corruptData)
+        XCTAssertNoThrow(try viewModel.permanentlyDelete(projectId: project.id))
+    }
+
     @MainActor
     func testSyncSummaryShowsQueuedChangesAndConflictCount() async throws {
         let repository = InMemoryJournalRepository()

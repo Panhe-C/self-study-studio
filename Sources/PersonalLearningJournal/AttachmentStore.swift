@@ -15,6 +15,9 @@ public struct StoredAttachment: Equatable, Sendable {
 public enum AttachmentCleanupQueueError: Error, Equatable, Sendable {
     case invalidQueue
     case legacyQueueNeedsReview([String])
+    case orphanCleanupRequiresConfirmation([String])
+    case orphanCleanupFailed([String])
+    case quarantineFailed
 }
 
 extension AttachmentCleanupQueueError: LocalizedError {
@@ -24,15 +27,21 @@ extension AttachmentCleanupQueueError: LocalizedError {
             return "The attachment cleanup queue is unreadable. Repair or remove the queue file before retrying."
         case let .legacyQueueNeedsReview(paths):
             return "The legacy attachment cleanup queue contains paths without a safely identifiable project: \(paths.joined(separator: ", "))."
+        case let .orphanCleanupRequiresConfirmation(paths):
+            return "These attachment paths need explicit confirmation before deletion: \(paths.joined(separator: ", "))."
+        case let .orphanCleanupFailed(paths):
+            return "Some confirmed orphan attachment paths could not be deleted: \(paths.joined(separator: ", "))."
+        case .quarantineFailed:
+            return "The corrupt attachment cleanup queue could not be quarantined; the original file remains blocked for safety."
         }
     }
 }
 
 public struct AttachmentCleanupEntry: Codable, Equatable, Sendable {
-    public var projectID: UUID
+    public var projectID: UUID?
     public var paths: [String]
 
-    public init(projectID: UUID, paths: [String]) {
+    public init(projectID: UUID?, paths: [String]) {
         self.projectID = projectID
         self.paths = paths
     }
@@ -47,9 +56,16 @@ public enum AttachmentStoreError: Error, Equatable, Sendable {
 /// enter CloudKit sync payloads.
 public struct AttachmentCleanupQueue: Sendable {
     public let fileURL: URL
+    private let moveItem: @Sendable (URL, URL) throws -> Void
 
-    public init(fileURL: URL) {
+    public init(
+        fileURL: URL,
+        moveItem: @escaping @Sendable (URL, URL) throws -> Void = { source, destination in
+            try FileManager.default.moveItem(at: source, to: destination)
+        }
+    ) {
         self.fileURL = fileURL
+        self.moveItem = moveItem
     }
 
     public init(rootDirectory: URL) {
@@ -75,32 +91,39 @@ public struct AttachmentCleanupQueue: Sendable {
         guard let legacyPaths = try? JSONDecoder().decode([String].self, from: data) else {
             throw AttachmentCleanupQueueError.invalidQueue
         }
-        guard legacyPaths.allSatisfy({ legacyProjectID(in: $0) != nil }) else {
-            throw AttachmentCleanupQueueError.legacyQueueNeedsReview(legacyPaths)
+        let legacyEntries = legacyPaths.compactMap(legacyEntry(for:))
+        guard legacyEntries.count == legacyPaths.count else {
+            throw AttachmentCleanupQueueError.legacyQueueNeedsReview(legacyPaths.filter { legacyEntry(for: $0) == nil })
         }
-        let grouped = Dictionary(grouping: legacyPaths) { legacyProjectID(in: $0)! }
+        let grouped = Dictionary(grouping: legacyEntries, by: \.projectID)
         let migrated = grouped
-            .map { projectID, paths in
-                AttachmentCleanupEntry(projectID: projectID, paths: Array(Set(paths)).sorted())
+            .map { projectID, entries in
+                AttachmentCleanupEntry(
+                    projectID: projectID,
+                    paths: Array(Set(entries.flatMap(\.paths))).sorted()
+                )
             }
-            .sorted { $0.projectID.uuidString < $1.projectID.uuidString }
+            .sorted { ($0.projectID?.uuidString ?? "") < ($1.projectID?.uuidString ?? "") }
         try write(migrated)
         return migrated
     }
 
-    private func legacyProjectID(in path: String) -> UUID? {
+    private func legacyEntry(for path: String) -> AttachmentCleanupEntry? {
         let rawComponents = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         let componentsAfterRoot = path.hasPrefix("/") ? rawComponents.dropFirst() : rawComponents[...]
         guard !componentsAfterRoot.contains(".."), !componentsAfterRoot.contains("") else { return nil }
         let components = URL(fileURLWithPath: path).pathComponents
-        guard let attachmentsIndex = components.lastIndex(of: "Attachments"),
-              attachmentsIndex + 2 < components.count,
-              let projectID = UUID(uuidString: components[attachmentsIndex + 1]),
-              components[attachmentsIndex + 2] != ".",
-              components[attachmentsIndex + 2] != ".." else {
+        guard let rootIndex = components.lastIndex(where: { $0 == "Attachments" || $0 == "ImportedAssets" }),
+              rootIndex > 0,
+              components[rootIndex - 1] == "LearningJournal",
+              rootIndex + 1 < components.count else {
             return nil
         }
-        return projectID
+        if components[rootIndex] == "Attachments",
+           let projectID = UUID(uuidString: components[rootIndex + 1]) {
+            return AttachmentCleanupEntry(projectID: projectID, paths: [path])
+        }
+        return AttachmentCleanupEntry(projectID: nil, paths: [path])
     }
 
     public func enqueue(projectID: UUID, paths: [String]) throws {
@@ -130,12 +153,52 @@ public struct AttachmentCleanupQueue: Sendable {
         }
     }
 
+    public func removeOrphan(paths: [String]) throws {
+        var entries = try load()
+        let requested = Set(paths)
+        entries = entries.compactMap { entry in
+            guard entry.projectID == nil else { return entry }
+            let remaining = entry.paths.filter { !requested.contains($0) }
+            return remaining.isEmpty ? nil : AttachmentCleanupEntry(projectID: nil, paths: remaining)
+        }
+        if entries.isEmpty {
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.removeItem(at: fileURL)
+            }
+        } else {
+            try write(entries)
+        }
+    }
+
+    public func quarantineCorruptQueue() throws -> URL {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw AttachmentCleanupQueueError.invalidQueue
+        }
+        let quarantineDirectory = fileURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Quarantine", isDirectory: true)
+        let stamp = String(Int(Date().timeIntervalSince1970))
+        let quarantineURL = quarantineDirectory.appendingPathComponent(
+            "\(fileURL.deletingPathExtension().lastPathComponent)-\(stamp)-\(UUID().uuidString).json"
+        )
+        do {
+            try FileManager.default.createDirectory(
+                at: quarantineDirectory,
+                withIntermediateDirectories: true
+            )
+            try moveItem(fileURL, quarantineURL)
+            return quarantineURL
+        } catch {
+            throw AttachmentCleanupQueueError.quarantineFailed
+        }
+    }
+
     private func write(_ entries: [AttachmentCleanupEntry]) throws {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let sorted = entries.sorted { $0.projectID.uuidString < $1.projectID.uuidString }
+        let sorted = entries.sorted { ($0.projectID?.uuidString ?? "") < ($1.projectID?.uuidString ?? "") }
         try JSONEncoder().encode(sorted).write(to: fileURL, options: [.atomic])
     }
 }
