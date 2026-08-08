@@ -28,6 +28,42 @@ final class JournalRecordContractTests: XCTestCase {
         )
     }
 
+    func testDateFormatUsesSharedSymbolAndUnknownFormatsFailClosed() throws {
+        let document = try JournalRecordContract.load()
+        XCTAssertEqual(document.formats["iso8601"], "utcIso8601OptionalFraction")
+
+        let suite = try JournalContractFixtures.load()
+        let fixture = try XCTUnwrap(suite.valid.first(where: { $0.id == "session-fractional" }))
+        XCTAssertNoThrow(
+            try JournalRecordContractDecoder.decode(fixture.payload, kind: fixture.kind, contract: document),
+            fixture.id
+        )
+
+        var unsupportedFormats = document.formats
+        unsupportedFormats["iso8601"] = "unknownDateFormat"
+        let unsupportedDocument = JournalRecordContractDocument(
+            version: document.version,
+            formats: unsupportedFormats,
+            integerRange: document.integerRange,
+            records: document.records
+        )
+        XCTAssertThrowsError(
+            try JournalRecordContractDecoder.decode(fixture.payload, kind: fixture.kind, contract: unsupportedDocument)
+        )
+    }
+
+    func testIntegerBeyondInt64IsRejectedByContractFieldValidationBeforeTypedDecode() throws {
+        let suite = try JournalContractFixtures.load()
+        let fixture = try XCTUnwrap(suite.invalid.first(where: { $0.id == "proof-invalid-int64" }))
+
+        do {
+            _ = try JournalRecordContractDecoder.decode(fixture.payload, kind: fixture.kind)
+            XCTFail("Expected " + fixture.id + " to be rejected")
+        } catch let error as JournalRecordContractError {
+            XCTAssertEqual(error, .invalidField(kind: fixture.kind, field: "fileSize"))
+        }
+    }
+
     func testValidFixturesNormalizeThroughJournalEntityEncoding() throws {
         let suite = try JournalContractFixtures.load()
         for fixture in suite.valid {
@@ -75,6 +111,7 @@ final class JournalRecordContractTests: XCTestCase {
         let suite = try JournalContractFixtures.load()
         let requiredIDs = [
             "project-invalid-safe-integer",
+            "proof-invalid-int64",
             "session-invalid-date",
             "proof-invalid-artifact",
             "evidence-contract-invalid-trigger",

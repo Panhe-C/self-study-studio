@@ -440,10 +440,15 @@ function isISO8601(
   contract: JournalRecordContractDocument,
   format = "iso8601",
 ): boolean {
-  const pattern = contract.formats?.[format];
-  if (!pattern) return false;
-  const expression = new RegExp(pattern);
-  return expression.test(value) && Number.isFinite(Date.parse(value));
+  const semanticFormat = contract.formats?.[format];
+  if (!semanticFormat) return false;
+  switch (semanticFormat) {
+    case "utcIso8601OptionalFraction":
+      return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)
+        && Number.isFinite(Date.parse(value));
+    default:
+      return false;
+  }
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

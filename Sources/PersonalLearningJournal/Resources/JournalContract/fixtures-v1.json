@@ -833,6 +833,23 @@
         "schemaVersion": 9007199254740992,
         "commitmentState": "ready"
       }
+    },
+    {
+      "id": "proof-invalid-int64",
+      "kind": "proof",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000003",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "type": "text",
+        "title": "Notes",
+        "statement": "Shows the result",
+        "fileSize": 18446744073709551616,
+        "createdAt": "2026-01-01T11:00:00Z",
+        "updatedAt": "2026-01-01T11:00:00Z",
+        "schemaVersion": 3,
+        "integrity": "qualifying",
+        "revision": 1
+      }
     }
   ]
 }

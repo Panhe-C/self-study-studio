@@ -206,18 +206,31 @@ public struct JournalRecordContractDocument: Codable, Equatable, Sendable {
     }
 }
 
-enum JournalISO8601Codec {
-    static let contractPattern = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$"
+enum JournalRecordDateFormat: String, Sendable {
+    case utcIso8601OptionalFraction
+}
 
-    static func date(from value: String, pattern: String = contractPattern) -> Date? {
-        guard value.range(of: pattern, options: .regularExpression) != nil else { return nil }
-        let formatter = ISO8601DateFormatter()
-        if value.contains(".") {
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        } else {
-            formatter.formatOptions = [.withInternetDateTime]
+enum JournalISO8601Codec {
+    private static let utcIso8601OptionalFractionPattern = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$"
+
+    static func date(
+        from value: String,
+        format: String = JournalRecordDateFormat.utcIso8601OptionalFraction.rawValue
+    ) -> Date? {
+        guard let format = JournalRecordDateFormat(rawValue: format) else { return nil }
+        switch format {
+        case .utcIso8601OptionalFraction:
+            guard value.range(of: Self.utcIso8601OptionalFractionPattern, options: .regularExpression) != nil else {
+                return nil
+            }
+            let formatter = ISO8601DateFormatter()
+            if value.contains(".") {
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            } else {
+                formatter.formatOptions = [.withInternetDateTime]
+            }
+            return formatter.date(from: value)
         }
-        return formatter.date(from: value)
     }
 
     static func string(from date: Date) -> String {
@@ -456,12 +469,9 @@ public enum JournalRecordContractDecoder {
             guard let string = value as? String, values?.contains(string) == true else { throw invalid(kind, field) }
         case "integer":
             guard let number = value as? NSNumber,
-                  !isJSONBoolean(number),
-                  number.doubleValue.rounded() == number.doubleValue else { throw invalid(kind, field) }
-            guard number.int64Value >= document.integerRange.minimum,
-                  number.int64Value <= document.integerRange.maximum else { throw invalid(kind, field) }
-            if let minimum, number.intValue < minimum { throw invalid(kind, field) }
-            if let maximum, number.intValue > maximum { throw invalid(kind, field) }
+                  let integer = exactJSONInteger(number, range: document.integerRange) else { throw invalid(kind, field) }
+            if let minimum, integer < Decimal(minimum) { throw invalid(kind, field) }
+            if let maximum, integer > Decimal(maximum) { throw invalid(kind, field) }
         case "boolean":
             guard let number = value as? NSNumber, isJSONBoolean(number) else { throw invalid(kind, field) }
         case "stringArray":
@@ -474,10 +484,7 @@ public enum JournalRecordContractDecoder {
         case "integerArray":
             guard let items = value as? [Any], items.allSatisfy({ item in
                 guard let number = item as? NSNumber else { return false }
-                return !isJSONBoolean(number)
-                    && number.doubleValue.rounded() == number.doubleValue
-                    && number.int64Value >= document.integerRange.minimum
-                    && number.int64Value <= document.integerRange.maximum
+                return exactJSONInteger(number, range: document.integerRange) != nil
             }) else { throw invalid(kind, field) }
         case "object":
             guard let object = value as? [String: Any], let objectFields else { throw invalid(kind, field) }
@@ -737,8 +744,22 @@ public enum JournalRecordContractDecoder {
         format: String?
     ) -> Date? {
         let formatName = format ?? "iso8601"
-        guard let pattern = document.formats[formatName] else { return nil }
-        return JournalISO8601Codec.date(from: value, pattern: pattern)
+        guard let formatValue = document.formats[formatName] else { return nil }
+        return JournalISO8601Codec.date(from: value, format: formatValue)
+    }
+
+    private static func exactJSONInteger(
+        _ number: NSNumber,
+        range: JournalRecordIntegerRange
+    ) -> Decimal? {
+        guard !isJSONBoolean(number), number.doubleValue.isFinite else { return nil }
+        var value = number.decimalValue
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &value, 0, .plain)
+        guard value == rounded,
+              rounded >= Decimal(range.minimum),
+              rounded <= Decimal(range.maximum) else { return nil }
+        return rounded
     }
 
     private static func isJSONBoolean(_ number: NSNumber) -> Bool {

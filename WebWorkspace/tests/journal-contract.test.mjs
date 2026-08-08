@@ -51,6 +51,19 @@ test("accepts the shared fractional-seconds ISO fixture", () => {
   assert.deepEqual(decodeJournalRecord(fixture.payload, fixture.kind).payload, fixture.expectedNormalized);
 });
 
+test("uses the shared symbolic date format and rejects unknown formats", () => {
+  assert.equal(journalRecordContract.formats.iso8601, "utcIso8601OptionalFraction");
+  const fixture = fixtureSuite.valid.find((candidate) => candidate.id === "session-fractional");
+  assert.ok(fixture);
+  assert.deepEqual(decodeJournalRecord(fixture.payload, fixture.kind).payload, fixture.expectedNormalized);
+
+  const unsupportedContract = {
+    ...journalRecordContract,
+    formats: { ...journalRecordContract.formats, iso8601: "unknownDateFormat" },
+  };
+  assert.throws(() => decodeJournalRecord(fixture.payload, fixture.kind, unsupportedContract));
+});
+
 test("rejects every shared invalid fixture, including one-sided field drift", () => {
   for (const fixture of fixtureSuite.invalid) {
     assert.throws(
@@ -109,6 +122,7 @@ test("wires the shared contract source and resources into the unsigned app targe
 test("includes explicit nested/date invalid fixtures", () => {
   const expected = new Set([
     "project-invalid-safe-integer",
+    "proof-invalid-int64",
     "session-invalid-date",
     "proof-invalid-artifact",
     "evidence-contract-invalid-trigger",
