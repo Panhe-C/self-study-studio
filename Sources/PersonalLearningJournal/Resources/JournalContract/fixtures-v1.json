@@ -68,6 +68,40 @@
       }
     },
     {
+      "id": "session-fractional",
+      "kind": "session",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "source": "quickLog",
+        "actionType": "course",
+        "startedAt": "2026-01-01T12:00:00.123Z",
+        "endedAt": "2026-01-01T12:30:00.123Z",
+        "durationMinutes": 30,
+        "note": "  Read chapter one  ",
+        "nextStepBefore": "  Start  ",
+        "nextStepAfter": "  Continue  ",
+        "createdAt": "2026-01-01T12:30:00.123Z",
+        "updatedAt": "2026-01-01T12:30:00.123Z",
+        "schemaVersion": 3
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "source": "quickLog",
+        "actionType": "course",
+        "startedAt": "2026-01-01T12:00:00.123Z",
+        "endedAt": "2026-01-01T12:30:00.123Z",
+        "durationMinutes": 30,
+        "note": "Read chapter one",
+        "nextStepBefore": "Start",
+        "nextStepAfter": "Continue",
+        "createdAt": "2026-01-01T12:30:00.123Z",
+        "updatedAt": "2026-01-01T12:30:00.123Z",
+        "schemaVersion": 3
+      }
+    },
+    {
       "id": "proof-text",
       "kind": "proof",
       "payload": {
@@ -780,6 +814,24 @@
         "schemaVersion": 3,
         "confirmedDecisionIds": [],
         "referencedProofRevisionIds": []
+      }
+    },
+    {
+      "id": "project-invalid-safe-integer",
+      "kind": "project",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "name": "CS336",
+        "area": "AI",
+        "goal": "Implement a tokenizer",
+        "status": "active",
+        "currentNextStep": "Write the merge loop",
+        "lastActionType": "course",
+        "defaultDurationMinutes": 30,
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "schemaVersion": 9007199254740992,
+        "commitmentState": "ready"
       }
     }
   ]

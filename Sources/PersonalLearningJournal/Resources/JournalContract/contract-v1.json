@@ -3,6 +3,10 @@
   "formats": {
     "iso8601": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$"
   },
+  "integerRange": {
+    "minimum": -9007199254740991,
+    "maximum": 9007199254740991
+  },
   "records": {
     "project": {
       "recordType": "Project",

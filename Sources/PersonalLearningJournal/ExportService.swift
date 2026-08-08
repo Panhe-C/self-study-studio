@@ -235,7 +235,10 @@ public extension JSONEncoder {
     static var journal: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(JournalISO8601Codec.string(from: date))
+        }
         return encoder
     }
 }
@@ -243,7 +246,17 @@ public extension JSONEncoder {
 public extension JSONDecoder {
     static var journal: JSONDecoder {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+            guard let date = JournalISO8601Codec.date(from: value) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Expected UTC ISO-8601 date with optional fractional seconds."
+                )
+            }
+            return date
+        }
         return decoder
     }
 }

@@ -19,6 +19,15 @@ final class JournalRecordContractTests: XCTestCase {
         }
     }
 
+    func testFractionalISOFixtureIsAccepted() throws {
+        let suite = try JournalContractFixtures.load()
+        let fixture = try XCTUnwrap(suite.valid.first(where: { $0.id == "session-fractional" }))
+        XCTAssertNoThrow(
+            try JournalRecordContractDecoder.decode(fixture.payload, kind: fixture.kind),
+            fixture.id
+        )
+    }
+
     func testValidFixturesNormalizeThroughJournalEntityEncoding() throws {
         let suite = try JournalContractFixtures.load()
         for fixture in suite.valid {
@@ -65,6 +74,7 @@ final class JournalRecordContractTests: XCTestCase {
     func testNestedAndDateInvalidFixturesReject() throws {
         let suite = try JournalContractFixtures.load()
         let requiredIDs = [
+            "project-invalid-safe-integer",
             "session-invalid-date",
             "proof-invalid-artifact",
             "evidence-contract-invalid-trigger",

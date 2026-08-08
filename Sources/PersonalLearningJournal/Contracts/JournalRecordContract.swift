@@ -172,15 +172,59 @@ public struct JournalRecordDefinition: Codable, Equatable, Sendable {
     }
 }
 
+public struct JournalRecordIntegerRange: Codable, Equatable, Sendable {
+    public let minimum: Int64
+    public let maximum: Int64
+
+    public init(minimum: Int64, maximum: Int64) {
+        self.minimum = minimum
+        self.maximum = maximum
+    }
+
+    public static let jsonSafe = JournalRecordIntegerRange(
+        minimum: -9_007_199_254_740_991,
+        maximum: 9_007_199_254_740_991
+    )
+}
+
 public struct JournalRecordContractDocument: Codable, Equatable, Sendable {
     public let version: Int
     public let formats: [String: String]
+    public let integerRange: JournalRecordIntegerRange
     public let records: [String: JournalRecordDefinition]
 
-    public init(version: Int, formats: [String: String] = [:], records: [String: JournalRecordDefinition]) {
+    public init(
+        version: Int,
+        formats: [String: String] = [:],
+        integerRange: JournalRecordIntegerRange = .jsonSafe,
+        records: [String: JournalRecordDefinition]
+    ) {
         self.version = version
         self.formats = formats
+        self.integerRange = integerRange
         self.records = records
+    }
+}
+
+enum JournalISO8601Codec {
+    static let contractPattern = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$"
+
+    static func date(from value: String, pattern: String = contractPattern) -> Date? {
+        guard value.range(of: pattern, options: .regularExpression) != nil else { return nil }
+        let formatter = ISO8601DateFormatter()
+        if value.contains(".") {
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        } else {
+            formatter.formatOptions = [.withInternetDateTime]
+        }
+        return formatter.date(from: value)
+    }
+
+    static func string(from date: Date) -> String {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let value = fractional.string(from: date)
+        return value.replacingOccurrences(of: ".000Z", with: "Z")
     }
 }
 
@@ -414,6 +458,8 @@ public enum JournalRecordContractDecoder {
             guard let number = value as? NSNumber,
                   !isJSONBoolean(number),
                   number.doubleValue.rounded() == number.doubleValue else { throw invalid(kind, field) }
+            guard number.int64Value >= document.integerRange.minimum,
+                  number.int64Value <= document.integerRange.maximum else { throw invalid(kind, field) }
             if let minimum, number.intValue < minimum { throw invalid(kind, field) }
             if let maximum, number.intValue > maximum { throw invalid(kind, field) }
         case "boolean":
@@ -428,7 +474,10 @@ public enum JournalRecordContractDecoder {
         case "integerArray":
             guard let items = value as? [Any], items.allSatisfy({ item in
                 guard let number = item as? NSNumber else { return false }
-                return !isJSONBoolean(number) && number.doubleValue.rounded() == number.doubleValue
+                return !isJSONBoolean(number)
+                    && number.doubleValue.rounded() == number.doubleValue
+                    && number.int64Value >= document.integerRange.minimum
+                    && number.int64Value <= document.integerRange.maximum
             }) else { throw invalid(kind, field) }
         case "object":
             guard let object = value as? [String: Any], let objectFields else { throw invalid(kind, field) }
@@ -446,8 +495,6 @@ public enum JournalRecordContractDecoder {
             try validatePairs(value, field: field, valueType: "enum", values: values, kind: kind)
         case "uuidStringMap":
             try validatePairs(value, field: field, valueType: "string", values: nil, kind: kind)
-        case "stringArrayMap":
-            try validatePairs(value, field: field, valueType: "stringArray", values: nil, kind: kind)
         case "stringArrayDictionary":
             guard let dictionary = value as? [String: Any], dictionary.values.allSatisfy({ item in
                 guard let values = item as? [Any] else { return false }
@@ -502,14 +549,9 @@ public enum JournalRecordContractDecoder {
         for index in stride(from: 0, to: items.count, by: 2) {
             guard let key = items[index] as? String, !keys.contains(key) else { throw invalid(kind, field) }
             keys.insert(key)
-            if valueType == "stringArray" {
-                guard let values = items[index + 1] as? [Any], values.allSatisfy({ $0 is String }) else { throw invalid(kind, field) }
-            } else {
-                guard let string = items[index + 1] as? String else { throw invalid(kind, field) }
-                if valueType == "enum" && values?.contains(string) != true { throw invalid(kind, field) }
-            }
-            if !valueType.isEmpty && UUID(uuidString: key) == nil && valueType != "stringArray" { throw invalid(kind, field) }
-            if valueType == "stringArray" && key.isEmpty { throw invalid(kind, field) }
+            guard let string = items[index + 1] as? String else { throw invalid(kind, field) }
+            if valueType == "enum" && values?.contains(string) != true { throw invalid(kind, field) }
+            guard UUID(uuidString: key) != nil else { throw invalid(kind, field) }
         }
     }
 
@@ -695,11 +737,8 @@ public enum JournalRecordContractDecoder {
         format: String?
     ) -> Date? {
         let formatName = format ?? "iso8601"
-        guard let pattern = document.formats[formatName],
-              value.range(of: pattern, options: .regularExpression) != nil else {
-            return nil
-        }
-        return ISO8601DateFormatter().date(from: value)
+        guard let pattern = document.formats[formatName] else { return nil }
+        return JournalISO8601Codec.date(from: value, pattern: pattern)
     }
 
     private static func isJSONBoolean(_ number: NSNumber) -> Bool {

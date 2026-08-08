@@ -52,9 +52,15 @@ export type JournalRecordDefinition = {
   fields: Record<string, JournalRecordFieldDefinition>;
 };
 
+export type JournalRecordIntegerRange = {
+  minimum: number;
+  maximum: number;
+};
+
 export type JournalRecordContractDocument = {
   version: number;
   formats: Record<string, string>;
+  integerRange: JournalRecordIntegerRange;
   records: Record<JournalRecordKind, JournalRecordDefinition>;
 };
 
@@ -199,6 +205,7 @@ function validateValue(
       break;
     case "integer":
       if (typeof value !== "number" || !Number.isInteger(value)) invalid(kind, field);
+      else if (!Number.isSafeInteger(value) || value < contract.integerRange.minimum || value > contract.integerRange.maximum) invalid(kind, field);
       else if (definition.minimum !== undefined && value < definition.minimum) invalid(kind, field);
       else if (definition.maximum !== undefined && value > definition.maximum) invalid(kind, field);
       break;
@@ -216,7 +223,7 @@ function validateValue(
       }
       break;
     case "integerArray":
-      if (!Array.isArray(value) || !value.every((item) => typeof item === "number" && Number.isInteger(item))) {
+      if (!Array.isArray(value) || !value.every((item) => typeof item === "number" && Number.isSafeInteger(item) && item >= contract.integerRange.minimum && item <= contract.integerRange.maximum)) {
         invalid(kind, field);
       }
       break;
@@ -242,9 +249,6 @@ function validateValue(
       break;
     case "uuidStringMap":
       validatePairs(value, field, kind, "string");
-      break;
-    case "stringArrayMap":
-      validatePairs(value, field, kind, "stringArray");
       break;
     case "stringArrayDictionary":
       if (!isObject(value) || !Object.values(value).every((item) => Array.isArray(item) && item.every((entry) => typeof entry === "string"))) {
@@ -284,7 +288,7 @@ function validatePairs(
   value: unknown,
   field: string,
   kind: JournalRecordKind,
-  valueType: "enum" | "string" | "stringArray",
+  valueType: "enum" | "string",
   values?: string[],
 ) {
   if (!Array.isArray(value) || value.length % 2 !== 0) invalid(kind, field);
@@ -293,11 +297,9 @@ function validatePairs(
     const key = value[index];
     if (typeof key !== "string" || keys.has(key)) invalid(kind, field);
     keys.add(key);
-    if (valueType !== "stringArray" && !isUUID(key)) invalid(kind, field);
+    if (!isUUID(key)) invalid(kind, field);
     const item = value[index + 1];
-    if (valueType === "stringArray") {
-      if (!Array.isArray(item) || !item.every((entry) => typeof entry === "string")) invalid(kind, field);
-    } else if (typeof item !== "string" || (valueType === "enum" && !values?.includes(item))) {
+    if (typeof item !== "string" || (valueType === "enum" && !values?.includes(item))) {
       invalid(kind, field);
     }
   }
