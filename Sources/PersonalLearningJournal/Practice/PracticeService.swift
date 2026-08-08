@@ -5,6 +5,26 @@ public enum PracticeServiceError: Error, Equatable, Sendable {
     case duplicateActiveRoutineName
     case routineHasSessions
     case activeRoutineCannotBeModified
+    /// Published plan revisions own an immutable routine structure. Learners
+    /// must create and activate a new plan revision to change it.
+    case lockedRoutineCannotBeModified
+}
+
+extension PracticeServiceError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .missingRoutine:
+            "The practice routine is no longer available."
+        case .duplicateActiveRoutineName:
+            "An active practice routine already uses this name."
+        case .routineHasSessions:
+            "This routine has practice history and can only be archived."
+        case .activeRoutineCannotBeModified:
+            "Finish or discard the active timer before changing this routine."
+        case .lockedRoutineCannotBeModified:
+            "This routine belongs to a published plan. Create a new plan revision to change its structure."
+        }
+    }
 }
 
 public struct PracticeSessionSaveResult: Equatable, Sendable {
@@ -108,6 +128,9 @@ public final class PracticeService {
         guard let existing = liveRoutine(id: routineId, in: snapshot) else {
             throw PracticeServiceError.missingRoutine
         }
+        guard !existing.isStructuralLocked else {
+            throw PracticeServiceError.lockedRoutineCannotBeModified
+        }
 
         let updated = try PracticeRoutine(
             id: existing.id,
@@ -143,6 +166,9 @@ public final class PracticeService {
         let snapshot = try repository.snapshot()
         guard var routine = liveRoutine(id: routineId, in: snapshot) else {
             throw PracticeServiceError.missingRoutine
+        }
+        guard !routine.isStructuralLocked else {
+            throw PracticeServiceError.lockedRoutineCannotBeModified
         }
 
         routine.isArchived = true
@@ -279,7 +305,7 @@ public final class PracticeService {
         in snapshot: JournalSnapshot
     ) -> Bool {
         let normalizedName = normalizedRoutineName(name)
-        return snapshot.practiceRoutines.contains { routine in
+        return snapshot.operationalPracticeRoutines.contains { routine in
             routine.id != excludedRoutineID
                 && !routine.isArchived
                 && routine.deletedAt == nil

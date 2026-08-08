@@ -6,6 +6,7 @@ public final class JournalViewModel: ObservableObject {
     @Published public private(set) var snapshot: JournalSnapshot
     @Published public private(set) var syncSummary: SyncSummary
     @Published public private(set) var syncConflicts: [SyncConflict]
+    @Published public private(set) var syncTerminalMutations: [PendingMutation]
     @Published public private(set) var syncAccountState: CloudAccountState
     @Published public private(set) var syncPendingMutationCount: Int
     @Published public private(set) var syncLastSuccess: Date?
@@ -70,6 +71,7 @@ public final class JournalViewModel: ObservableObject {
         self.snapshot = journalService.snapshot()
         self.syncSummary = .localOnly
         self.syncConflicts = []
+        self.syncTerminalMutations = []
         self.syncAccountState = accountCoordinator?.state ?? CloudAccountState(mode: .localOnly)
         self.syncPendingMutationCount = 0
         self.syncLastSuccess = nil
@@ -157,6 +159,35 @@ public final class JournalViewModel: ObservableObject {
         refreshSyncRepositoryDetails()
     }
 
+    /// Requeues a terminal mutation using the current persisted server tag.
+    /// The replacement is atomic, so a failed validation leaves the terminal
+    /// item untouched for another recovery decision.
+    public func retryTerminalMutation(id: UUID) throws {
+        guard let syncRepository else { return }
+        try SyncConflictRecoveryService(repository: syncRepository)
+            .retryTerminalMutation(id: id)
+        refresh()
+    }
+
+    /// Discards a terminal outbox item while preserving the current local
+    /// entity. This is an explicit user decision, not an automatic retry.
+    public func discardTerminalMutation(id: UUID) throws {
+        guard let syncRepository else { return }
+        try SyncConflictRecoveryService(repository: syncRepository)
+            .discardTerminalMutation(id: id)
+        refresh()
+    }
+
+    public func retryTerminalMutationAndSync(id: UUID) async throws {
+        try retryTerminalMutation(id: id)
+        try await syncNow()
+    }
+
+    public func discardTerminalMutationAndSync(id: UUID) async throws {
+        try discardTerminalMutation(id: id)
+        try await syncNow()
+    }
+
     public var hasCompletedOnboarding: Bool {
         snapshot.hasCompletedOnboarding
     }
@@ -207,7 +238,13 @@ public final class JournalViewModel: ObservableObject {
     }
 
     public var practiceRoutines: [PracticeRoutine] {
-        snapshot.practiceRoutines
+        snapshot.operationalPracticeRoutines
+    }
+
+    /// Full routine history for plan-revision detail and audit-oriented
+    /// presentation. Operational surfaces should use `practiceRoutines`.
+    public var practiceRoutineHistory: [PracticeRoutine] {
+        snapshot.practiceRoutineHistory
     }
 
     public var practiceSessions: [PracticeSession] {
@@ -939,6 +976,9 @@ public final class JournalViewModel: ObservableObject {
         return PracticeRoutine(
             id: routineId,
             projectId: syncedRoutine?.projectId,
+            planRevisionID: syncedRoutine?.planRevisionID,
+            planSeriesID: syncedRoutine?.planSeriesID,
+            isStructuralLocked: syncedRoutine?.isStructuralLocked ?? false,
             name: presentation?.name ?? syncedRoutine?.name ?? "Practice",
             symbolName: presentation?.symbolName ?? syncedRoutine?.symbolName ?? "timer",
             color: presentation?.color ?? syncedRoutine?.color ?? .teal,
@@ -1242,8 +1282,15 @@ public final class JournalViewModel: ObservableObject {
     }
 
     private func refreshSyncRepositoryDetails() {
-        syncConflicts = (try? syncRepository?.conflicts()) ?? []
-        syncPendingMutationCount = (try? syncRepository?.pendingMutations(limit: 1_000).count) ?? 0
+        guard let syncRepository else {
+            syncConflicts = []
+            syncTerminalMutations = []
+            syncPendingMutationCount = 0
+            return
+        }
+        syncConflicts = (try? syncRepository.conflicts()) ?? []
+        syncTerminalMutations = (try? syncRepository.terminalMutations(limit: 1_000)) ?? []
+        syncPendingMutationCount = (try? syncRepository.pendingMutations(limit: 1_000).count) ?? 0
     }
 
     private func scheduleAutomaticSyncIfNeeded() {

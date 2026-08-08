@@ -87,6 +87,42 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+/// A user-approved replacement for a terminal outbox item. Replacements keep
+/// the original mutation identity/transaction while atomically swapping the
+/// local payload and the caller's refreshed revision guard.
+public struct TerminalMutationReplacement: Equatable, Sendable {
+    public var mutationID: UUID
+    public var entity: JournalEntity
+    /// `nil` preserves the terminal mutation's operation. Save is the normal
+    /// recovery path; exposing the operation also lets delete recovery retain
+    /// the original intent when needed.
+    public var operation: SyncOperation?
+    public var revisionExpectation: RevisionGuardExpectation?
+
+    public init(
+        mutationID: UUID,
+        entity: JournalEntity,
+        revisionExpectation: RevisionGuardExpectation?,
+        operation: SyncOperation? = nil
+    ) {
+        self.mutationID = mutationID
+        self.entity = entity
+        self.operation = operation
+        self.revisionExpectation = revisionExpectation
+    }
+}
+
+public enum TerminalMutationRecoveryError: Error, Equatable, Sendable {
+    case mutationNotFound(UUID)
+    case mutationNotTerminal(UUID)
+    case entityMismatch(
+        mutationID: UUID,
+        expected: JournalEntityReference,
+        actual: JournalEntityReference
+    )
+    case missingLocalEntity(JournalEntityReference)
+}
+
 public struct SyncRecordMetadata: Codable, Equatable, Sendable {
     public var entity: JournalEntityReference
     public var zoneName: String

@@ -143,6 +143,7 @@ public final class CoursePlanningService {
                     + plannedSessions.map(JournalEntity.plannedSession)
                     + revisionRoutines.map(JournalEntity.practiceRoutine),
                 origin: .user,
+                transactionID: plan.planSeriesID,
                 revisionExpectations: newRecordExpectations
             )
         )
@@ -223,6 +224,9 @@ public final class CoursePlanningService {
                 value.isStructuralLocked = true
                 return value
             }
+        // The Project pointer, plan children, and Learning Trail event form
+        // one causal transaction. The repository still preserves append-only
+        // semantics for nonplanning entities across later user transactions.
         var upserts: [JournalEntity] = [.coursePlan(activatedPlan), .project(project)]
             + activatedPhases.map(JournalEntity.planPhase)
             + activatedSessions.map(JournalEntity.plannedSession)
@@ -268,21 +272,36 @@ public final class CoursePlanningService {
             detail: activatedPlan.courseTitle
         )
         upserts.append(.trailEvent(trailEvent))
+        // Keep the caller's captured target/base expectation intact. In
+        // particular, a draft that was synced before activation carries an
+        // existing-target guard; replacing it with a freshly inferred base
+        // guard would allow activation to overwrite a newer draft payload.
         var expectations: [JournalEntityReference: RevisionGuardExpectation] = [
-            activatedPlan.reference: activatedPlan.baseRevisionID.map {
-                .existing(baseRevisionID: $0, recordChangeTag: expectation.recordChangeTag)
-            } ?? .newRecord()
+            activatedPlan.reference: expectation
         ]
         for currentActive in activePlans {
-            expectations[currentActive.reference] = .existing(
-                baseRevisionID: currentActive.revisionID,
-                recordChangeTag: try repository.metadata(for: currentActive.reference)?.recordChangeTag
-            )
+            let currentMetadata = try repository.metadata(for: currentActive.reference)
+            expectations[currentActive.reference] = if currentMetadata != nil {
+                .existingTarget(
+                    revisionID: currentActive.revisionID,
+                    recordChangeTag: currentMetadata?.recordChangeTag
+                )
+            } else {
+                // No metadata means the old active revision has not reached
+                // CloudKit yet; it remains a new target in this offline
+                // dependency chain. A server-side record, if any, will fail
+                // the new-record guard instead of being overwritten.
+                .existing(
+                    baseRevisionID: currentActive.revisionID,
+                    recordChangeTag: nil
+                )
+            }
         }
         try repository.commit(
             JournalTransaction(
                 upserts: upserts,
                 origin: .user,
+                transactionID: activatedPlan.planSeriesID,
                 revisionExpectations: expectations
             )
         )

@@ -161,7 +161,11 @@ public struct PracticeManagerView: View {
     private func routineRow(_ routine: PracticeRoutine) -> some View {
         let sessions = sessions(for: routine)
         return Button {
-            editorContext = PracticeEditorContext(routine: routine)
+            if routine.isStructuralLocked {
+                errorMessage = "This routine belongs to a published plan. Create a new plan revision to change its structure."
+            } else {
+                editorContext = PracticeEditorContext(routine: routine)
+            }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: routine.symbolName)
@@ -203,7 +207,9 @@ public struct PracticeManagerView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(routineAccessibilityLabel(routine, sessions: sessions))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if practiceTimer.snapshot.activeRoutineId != routine.id, !routine.isArchived {
+            if practiceTimer.snapshot.activeRoutineId != routine.id,
+               !routine.isArchived,
+               !routine.isStructuralLocked {
                 Button {
                     archive(routine)
                 } label: {

@@ -68,6 +68,41 @@ public struct SyncSettingsView: View {
                     }
                 }
 
+                Section("Terminal Sync Recovery") {
+                    if viewModel.syncTerminalMutations.isEmpty {
+                        Label("No terminal sync items", systemImage: "checkmark.circle")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(viewModel.syncTerminalMutations) { mutation in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text(mutation.entity.kind.rawValue.capitalized)
+                                        .font(.headline)
+                                    Spacer()
+                                    Text(mutation.operation.rawValue.capitalized)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text(mutation.lastError ?? "Needs a fresh revision guard")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                                HStack {
+                                    Button("Retry with Current Guard") {
+                                        recoverTerminalMutation(mutation.id, discard: false)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    Button("Discard", role: .destructive) {
+                                        recoverTerminalMutation(mutation.id, discard: true)
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+
                 Section("Privacy") {
                     Toggle("privacy.app_lock", isOn: Binding(
                         get: { appLock.isEnabled },
@@ -146,6 +181,24 @@ public struct SyncSettingsView: View {
             Task { await viewModel.refreshSyncSummary() }
         } catch {
             notice = SyncSettingsNotice(title: "Transfer Not Completed", message: error.localizedDescription)
+        }
+    }
+
+    private func recoverTerminalMutation(_ id: UUID, discard: Bool) {
+        Task {
+            do {
+                if discard {
+                    try await viewModel.discardTerminalMutationAndSync(id: id)
+                } else {
+                    try await viewModel.retryTerminalMutationAndSync(id: id)
+                }
+                await viewModel.refreshSyncSummary()
+            } catch {
+                notice = SyncSettingsNotice(
+                    title: discard ? "Terminal Item Not Discarded" : "Terminal Item Not Retried",
+                    message: error.localizedDescription
+                )
+            }
         }
     }
 }

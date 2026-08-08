@@ -10,6 +10,11 @@ public protocol JournalRepository: AnyObject {
     /// Re-enables selected terminal mutations after a user has resolved the
     /// conflict or refreshed its guard expectation.
     func requeueTerminalMutations(_ mutationIDs: Set<UUID>) throws
+    /// Atomically replaces terminal payloads and requeues them with the
+    /// caller's freshly captured revision expectations.
+    func replaceTerminalMutations(_ replacements: [TerminalMutationReplacement]) throws
+    /// Discards selected terminal mutations without changing the local entity.
+    func discardTerminalMutations(_ mutationIDs: Set<UUID>) throws
     func acknowledge(_ mutationIDs: Set<UUID>, metadata: [SyncRecordMetadata]) throws
     func conflicts() throws -> [SyncConflict]
     func resolveConflict(id: UUID, with entity: JournalEntity) throws
@@ -38,6 +43,24 @@ public protocol JournalRepository: AnyObject {
 public extension JournalRepository {
     func terminalMutations(limit: Int) throws -> [PendingMutation] { [] }
     func requeueTerminalMutations(_ mutationIDs: Set<UUID>) throws {}
+    func replaceTerminalMutations(_ replacements: [TerminalMutationReplacement]) throws {}
+    func discardTerminalMutations(_ mutationIDs: Set<UUID>) throws {}
+
+    func replaceTerminalMutation(_ replacement: TerminalMutationReplacement) throws {
+        try replaceTerminalMutations([replacement])
+    }
+
+    func discardTerminalMutation(_ mutationID: UUID) throws {
+        try discardTerminalMutations([mutationID])
+    }
+
+    func resolveTerminalMutations(_ mutationIDs: Set<UUID>) throws {
+        try discardTerminalMutations(mutationIDs)
+    }
+
+    func resolveTerminalMutation(_ mutationID: UUID) throws {
+        try discardTerminalMutations([mutationID])
+    }
 
     func saveCalendarBinding(_ binding: CalendarBinding) throws {}
     func calendarBinding(for plannedSessionID: UUID) throws -> CalendarBinding? { nil }
@@ -238,12 +261,57 @@ public final class InMemoryJournalRepository: JournalRepository {
     }
 
     public func requeueTerminalMutations(_ mutationIDs: Set<UUID>) throws {
-        withLock {
-            for index in outbox.indices where mutationIDs.contains(outbox[index].id) {
-                guard outbox[index].isTerminal else { continue }
-                outbox[index].isTerminal = false
-                outbox[index].lastError = nil
+        // Keep the legacy entry point safe: requeueing now refreshes the
+        // persisted guard and payload through the recovery service instead of
+        // reviving the stale expectation that caused the terminal failure.
+        try SyncConflictRecoveryService(repository: self)
+            .retryTerminalMutations(mutationIDs)
+    }
+
+    public func replaceTerminalMutations(_ replacements: [TerminalMutationReplacement]) throws {
+        guard !replacements.isEmpty else { return }
+        try withLock {
+            var indexes: [UUID: Int] = [:]
+            for replacement in replacements {
+                guard indexes[replacement.mutationID] == nil else {
+                    throw TerminalMutationRecoveryError.mutationNotFound(replacement.mutationID)
+                }
+                guard let index = outbox.firstIndex(where: { $0.id == replacement.mutationID }) else {
+                    throw TerminalMutationRecoveryError.mutationNotFound(replacement.mutationID)
+                }
+                guard outbox[index].isTerminal else {
+                    throw TerminalMutationRecoveryError.mutationNotTerminal(replacement.mutationID)
+                }
+                guard outbox[index].entity == replacement.entity.reference else {
+                    throw TerminalMutationRecoveryError.entityMismatch(
+                        mutationID: replacement.mutationID,
+                        expected: outbox[index].entity,
+                        actual: replacement.entity.reference
+                    )
+                }
+                indexes[replacement.mutationID] = index
             }
+
+            for replacement in replacements {
+                guard let index = indexes[replacement.mutationID] else { continue }
+                let reference = replacement.entity.reference
+                if entities[reference] == nil {
+                    entityOrder.append(reference)
+                }
+                entities[reference] = replacement.entity
+                outbox[index].operation = replacement.operation ?? outbox[index].operation
+                outbox[index].revisionExpectation = replacement.revisionExpectation
+                outbox[index].retryCount = 0
+                outbox[index].lastError = nil
+                outbox[index].isTerminal = false
+            }
+        }
+    }
+
+    public func discardTerminalMutations(_ mutationIDs: Set<UUID>) throws {
+        guard !mutationIDs.isEmpty else { return }
+        withLock {
+            outbox.removeAll { mutationIDs.contains($0.id) && $0.isTerminal }
         }
     }
 

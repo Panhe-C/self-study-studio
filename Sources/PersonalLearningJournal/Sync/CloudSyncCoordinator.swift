@@ -202,17 +202,24 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
 
     private func performSync() async throws {
         let pending = try repository.pendingMutations(limit: 100)
-        let terminal = try repository.terminalMutations(limit: 100)
         currentStatus = .syncing(pending: pending.count)
         do {
             try await client.ensureZone(named: Self.zoneName)
             let pushSummary = try await push(pending)
             try await pullRemoteChanges()
-            if !pushSummary.terminalErrors.isEmpty || !terminal.isEmpty {
+            // Re-read after pull/recovery. A terminal item may have been
+            // replaced or discarded while the network operation was in
+            // flight; retaining the initial snapshot would leave a resolved
+            // conflict stuck in `.failed` until another unrelated sync.
+            let remainingTerminal = try repository.terminalMutations(limit: 100)
+            if !remainingTerminal.isEmpty {
                 let conflicts = (try? repository.conflicts().count) ?? 0
-                let message = (
-                    pushSummary.terminalErrors.values + terminal.compactMap(\.lastError)
-                ).sorted().joined(separator: "; ")
+                let messages = (
+                    pushSummary.terminalErrors.values + remainingTerminal.compactMap(\.lastError)
+                ).sorted()
+                let message = messages.isEmpty
+                    ? "Terminal sync item requires review"
+                    : messages.joined(separator: "; ")
                 currentStatus = .failed(
                     pending: (try? repository.pendingMutations(limit: 100).count) ?? 0,
                     conflicts: conflicts,
@@ -242,9 +249,16 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
         var terminalErrors: [UUID: String] = [:]
 
         for (_, group) in groups {
+            // A planning dependency chain intentionally keeps Project writes
+            // append-only locally while sharing one transaction ID with its
+            // plan/trail records. CloudKit modifyRecords cannot receive the
+            // same record ID twice in one atomic batch, so collapse duplicate
+            // references to the final local mutation. Trail events have
+            // distinct IDs and therefore remain append-only in the payload.
+            let effectiveGroup = Self.coalescedMutations(group)
             var revisionExpectations: [JournalEntityReference: CloudRevisionExpectation] = [:]
             var missingLocalEntity = false
-            let mutations = try group.compactMap { mutation -> CloudMutation? in
+            let mutations = try effectiveGroup.compactMap { mutation -> CloudMutation? in
                 switch mutation.operation {
                 case .save:
                     guard let entity = try repository.entity(for: mutation.entity) else {
@@ -279,10 +293,25 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
                     mutations,
                     revisionExpectations: revisionExpectations
                 )
-                acknowledgedMutationIDs.formUnion(result.acknowledgedMutationIDs)
+                let acknowledgedReferences = Set(
+                    effectiveGroup.compactMap { mutation in
+                        result.acknowledgedMutationIDs.contains(mutation.id)
+                            ? mutation.entity
+                            : nil
+                    }
+                )
+                acknowledgedMutationIDs.formUnion(
+                    group.filter { acknowledgedReferences.contains($0.entity) }.map(\.id)
+                )
                 metadata.append(contentsOf: result.metadata)
-                retryableErrors.merge(result.retryableErrors, uniquingKeysWith: { _, new in new })
-                terminalErrors.merge(result.terminalErrors, uniquingKeysWith: { _, new in new })
+                retryableErrors.merge(
+                    Self.expandErrors(result.retryableErrors, from: effectiveGroup, group: group),
+                    uniquingKeysWith: { _, new in new }
+                )
+                terminalErrors.merge(
+                    Self.expandErrors(result.terminalErrors, from: effectiveGroup, group: group),
+                    uniquingKeysWith: { _, new in new }
+                )
             } catch let guardError as CloudRevisionGuardError {
                 let message = String(describing: guardError)
                 for mutation in group {
@@ -304,6 +333,33 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
             )
         }
         return CloudSyncPushSummary(terminalErrors: terminalErrors)
+    }
+
+    private static func coalescedMutations(_ group: [PendingMutation]) -> [PendingMutation] {
+        var latestByReference: [JournalEntityReference: PendingMutation] = [:]
+        for mutation in group {
+            latestByReference[mutation.entity] = mutation
+        }
+        return group.filter { latestByReference[$0.entity]?.id == $0.id }
+    }
+
+    private static func expandErrors(
+        _ errors: [UUID: String],
+        from effectiveGroup: [PendingMutation],
+        group: [PendingMutation]
+    ) -> [UUID: String] {
+        guard !errors.isEmpty else { return [:] }
+        var expanded: [UUID: String] = [:]
+        for (mutationID, message) in errors {
+            guard let effective = effectiveGroup.first(where: { $0.id == mutationID }) else {
+                expanded[mutationID] = message
+                continue
+            }
+            for original in group where original.entity == effective.entity {
+                expanded[original.id] = message
+            }
+        }
+        return expanded
     }
 
     private func pullRemoteChanges() async throws {

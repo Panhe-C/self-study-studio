@@ -123,11 +123,72 @@ public final class SwiftDataJournalRepository: JournalRepository {
     }
 
     public func requeueTerminalMutations(_ mutationIDs: Set<UUID>) throws {
+        // Keep the legacy entry point safe: requeueing now refreshes the
+        // persisted guard and payload through the recovery service instead of
+        // reviving the stale expectation that caused the terminal failure.
+        try SyncConflictRecoveryService(repository: self)
+            .retryTerminalMutations(mutationIDs)
+    }
+
+    public func replaceTerminalMutations(_ replacements: [TerminalMutationReplacement]) throws {
+        guard !replacements.isEmpty else { return }
+        do {
+            let records = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+            var selected: [UUID: StoredPendingMutationV2] = [:]
+            for replacement in replacements {
+                guard selected[replacement.mutationID] == nil else {
+                    throw TerminalMutationRecoveryError.mutationNotFound(replacement.mutationID)
+                }
+                guard let record = records.first(where: { $0.id == replacement.mutationID }) else {
+                    throw TerminalMutationRecoveryError.mutationNotFound(replacement.mutationID)
+                }
+                guard record.isTerminal else {
+                    throw TerminalMutationRecoveryError.mutationNotTerminal(replacement.mutationID)
+                }
+                guard let kind = JournalEntityKind(rawValue: record.entityKindRaw) else {
+                    throw SwiftDataJournalRepositoryError.invalidStoredValue
+                }
+                let expected = JournalEntityReference(kind, record.entityID)
+                guard expected == replacement.entity.reference else {
+                    throw TerminalMutationRecoveryError.entityMismatch(
+                        mutationID: replacement.mutationID,
+                        expected: expected,
+                        actual: replacement.entity.reference
+                    )
+                }
+                selected[replacement.mutationID] = record
+            }
+
+            for replacement in replacements {
+                guard let record = selected[replacement.mutationID] else { continue }
+                try upsert(replacement.entity)
+                let operation: SyncOperation
+                if let replacementOperation = replacement.operation {
+                    operation = replacementOperation
+                } else if let storedOperation = SyncOperation(rawValue: record.operationRaw) {
+                    operation = storedOperation
+                } else {
+                    throw SwiftDataJournalRepositoryError.invalidStoredValue
+                }
+                record.operationRaw = operation.rawValue
+                record.revisionExpectationPayload = try? replacement.revisionExpectation.map(JSONEncoder.journal.encode)
+                record.retryCount = 0
+                record.lastError = nil
+                record.isTerminal = false
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
+    public func discardTerminalMutations(_ mutationIDs: Set<UUID>) throws {
+        guard !mutationIDs.isEmpty else { return }
         do {
             let records = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
             for record in records where mutationIDs.contains(record.id) && record.isTerminal {
-                record.isTerminal = false
-                record.lastError = nil
+                context.delete(record)
             }
             try context.save()
         } catch {

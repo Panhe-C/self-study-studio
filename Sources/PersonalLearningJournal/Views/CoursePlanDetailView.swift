@@ -62,7 +62,7 @@ struct CoursePlanDetailView: View {
                 }
             }
 
-            let revisionRoutines = viewModel.practiceRoutines.filter {
+            let revisionRoutines = viewModel.practiceRoutineHistory.filter {
                 $0.planRevisionID == plan.revisionID
             }
             if !revisionRoutines.isEmpty {

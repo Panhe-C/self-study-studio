@@ -464,6 +464,52 @@ public extension JournalSnapshot {
             return lhs.planSeriesID.uuidString < rhs.planSeriesID.uuidString
         }
     }
+
+    /// Routines that can participate in current-day practice operations.
+    ///
+    /// Legacy routines have no revision scope and remain visible. A
+    /// revision-scoped routine is operational only when its owning Project's
+    /// active Learning Plan points at that exact revision. Superseded
+    /// revisions stay available through `practiceRoutineHistory` instead of
+    /// leaking into Today, the timer, or routine management.
+    var operationalPracticeRoutines: [PracticeRoutine] {
+        var activeRevisionByProject: [UUID: UUID] = [:]
+        for project in projects {
+            let explicitlyLinkedPlan = project.activeCoursePlanId.flatMap { activePlanID in
+                coursePlans.first {
+                    $0.id == activePlanID
+                        && $0.projectId == project.id
+                        && $0.status == .active
+                }
+            }
+            let activePlans = coursePlans.filter {
+                $0.projectId == project.id && $0.status == .active
+            }
+            let activePlan = explicitlyLinkedPlan
+                ?? (activePlans.count == 1 ? activePlans[0] : nil)
+            if let activePlan {
+                activeRevisionByProject[project.id] = activePlan.revisionID
+            }
+        }
+
+        return practiceRoutines.filter { routine in
+            guard routine.deletedAt == nil else { return false }
+            guard let revisionID = routine.planRevisionID else {
+                return true
+            }
+            guard let projectID = routine.projectId,
+                  let activeRevisionID = activeRevisionByProject[projectID]
+            else {
+                return false
+            }
+            return revisionID == activeRevisionID
+        }
+    }
+
+    /// Full routine history, including superseded revision snapshots.
+    var practiceRoutineHistory: [PracticeRoutine] {
+        practiceRoutines
+    }
 }
 
 public enum RevisionGuardRecordState: String, Codable, Sendable {
