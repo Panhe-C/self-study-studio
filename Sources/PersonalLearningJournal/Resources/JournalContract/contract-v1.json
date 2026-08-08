@@ -1,0 +1,284 @@
+{
+  "version": 1,
+  "records": {
+    "project": {
+      "recordType": "Project",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "name": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "area": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "goal": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "status": { "type": "enum", "required": true, "values": ["idea", "active", "low-frequency", "paused", "archived", "completed", "trash"] },
+        "currentNextStep": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "lastActionType": { "type": "enum", "required": true, "values": ["course", "practice", "output", "reading", "experiment", "review"] },
+        "defaultDurationMinutes": { "type": "integer", "required": true, "minimum": 1 },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "archivedAt": { "type": "date", "required": false },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 },
+        "activeCoursePlanId": { "type": "uuid", "required": false },
+        "commitmentState": { "type": "enum", "required": true, "values": ["ready", "needsSetup"] },
+        "activeEvidenceContractId": { "type": "uuid", "required": false },
+        "completedAt": { "type": "date", "required": false },
+        "previousStatusBeforeTrash": { "type": "enum", "required": false, "values": ["idea", "active", "low-frequency", "paused", "archived", "completed", "trash"] }
+      }
+    },
+    "session": {
+      "recordType": "LearningSession",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "projectId": { "type": "uuid", "required": true },
+        "source": { "type": "enum", "required": true, "values": ["quickLog", "timer"] },
+        "actionType": { "type": "enum", "required": true, "values": ["course", "practice", "output", "reading", "experiment", "review"] },
+        "startedAt": { "type": "date", "required": true },
+        "endedAt": { "type": "date", "required": true },
+        "durationMinutes": { "type": "integer", "required": true, "minimum": 1 },
+        "note": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "nextStepBefore": { "type": "string", "required": true, "trim": true },
+        "nextStepAfter": { "type": "string", "required": true, "trim": true },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "proof": {
+      "recordType": "Proof",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "projectId": { "type": "uuid", "required": true },
+        "sessionId": { "type": "uuid", "required": false },
+        "type": { "type": "enum", "required": true, "values": ["image", "audio", "file", "link", "text"] },
+        "title": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "statement": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "localPath": { "type": "string", "required": false, "trim": true },
+        "url": { "type": "url", "required": false },
+        "mimeType": { "type": "string", "required": false, "trim": true },
+        "fileSize": { "type": "integer", "required": false, "minimum": 0 },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 },
+        "artifact": { "type": "taggedUnion", "required": false, "variants": ["attachment", "link", "text"] },
+        "integrity": { "type": "enum", "required": true, "values": ["qualifying", "needsEvidence", "changedLink", "brokenLink"] },
+        "revision": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "review": {
+      "recordType": "Review",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "periodStart": { "type": "date", "required": true },
+        "periodEnd": { "type": "date", "required": true },
+        "facts": { "type": "stringArray", "required": true },
+        "patterns": { "type": "stringArray", "required": true },
+        "decisions": { "type": "stringArray", "required": true },
+        "projectRecommendations": { "type": "json", "required": true },
+        "nextSteps": { "type": "json", "required": true },
+        "aiSourceSummary": { "type": "stringArray", "required": true },
+        "sourceReferences": { "type": "json", "required": true },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 },
+        "confirmedDecisionIds": { "type": "uuidArray", "required": true },
+        "referencedProofRevisionIds": { "type": "uuidArray", "required": true }
+      }
+    },
+    "evidenceContract": {
+      "recordType": "EvidenceContract",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "projectId": { "type": "uuid", "required": true },
+        "trigger": { "type": "taggedUnion", "required": true, "variants": ["interval", "milestone"] },
+        "expectedArtifact": { "type": "enum", "required": true, "values": ["image", "audio", "file", "link", "text"] },
+        "acceptanceCriteria": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "startsAt": { "type": "date", "required": true },
+        "endedAt": { "type": "date", "required": false },
+        "revision": { "type": "integer", "required": true, "minimum": 1 },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false }
+      }
+    },
+    "evidenceAcceptance": {
+      "recordType": "EvidenceAcceptance",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "contractId": { "type": "uuid", "required": true },
+        "proofId": { "type": "uuid", "required": true },
+        "acceptedCriteria": { "type": "stringArray", "required": true, "trim": true },
+        "acceptedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false }
+      }
+    },
+    "proofRevision": {
+      "recordType": "ProofRevision",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "proofId": { "type": "uuid", "required": true },
+        "revision": { "type": "integer", "required": true, "minimum": 1 },
+        "title": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "statement": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "artifactChecksum": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "createdAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false }
+      }
+    },
+    "reviewDecision": {
+      "recordType": "ReviewDecision",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "reviewId": { "type": "uuid", "required": true },
+        "projectId": { "type": "uuid", "required": true },
+        "kind": { "type": "enum", "required": true, "values": ["continueUnchanged", "changeNextStep", "reviseContract", "changeFrequency", "pause", "archive", "complete"] },
+        "nextStep": { "type": "string", "required": false, "trim": true },
+        "contractId": { "type": "uuid", "required": false },
+        "capstoneProofId": { "type": "uuid", "required": false },
+        "decidedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false }
+      }
+    },
+    "trailEvent": {
+      "recordType": "TrailEvent",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "projectId": { "type": "uuid", "required": true },
+        "type": { "type": "enum", "required": true, "values": ["session", "proof", "review", "statusChange", "nextStepChange", "planActivated", "planRevised", "scheduleChanged", "calendarSynced"] },
+        "sourceId": { "type": "uuid", "required": true },
+        "occurredAt": { "type": "date", "required": true },
+        "title": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "detail": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "coursePlan": {
+      "recordType": "CoursePlan",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "projectId": { "type": "uuid", "required": true },
+        "revision": { "type": "integer", "required": true, "minimum": 1 },
+        "status": { "type": "enum", "required": true, "values": ["draft", "active", "archived", "completed"] },
+        "courseURL": { "type": "url", "required": false },
+        "courseTitle": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "courseOutline": { "type": "string", "required": true, "trim": true },
+        "goal": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "expectedOutcome": { "type": "string", "required": true, "trim": true },
+        "startsOn": { "type": "date", "required": true },
+        "deadline": { "type": "date", "required": false },
+        "weeklyBudgetMinutes": { "type": "integer", "required": true, "minimum": 1 },
+        "summary": { "type": "string", "required": true, "trim": true },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "activatedAt": { "type": "date", "required": false },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "planPhase": {
+      "recordType": "PlanPhase",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "planId": { "type": "uuid", "required": true },
+        "title": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "objective": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "expectedProof": { "type": "string", "required": true, "trim": true },
+        "ordinal": { "type": "integer", "required": true, "minimum": 0 },
+        "targetStart": { "type": "date", "required": true },
+        "targetEnd": { "type": "date", "required": true },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "plannedSession": {
+      "recordType": "PlannedSession",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "planId": { "type": "uuid", "required": true },
+        "phaseId": { "type": "uuid", "required": true },
+        "projectId": { "type": "uuid", "required": true },
+        "title": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "actionType": { "type": "enum", "required": true, "values": ["course", "practice", "output", "reading", "experiment", "review"] },
+        "expectedProof": { "type": "string", "required": false, "trim": true },
+        "durationMinutes": { "type": "integer", "required": true, "minimum": 1 },
+        "deadline": { "type": "date", "required": false },
+        "status": { "type": "enum", "required": true, "values": ["unscheduled", "scheduled", "completed", "skipped", "cancelled"] },
+        "completedSessionId": { "type": "uuid", "required": false },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "availabilityRule": {
+      "recordType": "AvailabilityRule",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "weekday": { "type": "integer", "required": true, "minimum": 1, "maximum": 7 },
+        "startMinute": { "type": "integer", "required": true, "minimum": 0, "maximum": 1440 },
+        "endMinute": { "type": "integer", "required": true, "minimum": 1, "maximum": 1440 },
+        "timeZoneIdentifier": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "validFrom": { "type": "date", "required": false },
+        "validThrough": { "type": "date", "required": false },
+        "minimumSessionMinutes": { "type": "integer", "required": true, "minimum": 1 },
+        "enabled": { "type": "boolean", "required": true },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "schedulingPreferences": {
+      "recordType": "SchedulingPreferences",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "preferredSessionMinutes": { "type": "integer", "required": true, "minimum": 1 },
+        "maximumDailyMinutes": { "type": "integer", "required": true, "minimum": 1 },
+        "minimumGapMinutes": { "type": "integer", "required": true, "minimum": 0 },
+        "allowWeekends": { "type": "boolean", "required": true },
+        "eventTitleStyle": { "type": "enum", "required": true, "values": ["project", "session", "private"] },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "practiceRoutine": {
+      "recordType": "PracticeRoutine",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "projectId": { "type": "uuid", "required": false },
+        "name": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "symbolName": { "type": "string", "required": true, "trim": true },
+        "color": { "type": "enum", "required": true, "values": ["coral", "teal", "yellow", "blue", "green", "pink"] },
+        "targetMinutes": { "type": "integer", "required": true, "minimum": 1, "maximum": 1440 },
+        "weekdays": { "type": "integerArray", "required": true },
+        "reminderTime": { "type": "json", "required": false },
+        "isArchived": { "type": "boolean", "required": true },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "practiceSession": {
+      "recordType": "PracticeSession",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "routineId": { "type": "uuid", "required": true },
+        "linkedProjectId": { "type": "uuid", "required": false },
+        "startedAt": { "type": "date", "required": true },
+        "endedAt": { "type": "date", "required": true },
+        "activeDurationSeconds": { "type": "integer", "required": true, "minimum": 0 },
+        "note": { "type": "string", "required": false, "trim": true },
+        "createdAt": { "type": "date", "required": true },
+        "updatedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false },
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    }
+  }
+}
