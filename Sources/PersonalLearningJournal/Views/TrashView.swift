@@ -54,13 +54,16 @@ public struct TrashView: View {
                     Text("\(impact.planCount) plans · \(impact.phaseCount) phases · \(impact.plannedSessionCount) planned sessions")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text("\(impact.contractCount) contracts · \(impact.acceptanceCount) acceptances · \(impact.decisionCount) decisions")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Text("\(impact.sessionCount) sessions · \(impact.proofCount) proofs · \(impact.revisionCount) revisions")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text("\(impact.routineCount) routines · \(impact.practiceSessionCount) practice sessions · \(impact.attachmentPaths.count) attachments")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("\(impact.reviewCount) reviews · \(impact.trailCount) trail events")
+                    Text("\(impact.reviewCount) reviews deleted · \(impact.reviewUpdateCount) shared reviews updated · \(impact.trailCount) trail events")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     HStack {
@@ -100,7 +103,7 @@ public struct TrashView: View {
             }
         } message: {
             if let impact = pendingImpact {
-                Text("This cannot be undone. It affects \(impact.planCount) plans, \(impact.sessionCount) sessions, \(impact.proofCount) proofs, \(impact.routineCount) routines, \(impact.practiceSessionCount) practice sessions, \(impact.reviewCount) reviews, \(impact.trailCount) trail events, and \(impact.attachmentPaths.count) attachments.")
+                Text("This cannot be undone. It affects \(impact.planCount) plans, \(impact.phaseCount) phases, \(impact.plannedSessionCount) planned sessions, \(impact.contractCount) contracts, \(impact.acceptanceCount) acceptances, \(impact.sessionCount) sessions, \(impact.proofCount) proofs, \(impact.revisionCount) revisions, \(impact.decisionCount) decisions, \(impact.routineCount) routines, \(impact.practiceSessionCount) practice sessions, \(impact.reviewCount) reviews deleted, \(impact.reviewUpdateCount) shared reviews updated, \(impact.trailCount) trail events, and \(impact.attachmentPaths.count) attachments.")
             }
         }
         .alert("Could not complete action", isPresented: Binding(
@@ -133,6 +136,13 @@ public struct TrashView: View {
                         .foregroundStyle(.green)
                     Text("Export is ready to save or share.")
                         .multilineTextAlignment(.center)
+                    Label(
+                        "This archive is unencrypted. Save or share it only in a trusted location.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
                     ShareLink(item: document.url) {
                         Label("Save or Share Export", systemImage: "square.and.arrow.up")
                     }
@@ -171,7 +181,7 @@ public struct TrashView: View {
                 onExport(project, try Data(contentsOf: document.url))
             }
             exportDocument = document
-            noticeMessage = "Export prepared with \(document.attachmentCount) attachments before deleting \(project.name)."
+            noticeMessage = "Unencrypted export prepared with \(document.attachmentCount) attachments before deleting \(project.name). Save it only in a trusted location."
         } catch {
             errorMessage = "Export failed: \(error.localizedDescription)"
         }

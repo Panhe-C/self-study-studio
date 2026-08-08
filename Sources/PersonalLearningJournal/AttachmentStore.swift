@@ -16,6 +16,16 @@ public enum AttachmentCleanupQueueError: Error, Equatable, Sendable {
     case invalidQueue
 }
 
+public struct AttachmentCleanupEntry: Codable, Equatable, Sendable {
+    public var projectID: UUID
+    public var paths: [String]
+
+    public init(projectID: UUID, paths: [String]) {
+        self.projectID = projectID
+        self.paths = paths
+    }
+}
+
 public enum AttachmentStoreError: Error, Equatable, Sendable {
     case unsafePath(String)
 }
@@ -39,37 +49,49 @@ public struct AttachmentCleanupQueue: Sendable {
         )
     }
 
-    public func load() throws -> [String] {
+    public func load() throws -> [AttachmentCleanupEntry] {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
         do {
-            return try JSONDecoder().decode([String].self, from: Data(contentsOf: fileURL))
+            return try JSONDecoder().decode([AttachmentCleanupEntry].self, from: Data(contentsOf: fileURL))
         } catch {
             throw AttachmentCleanupQueueError.invalidQueue
         }
     }
 
-    public func enqueue(paths: [String]) throws {
-        let merged = Set(try load()).union(paths)
-        try write(Array(merged).sorted())
+    public func enqueue(projectID: UUID, paths: [String]) throws {
+        guard !paths.isEmpty else { return }
+        var entries = try load()
+        if let index = entries.firstIndex(where: { $0.projectID == projectID }) {
+            entries[index].paths = Array(Set(entries[index].paths).union(paths)).sorted()
+        } else {
+            entries.append(AttachmentCleanupEntry(projectID: projectID, paths: paths.sorted()))
+        }
+        try write(entries)
     }
 
-    public func remove(paths: [String]) throws {
-        let remaining = Set(try load()).subtracting(paths)
-        if remaining.isEmpty {
+    public func remove(projectID: UUID, paths: [String]) throws {
+        var entries = try load()
+        guard let index = entries.firstIndex(where: { $0.projectID == projectID }) else { return }
+        entries[index].paths = Array(Set(entries[index].paths).subtracting(paths)).sorted()
+        if entries[index].paths.isEmpty {
+            entries.remove(at: index)
+        }
+        if entries.isEmpty {
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 try FileManager.default.removeItem(at: fileURL)
             }
         } else {
-            try write(Array(remaining).sorted())
+            try write(entries)
         }
     }
 
-    private func write(_ paths: [String]) throws {
+    private func write(_ entries: [AttachmentCleanupEntry]) throws {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try JSONEncoder().encode(paths).write(to: fileURL, options: [.atomic])
+        let sorted = entries.sorted { $0.projectID.uuidString < $1.projectID.uuidString }
+        try JSONEncoder().encode(sorted).write(to: fileURL, options: [.atomic])
     }
 }
 
@@ -190,21 +212,25 @@ public struct AttachmentStore: Sendable {
             .appendingPathComponent(fileName)
     }
 
-    private var attachmentRoot: URL {
-        rootDirectory
+    private var attachmentRoots: [URL] {
+        let learningJournal = rootDirectory
             .appendingPathComponent("LearningJournal", isDirectory: true)
-            .appendingPathComponent("Attachments", isDirectory: true)
-            .standardizedFileURL
+        return [
+            learningJournal.appendingPathComponent("Attachments", isDirectory: true),
+            learningJournal.appendingPathComponent("ImportedAssets", isDirectory: true)
+        ].map(\.standardizedFileURL)
     }
 
     private func validateAttachmentTarget(_ url: URL) throws {
-        let root = attachmentRoot
         let target = url.standardizedFileURL
+        guard let root = attachmentRoots.first(where: {
+            target != $0 && isDescendant(target, of: $0)
+        }) else {
+            throw AttachmentStoreError.unsafePath(url.path)
+        }
         let resolvedRoot = root.resolvingSymlinksInPath().standardizedFileURL
         let resolvedTarget = target.resolvingSymlinksInPath().standardizedFileURL
-        guard target != root,
-              isDescendant(target, of: root),
-              isDescendant(resolvedTarget, of: resolvedRoot),
+        guard isDescendant(resolvedTarget, of: resolvedRoot),
               !containsSymlink(onPathTo: target, from: root) else {
             throw AttachmentStoreError.unsafePath(url.path)
         }

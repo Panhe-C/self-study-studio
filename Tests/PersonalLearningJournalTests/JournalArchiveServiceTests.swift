@@ -176,7 +176,14 @@ final class JournalArchiveServiceTests: XCTestCase {
             status: .active,
             currentNextStep: "Review"
         )
+        let reviewID = UUID()
+        let decision = ReviewDecision(
+            reviewId: reviewID,
+            projectId: otherProject.id,
+            kind: .continueUnchanged
+        )
         let review = Review(
+            id: reviewID,
             periodStart: Date(timeIntervalSince1970: 1_000),
             periodEnd: Date(timeIntervalSince1970: 2_000),
             facts: [],
@@ -184,12 +191,8 @@ final class JournalArchiveServiceTests: XCTestCase {
             decisions: [],
             projectRecommendations: [project.id: .active],
             nextSteps: [:],
-            aiSourceSummary: []
-        )
-        let decision = ReviewDecision(
-            reviewId: review.id,
-            projectId: otherProject.id,
-            kind: .continueUnchanged
+            aiSourceSummary: [],
+            confirmedDecisionIds: [decision.id]
         )
         let snapshot = JournalSnapshot(
             projects: [project, otherProject],
@@ -202,8 +205,117 @@ final class JournalArchiveServiceTests: XCTestCase {
             snapshot: snapshot
         )
 
-        XCTAssertTrue(impact.references.contains(.init(.review, review.id)))
-        XCTAssertTrue(impact.references.contains(.init(.reviewDecision, decision.id)))
+        XCTAssertFalse(impact.references.contains(.init(.review, review.id)))
+        XCTAssertFalse(impact.references.contains(.init(.reviewDecision, decision.id)))
+        XCTAssertEqual(impact.reviewUpdateCount, 1)
+        XCTAssertEqual(impact.decisionCount, 0)
+    }
+
+    func testPurgePreservesSharedReviewAndOtherProjectDecision() throws {
+        let target = Project(
+            name: "Target Project",
+            area: "Learning",
+            goal: "Preserve target",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let other = Project(
+            name: "Other Project",
+            area: "Learning",
+            goal: "Preserve other",
+            status: .active,
+            currentNextStep: "Review"
+        )
+        let targetSession = try LearningSession(
+            projectId: target.id,
+            source: .quickLog,
+            actionType: .course,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_060),
+            durationMinutes: 1,
+            note: "Target session",
+            nextStepBefore: "",
+            nextStepAfter: ""
+        )
+        let otherSession = try LearningSession(
+            projectId: other.id,
+            source: .quickLog,
+            actionType: .course,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_060),
+            durationMinutes: 1,
+            note: "Other session",
+            nextStepBefore: "",
+            nextStepAfter: ""
+        )
+        let targetDecision = ReviewDecision(
+            reviewId: UUID(),
+            projectId: target.id,
+            kind: .continueUnchanged
+        )
+        let otherDecision = ReviewDecision(
+            reviewId: targetDecision.reviewId,
+            projectId: other.id,
+            kind: .continueUnchanged
+        )
+        let targetFact = "Target fact"
+        let otherFact = "Other fact"
+        let review = Review(
+            periodStart: Date(timeIntervalSince1970: 900),
+            periodEnd: Date(timeIntervalSince1970: 2_000),
+            facts: [targetFact, otherFact],
+            patterns: ["Target pattern", "Other pattern"],
+            decisions: ["Target decision", "Other decision"],
+            projectRecommendations: [target.id: .active, other.id: .paused],
+            nextSteps: [target.id: "Target next", other.id: "Other next"],
+            aiSourceSummary: [
+                "session \(targetSession.id.uuidString.prefix(8)): Target session",
+                "session \(otherSession.id.uuidString.prefix(8)): Other session"
+            ],
+            sourceReferences: [
+                targetFact: ["session \(targetSession.id.uuidString.prefix(8)): Target session"],
+                otherFact: ["session \(otherSession.id.uuidString.prefix(8)): Other session"],
+                "Target pattern": ["session \(targetSession.id.uuidString.prefix(8)): Target session"],
+                "Other pattern": ["session \(otherSession.id.uuidString.prefix(8)): Other session"],
+                "Target decision": ["session \(targetSession.id.uuidString.prefix(8)): Target session"],
+                "Other decision": ["session \(otherSession.id.uuidString.prefix(8)): Other session"]
+            ],
+            confirmedDecisionIds: [targetDecision.id, otherDecision.id]
+        )
+        var targetDecisionWithReview = targetDecision
+        targetDecisionWithReview.reviewId = review.id
+        var otherDecisionWithReview = otherDecision
+        otherDecisionWithReview.reviewId = review.id
+        let snapshot = JournalSnapshot(
+            projects: [target, other],
+            sessions: [targetSession, otherSession],
+            reviews: [review],
+            reviewDecisions: [targetDecisionWithReview, otherDecisionWithReview]
+        )
+        let repository = InMemoryJournalRepository(snapshot: snapshot)
+
+        let impact = try JournalArchiveService(derivationRounds: 20).purge(
+            projectID: target.id,
+            snapshot: snapshot,
+            from: repository
+        )
+        let remaining = try repository.snapshot()
+
+        XCTAssertEqual(impact.reviewCount, 0)
+        XCTAssertEqual(impact.reviewUpdateCount, 1)
+        XCTAssertEqual(impact.decisionCount, 1)
+        XCTAssertFalse(impact.references.contains(.init(.review, review.id)))
+        XCTAssertTrue(remaining.reviews.contains { review in
+            review.projectRecommendations == [other.id: .paused]
+                && review.nextSteps == [other.id: "Other next"]
+                && review.facts == [otherFact]
+                && review.patterns == ["Other pattern"]
+                && review.confirmedDecisionIds == [otherDecisionWithReview.id]
+        })
+        XCTAssertFalse(remaining.reviewDecisions.contains { $0.id == targetDecisionWithReview.id })
+        XCTAssertTrue(remaining.reviewDecisions.contains { $0.id == otherDecisionWithReview.id })
     }
 
     func testConfirmedPurgeCreatesTombstonesForEveryEnumeratedRecord() throws {
@@ -309,6 +421,20 @@ final class JournalArchiveServiceTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let attachmentURL = root.appendingPathComponent("record.txt")
         try Data("record".utf8).write(to: attachmentURL)
+        let project = Project(
+            name: "Archived project",
+            area: "Test",
+            goal: "Keep history",
+            status: .idea,
+            currentNextStep: "Review"
+        )
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        try repository.commit(
+            JournalTransaction(
+                deletions: [.init(.project, project.id)],
+                origin: .user
+            )
+        )
         var shouldFail = true
         let service = JournalArchiveService(
             derivationRounds: 20,
@@ -322,10 +448,20 @@ final class JournalArchiveServiceTests: XCTestCase {
         )
 
         XCTAssertThrowsError(
-            try service.retryAttachmentCleanup(paths: [attachmentURL.path])
+            try service.retryAttachmentCleanup(
+                projectID: project.id,
+                paths: [attachmentURL.path],
+                repository: repository
+            )
         )
         XCTAssertTrue(FileManager.default.fileExists(atPath: attachmentURL.path))
-        XCTAssertNoThrow(try service.retryAttachmentCleanup(paths: [attachmentURL.path]))
+        XCTAssertNoThrow(
+            try service.retryAttachmentCleanup(
+                projectID: project.id,
+                paths: [attachmentURL.path],
+                repository: repository
+            )
+        )
         XCTAssertFalse(FileManager.default.fileExists(atPath: attachmentURL.path))
     }
 

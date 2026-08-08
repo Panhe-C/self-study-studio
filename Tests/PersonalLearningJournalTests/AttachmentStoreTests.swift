@@ -120,4 +120,40 @@ final class AttachmentStoreTests: XCTestCase {
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: real.fileURL.path))
     }
+
+    func testRemovingImportedCloudAssetIsAllowedWithinImportedAssetsRoot() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let source = root.appendingPathComponent("source.bin")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("cloud".utf8).write(to: source)
+        let store = AttachmentStore(rootDirectory: root)
+        let imported = try store.importCloudAsset(at: source, proofId: UUID())
+
+        try store.removeAttachment(at: imported)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: imported.path))
+    }
+
+    func testRemovingImportedCloudAssetRejectsSymlinkAndTraversal() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let source = root.appendingPathComponent("source.bin")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = AttachmentStore(rootDirectory: root)
+        try Data("cloud".utf8).write(to: source)
+        let imported = try store.importCloudAsset(at: source, proofId: UUID())
+        let link = imported.deletingLastPathComponent().appendingPathComponent("link.bin")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: imported)
+
+        XCTAssertThrowsError(try store.removeAttachment(at: link)) { error in
+            XCTAssertEqual(error as? AttachmentStoreError, .unsafePath(link.path))
+        }
+        XCTAssertThrowsError(
+            try store.removeAttachment(
+                at: root.appendingPathComponent("LearningJournal/ImportedAssets/../../source.bin")
+            )
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: imported.path))
+    }
 }

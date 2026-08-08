@@ -88,15 +88,25 @@ public struct TrashExportService {
             contractIDs.contains($0.contractId) || proofIDs.contains($0.proofId)
         }
         let revisions = snapshot.proofRevisions.filter { proofIDs.contains($0.proofId) }
-        let reviews = snapshot.reviews.compactMap { review -> Review? in
-            guard review.projectRecommendations.keys.contains(projectID)
-                    || review.nextSteps.keys.contains(projectID) else { return nil }
-            var scoped = review
-            scoped.projectRecommendations = scoped.projectRecommendations.filter { $0.key == projectID }
-            scoped.nextSteps = scoped.nextSteps.filter { $0.key == projectID }
-            return scoped
-        }
+        let revisionIDs = Set(revisions.map(\.id))
         let decisions = snapshot.reviewDecisions.filter { $0.projectId == projectID }
+        let decisionIDs = Set(decisions.map(\.id))
+        let reviews = snapshot.reviews.compactMap { review -> Review? in
+            guard JournalArchiveService.reviewTouchesProject(
+                review,
+                projectID: projectID,
+                snapshot: snapshot
+            ) || review.confirmedDecisionIds.contains(where: decisionIDs.contains)
+                || review.referencedProofRevisionIds.contains(where: revisionIDs.contains) else {
+                return nil
+            }
+            return JournalArchiveService.scopedReview(
+                review,
+                projectID: projectID,
+                snapshot: snapshot,
+                mode: .exportingProject
+            )
+        }
         let trails = snapshot.trailEvents.filter { $0.projectId == projectID }
         let plans = snapshot.coursePlans.filter { $0.projectId == projectID }
         let planIDs = Set(plans.map(\.id))

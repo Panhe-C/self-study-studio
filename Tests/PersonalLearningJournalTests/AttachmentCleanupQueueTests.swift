@@ -3,6 +3,70 @@ import XCTest
 
 @MainActor
 final class AttachmentCleanupQueueTests: XCTestCase {
+    func testCleanupQueueSurvivesCommitCrashAndRefusesLiveProjectCleanup() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queue = AttachmentCleanupQueue(
+            fileURL: root.appendingPathComponent("cleanup-queue.json")
+        )
+        let project = Project(
+            name: "Crash project",
+            area: "Test",
+            goal: "Delete safely",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let path = root.appendingPathComponent("record.txt").path
+        let proof = try Proof(
+            projectId: project.id,
+            type: .file,
+            title: "Record",
+            statement: "A record",
+            localPath: path
+        )
+        var shouldFailCommit = true
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project], proofs: [proof]),
+            commitHook: { _ in
+                if shouldFailCommit {
+                    shouldFailCommit = false
+                    throw InjectedQueueCommitFailure()
+                }
+            }
+        )
+        var deleteAttempts = 0
+        let service = JournalArchiveService(
+            removeAttachment: { _ in deleteAttempts += 1 },
+            cleanupQueue: queue
+        )
+
+        XCTAssertThrowsError(
+            try service.purge(projectID: project.id, snapshot: try repository.snapshot(), from: repository)
+        )
+        let queued = try queue.load()
+        XCTAssertEqual(queued, [AttachmentCleanupEntry(projectID: project.id, paths: [path])])
+        XCTAssertEqual(deleteAttempts, 0)
+
+        XCTAssertThrowsError(
+            try service.retryAttachmentCleanup(
+                projectID: project.id,
+                paths: [path],
+                repository: repository
+            )
+        ) { error in
+            XCTAssertEqual(error as? JournalArchiveError, .projectNotPurged(project.id))
+        }
+        XCTAssertEqual(deleteAttempts, 0)
+        XCTAssertEqual(try queue.load(), queued)
+
+        _ = try service.purge(projectID: project.id, snapshot: try repository.snapshot(), from: repository)
+        XCTAssertEqual(deleteAttempts, 1)
+        XCTAssertTrue(try queue.load().isEmpty)
+    }
+
     func testPendingAttachmentCleanupSurvivesViewModelRestartAndRetry() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -49,7 +113,10 @@ final class AttachmentCleanupQueueTests: XCTestCase {
         )
 
         XCTAssertThrowsError(try firstViewModel.permanentlyDelete(projectId: project.id))
-        XCTAssertEqual(try queue.load(), [attachmentURL.path])
+        XCTAssertEqual(
+            try queue.load(),
+            [AttachmentCleanupEntry(projectID: project.id, paths: [attachmentURL.path])]
+        )
         let queuedMutations = try repository.pendingMutations(limit: 100)
         let queuedPayload = String(
             data: try JSONEncoder().encode(queuedMutations),
@@ -82,6 +149,7 @@ final class AttachmentCleanupQueueTests: XCTestCase {
 }
 
 private struct InjectedQueueDeletionFailure: Error {}
+private struct InjectedQueueCommitFailure: Error {}
 
 @MainActor
 private final class QueuePracticeTimerStateStore: PracticeTimerStateStore {

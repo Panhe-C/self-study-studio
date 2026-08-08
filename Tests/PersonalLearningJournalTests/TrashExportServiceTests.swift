@@ -181,4 +181,132 @@ final class TrashExportServiceTests: XCTestCase {
             XCTAssertEqual(error as? JournalArchiveError, .missingAttachment(missingPath))
         }
     }
+
+    func testPrepareExportsOnlyTargetReviewHistoryAndDecisionReferences() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let target = Project(
+            name: "Target",
+            area: "Test",
+            goal: "Keep",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let other = Project(
+            name: "Other",
+            area: "Test",
+            goal: "Keep",
+            status: .active,
+            currentNextStep: "Review"
+        )
+        let reviewID = UUID()
+        let targetDecision = ReviewDecision(
+            reviewId: reviewID,
+            projectId: target.id,
+            kind: .continueUnchanged
+        )
+        let otherDecision = ReviewDecision(
+            reviewId: reviewID,
+            projectId: other.id,
+            kind: .continueUnchanged
+        )
+        let review = Review(
+            id: reviewID,
+            periodStart: Date(timeIntervalSince1970: 500),
+            periodEnd: Date(timeIntervalSince1970: 900),
+            facts: ["Target fact", "Other fact"],
+            patterns: ["Target pattern", "Other pattern"],
+            decisions: ["Target decision", "Other decision"],
+            projectRecommendations: [target.id: .active, other.id: .paused],
+            nextSteps: [target.id: "Target next", other.id: "Other next"],
+            aiSourceSummary: ["Target source", "Other source"],
+            sourceReferences: [
+                "Target fact": ["project \(target.id.uuidString.prefix(8)): target source"],
+                "Other fact": ["project \(other.id.uuidString.prefix(8)): other source"],
+                "Target pattern": ["project \(target.id.uuidString.prefix(8)): target source"],
+                "Other pattern": ["project \(other.id.uuidString.prefix(8)): other source"],
+                "Target decision": ["project \(target.id.uuidString.prefix(8)): target source"],
+                "Other decision": ["project \(other.id.uuidString.prefix(8)): other source"]
+            ],
+            confirmedDecisionIds: [targetDecision.id, otherDecision.id]
+        )
+        let snapshot = JournalSnapshot(
+            projects: [target, other],
+            reviews: [review],
+            reviewDecisions: [targetDecision, otherDecision]
+        )
+
+        let document = try TrashExportService(
+            archiveService: JournalArchiveService(derivationRounds: 20)
+        ).prepare(
+            snapshot: snapshot,
+            project: target,
+            to: root.appendingPathComponent("Exports", isDirectory: true)
+        )
+        let envelope = try JSONDecoder.journal.decode(
+            JournalArchiveEnvelope.self,
+            from: Data(contentsOf: document.url)
+        )
+        let preview = try JournalArchiveService(derivationRounds: 20).preview(envelope, password: nil)
+
+        XCTAssertEqual(preview.snapshot.projects.map(\.id), [target.id])
+        XCTAssertEqual(preview.snapshot.reviewDecisions.map(\.id), [targetDecision.id])
+        XCTAssertEqual(preview.snapshot.reviews.count, 1)
+        let exportedReview = try XCTUnwrap(preview.snapshot.reviews.first)
+        XCTAssertEqual(exportedReview.projectRecommendations, [target.id: .active])
+        XCTAssertEqual(exportedReview.nextSteps, [target.id: "Target next"])
+        XCTAssertEqual(exportedReview.facts, ["Target fact"])
+        XCTAssertEqual(exportedReview.patterns, ["Target pattern"])
+        XCTAssertEqual(exportedReview.decisions, ["Target decision"])
+        XCTAssertEqual(exportedReview.confirmedDecisionIds, [targetDecision.id])
+        XCTAssertEqual(
+            exportedReview.sourceReferences,
+            [
+                "Target fact": ["project \(target.id.uuidString.prefix(8)): target source"],
+                "Target pattern": ["project \(target.id.uuidString.prefix(8)): target source"],
+                "Target decision": ["project \(target.id.uuidString.prefix(8)): target source"]
+            ]
+        )
+        XCTAssertFalse(exportedReview.facts.contains("Other fact"))
+        XCTAssertFalse(exportedReview.patterns.contains("Other pattern"))
+    }
+
+    func testArchiveRejectsDanglingReviewReferences() throws {
+        let project = Project(
+            name: "Target",
+            area: "Test",
+            goal: "Keep",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let review = Review(
+            periodStart: Date(timeIntervalSince1970: 500),
+            periodEnd: Date(timeIntervalSince1970: 900),
+            facts: ["Fact"],
+            patterns: [],
+            decisions: [],
+            projectRecommendations: [project.id: .active],
+            nextSteps: [:],
+            aiSourceSummary: [],
+            sourceReferences: ["Unknown insight": ["source"]],
+            confirmedDecisionIds: [UUID()]
+        )
+
+        XCTAssertThrowsError(
+            try JournalArchiveService(derivationRounds: 20).export(
+                snapshot: JournalSnapshot(projects: [project], reviews: [review]),
+                attachments: [:],
+                password: nil,
+                allowUnencrypted: true
+            )
+        ) { error in
+            XCTAssertEqual(error as? JournalArchiveError, .invalidArchive)
+        }
+    }
 }

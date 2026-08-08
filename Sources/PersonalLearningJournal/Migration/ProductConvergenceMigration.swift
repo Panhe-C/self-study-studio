@@ -183,6 +183,13 @@ public struct ProductConvergenceMigration {
             }
         }
 
+        let migrationIdentifiers = [Self.identifier, Self.statusMigrationIdentifier]
+        let preexistingMigrationIdentifiers = Set(
+            try migrationIdentifiers.filter {
+                try repository.hasCompletedMigration(identifier: $0)
+            }
+        )
+
         try writeBackup(snapshot: snapshot, to: backupDirectory)
         let migrated = try transformed(
             snapshot: snapshot,
@@ -222,10 +229,9 @@ public struct ProductConvergenceMigration {
                         upserts: entities(in: snapshot),
                         origin: .migration,
                         stateMetadata: JournalStateMetadata(snapshot: snapshot),
-                        removedMigrationIdentifiers: [
-                            Self.identifier,
-                            Self.statusMigrationIdentifier
-                        ]
+                        removedMigrationIdentifiers: migrationIdentifiers.filter {
+                            !preexistingMigrationIdentifiers.contains($0)
+                        }
                     )
                 )
             } catch {

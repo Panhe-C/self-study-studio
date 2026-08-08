@@ -11,6 +11,7 @@ public enum JournalArchiveError: Error, Equatable, Sendable {
     case unsafeAttachmentPath(String)
     case missingAttachment(String)
     case attachmentDeletionFailed([String])
+    case projectNotPurged(UUID)
 }
 
 public struct JournalArchiveManifest: Codable, Equatable, Sendable {
@@ -49,6 +50,8 @@ public struct TrashPurgeImpact: Equatable, Sendable {
     public var acceptanceCount: Int
     public var revisionCount: Int
     public var reviewCount: Int
+    public var reviewUpdateCount: Int
+    public var decisionCount: Int
     public var trailCount: Int
     public var planCount: Int
     public var phaseCount: Int
@@ -57,6 +60,94 @@ public struct TrashPurgeImpact: Equatable, Sendable {
     public var practiceSessionCount: Int
     public var attachmentPaths: [String]
     public var references: [JournalEntityReference]
+    public var reviewUpdates: [Review]
+}
+
+enum JournalReviewScopeMode: Equatable {
+    case removingProject
+    case exportingProject
+}
+
+private enum JournalReviewAttribution {
+    case target
+    case other
+    case unknown
+}
+
+private struct JournalReviewScopeContext {
+    let targetProjectID: UUID
+    private let sourceOwners: [String: UUID]
+
+    init(snapshot: JournalSnapshot, targetProjectID: UUID) {
+        self.targetProjectID = targetProjectID
+        var owners: [String: UUID] = [:]
+        func add(_ kind: String, _ id: UUID, owner: UUID?) {
+            guard let owner else { return }
+            owners["\(kind) \(id.uuidString.prefix(8))"] = owner
+        }
+
+        for project in snapshot.projects {
+            add("project", project.id, owner: project.id)
+        }
+        for session in snapshot.sessions {
+            add("session", session.id, owner: session.projectId)
+        }
+        for proof in snapshot.proofs {
+            add("proof", proof.id, owner: proof.projectId)
+        }
+        let planOwners = Dictionary(uniqueKeysWithValues: snapshot.coursePlans.map { ($0.id, $0.projectId) })
+        for plan in snapshot.coursePlans {
+            add("plan", plan.id, owner: plan.projectId)
+        }
+        for phase in snapshot.planPhases {
+            add("phase", phase.id, owner: planOwners[phase.planId])
+        }
+        for plannedSession in snapshot.plannedSessions {
+            add("plannedSession", plannedSession.id, owner: plannedSession.projectId)
+        }
+        let routineOwners = Dictionary(uniqueKeysWithValues: snapshot.practiceRoutines.compactMap { routine in
+            routine.projectId.map { (routine.id, $0) }
+        })
+        for routine in snapshot.practiceRoutines {
+            add("routine", routine.id, owner: routine.projectId)
+        }
+        for session in snapshot.practiceSessions {
+            add("practice", session.id, owner: session.linkedProjectId ?? routineOwners[session.routineId])
+        }
+        let proofOwners = Dictionary(uniqueKeysWithValues: snapshot.proofs.map { ($0.id, $0.projectId) })
+        for revision in snapshot.proofRevisions {
+            add("revision", revision.id, owner: proofOwners[revision.proofId])
+        }
+        for decision in snapshot.reviewDecisions {
+            add("decision", decision.id, owner: decision.projectId)
+        }
+        for event in snapshot.trailEvents {
+            add("trail", event.id, owner: event.projectId)
+        }
+        self.sourceOwners = owners
+    }
+
+    func attribution(for sources: [String]?) -> JournalReviewAttribution {
+        guard let sources, !sources.isEmpty else { return .unknown }
+        var sawTarget = false
+        var sawOther = false
+        var sawUnknown = false
+        for source in sources {
+            let owners = Set(sourceOwners.compactMap { token, owner in
+                source.contains(token) ? owner : nil
+            })
+            if owners.contains(targetProjectID) {
+                sawTarget = true
+            } else if !owners.isEmpty {
+                sawOther = true
+            } else {
+                sawUnknown = true
+            }
+        }
+        if sawTarget && !sawOther && !sawUnknown { return .target }
+        if sawOther && !sawTarget && !sawUnknown { return .other }
+        return .unknown
+    }
 }
 
 private struct JournalArchivePayload: Codable {
@@ -71,15 +162,18 @@ public struct JournalArchiveService {
     private let now: () -> Date
     private let derivationRounds: Int
     private let removeAttachment: (String) throws -> Void
+    private let cleanupQueue: AttachmentCleanupQueue?
 
     public init(
         now: @escaping () -> Date = Date.init,
         derivationRounds: Int = 10_000,
-        removeAttachment: @escaping (String) throws -> Void = AttachmentStore.removeAttachmentFile
+        removeAttachment: @escaping (String) throws -> Void = AttachmentStore.removeAttachmentFile,
+        cleanupQueue: AttachmentCleanupQueue? = nil
     ) {
         self.now = now
         self.derivationRounds = max(1, derivationRounds)
         self.removeAttachment = removeAttachment
+        self.cleanupQueue = cleanupQueue
     }
 
     public func export(
@@ -88,6 +182,10 @@ public struct JournalArchiveService {
         password: String?,
         allowUnencrypted: Bool = false
     ) throws -> JournalArchiveEnvelope {
+        guard duplicateIDs(in: snapshot).isEmpty else {
+            throw JournalArchiveError.duplicateIdentifiers
+        }
+        try validateRelationships(in: snapshot)
         try validateAttachmentPaths(attachments.keys)
         let snapshotData = try Self.encoder.encode(snapshot)
         var checksums = ["snapshot.json": Self.digest(snapshotData)]
@@ -170,6 +268,7 @@ public struct JournalArchiveService {
         guard payload.manifest.recordCounts == recordCounts(payload.snapshot) else {
             throw JournalArchiveError.invalidArchive
         }
+        try validateRelationships(in: payload.snapshot)
 
         return JournalArchivePreview(
             manifest: payload.manifest,
@@ -201,6 +300,161 @@ public struct JournalArchiveService {
         )
     }
 
+    /// Returns a review with only the selected project's content for a scoped
+    /// export, or with that project's content removed for a permanent purge.
+    /// Free text without an unambiguous source is replaced with a redacted
+    /// placeholder rather than guessed into another project's history.
+    static func scopedReview(
+        _ review: Review,
+        projectID: UUID,
+        snapshot: JournalSnapshot,
+        mode: JournalReviewScopeMode
+    ) -> Review? {
+        let context = JournalReviewScopeContext(snapshot: snapshot, targetProjectID: projectID)
+        let targetDecisionIDs = Set(snapshot.reviewDecisions.compactMap { decision in
+            decision.reviewId == review.id && decision.projectId == projectID ? decision.id : nil
+        })
+        let targetProofIDs = Set(snapshot.proofs.filter { $0.projectId == projectID }.map(\.id))
+        let targetRevisionIDs = Set(snapshot.proofRevisions.compactMap { revision in
+            targetProofIDs.contains(revision.proofId) ? revision.id : nil
+        })
+        let survivingDecisionIDs = Set(snapshot.reviewDecisions.compactMap { decision in
+            decision.reviewId == review.id && decision.projectId != projectID ? decision.id : nil
+        })
+
+        var scoped = review
+        switch mode {
+        case .removingProject:
+            scoped.projectRecommendations = review.projectRecommendations.filter { $0.key != projectID }
+            scoped.nextSteps = review.nextSteps.filter { $0.key != projectID }
+        case .exportingProject:
+            scoped.projectRecommendations = review.projectRecommendations.filter { $0.key == projectID }
+            scoped.nextSteps = review.nextSteps.filter { $0.key == projectID }
+        }
+
+        scoped.facts = scopedInsights(
+            review.facts,
+            references: review.sourceReferences,
+            context: context,
+            mode: mode
+        )
+        scoped.patterns = scopedInsights(
+            review.patterns,
+            references: review.sourceReferences,
+            context: context,
+            mode: mode
+        )
+        scoped.decisions = scopedInsights(
+            review.decisions,
+            references: review.sourceReferences,
+            context: context,
+            mode: mode
+        )
+        scoped.aiSourceSummary = scopedInsights(
+            review.aiSourceSummary,
+            references: nil,
+            context: context,
+            mode: mode
+        )
+        let keepAttribution: JournalReviewAttribution = mode == .removingProject ? .other : .target
+        scoped.sourceReferences = review.sourceReferences.reduce(into: [:]) { result, entry in
+            let attribution = context.attribution(for: entry.value)
+            guard attribution == keepAttribution else { return }
+            result[entry.key] = entry.value
+        }
+
+        switch mode {
+        case .removingProject:
+            scoped.confirmedDecisionIds = review.confirmedDecisionIds.filter { decisionID in
+                !targetDecisionIDs.contains(decisionID)
+                    && snapshot.reviewDecisions.contains { decision in
+                        decision.id == decisionID && decision.reviewId == review.id
+                    }
+            }
+            scoped.referencedProofRevisionIds = review.referencedProofRevisionIds.filter { revisionID in
+                !targetRevisionIDs.contains(revisionID)
+                    && snapshot.proofRevisions.contains { revision in revision.id == revisionID }
+            }
+        case .exportingProject:
+            scoped.confirmedDecisionIds = review.confirmedDecisionIds.filter { targetDecisionIDs.contains($0) }
+            scoped.referencedProofRevisionIds = review.referencedProofRevisionIds.filter { targetRevisionIDs.contains($0) }
+        }
+
+        let hasRemainingContent = !scoped.facts.isEmpty
+            || !scoped.patterns.isEmpty
+            || !scoped.decisions.isEmpty
+            || !scoped.projectRecommendations.isEmpty
+            || !scoped.nextSteps.isEmpty
+            || !scoped.aiSourceSummary.isEmpty
+            || !scoped.sourceReferences.isEmpty
+            || !scoped.confirmedDecisionIds.isEmpty
+            || !scoped.referencedProofRevisionIds.isEmpty
+            || !survivingDecisionIDs.isEmpty
+        if mode == .removingProject, !hasRemainingContent {
+            return nil
+        }
+        return scoped
+    }
+
+    private static let redactedReviewInsight = "[redacted project insight]"
+
+    private static func scopedInsights(
+        _ values: [String],
+        references: [String: [String]]?,
+        context: JournalReviewScopeContext,
+        mode: JournalReviewScopeMode
+    ) -> [String] {
+        var result: [String] = []
+        var needsRedaction = false
+        for value in values {
+            let attribution = context.attribution(for: references?[value])
+            let keep: Bool
+            switch mode {
+            case .removingProject: keep = attribution == .other
+            case .exportingProject: keep = attribution == .target
+            }
+            if keep {
+                result.append(value)
+            } else if attribution == .unknown {
+                needsRedaction = true
+            }
+        }
+        if needsRedaction && !result.contains(redactedReviewInsight) {
+            result.append(redactedReviewInsight)
+        }
+        return result
+    }
+
+    static func reviewTouchesProject(
+        _ review: Review,
+        projectID: UUID,
+        snapshot: JournalSnapshot
+    ) -> Bool {
+        if review.projectRecommendations[projectID] != nil || review.nextSteps[projectID] != nil {
+            return true
+        }
+        let targetDecisionIDs = Set(snapshot.reviewDecisions.compactMap { decision in
+            decision.reviewId == review.id && decision.projectId == projectID ? decision.id : nil
+        })
+        if !targetDecisionIDs.isDisjoint(with: review.confirmedDecisionIds) {
+            return true
+        }
+        let targetProofIDs = Set(snapshot.proofs.filter { $0.projectId == projectID }.map(\.id))
+        let targetRevisionIDs = Set(snapshot.proofRevisions.compactMap { revision in
+            targetProofIDs.contains(revision.proofId) ? revision.id : nil
+        })
+        if !targetRevisionIDs.isDisjoint(with: review.referencedProofRevisionIds) {
+            return true
+        }
+        let context = JournalReviewScopeContext(snapshot: snapshot, targetProjectID: projectID)
+        let allInsights = review.facts + review.patterns + review.decisions + review.aiSourceSummary
+        return allInsights.contains {
+            context.attribution(for: review.sourceReferences[$0]) == .target
+        } || review.sourceReferences.values.contains {
+            context.attribution(for: $0) == .target
+        }
+    }
+
     public func purgeImpact(projectID: UUID, snapshot: JournalSnapshot) -> TrashPurgeImpact {
         let sessions = snapshot.sessions.filter { $0.projectId == projectID }
         let sessionIDs = Set(sessions.map(\.id))
@@ -213,11 +467,25 @@ public struct JournalArchiveService {
         }
         let revisions = snapshot.proofRevisions.filter { proofIDs.contains($0.proofId) }
         let reviews = snapshot.reviews.filter {
-            $0.projectRecommendations.keys.contains(projectID) || $0.nextSteps.keys.contains(projectID)
+            Self.reviewTouchesProject($0, projectID: projectID, snapshot: snapshot)
         }
-        let reviewIDs = Set(reviews.map(\.id))
-        let decisions = snapshot.reviewDecisions.filter {
-            $0.projectId == projectID || reviewIDs.contains($0.reviewId)
+        let decisions = snapshot.reviewDecisions.filter { $0.projectId == projectID }
+        let deletedReviews = reviews.compactMap { review -> Review? in
+            Self.scopedReview(
+                review,
+                projectID: projectID,
+                snapshot: snapshot,
+                mode: .removingProject
+            ) == nil ? review : nil
+        }
+        let reviewUpdates = reviews.compactMap { review -> Review? in
+            guard let scoped = Self.scopedReview(
+                review,
+                projectID: projectID,
+                snapshot: snapshot,
+                mode: .removingProject
+            ), scoped != review else { return nil }
+            return scoped
         }
         let trails = snapshot.trailEvents.filter { $0.projectId == projectID }
         let plans = snapshot.coursePlans.filter { $0.projectId == projectID }
@@ -235,7 +503,7 @@ public struct JournalArchiveService {
         references += contracts.map { JournalEntityReference(.evidenceContract, $0.id) }
         references += acceptances.map { JournalEntityReference(.evidenceAcceptance, $0.id) }
         references += revisions.map { JournalEntityReference(.proofRevision, $0.id) }
-        references += reviews.map { JournalEntityReference(.review, $0.id) }
+        references += deletedReviews.map { JournalEntityReference(.review, $0.id) }
         references += decisions.map { JournalEntityReference(.reviewDecision, $0.id) }
         references += trails.map { JournalEntityReference(.trailEvent, $0.id) }
         references += plans.map { JournalEntityReference(.coursePlan, $0.id) }
@@ -250,7 +518,9 @@ public struct JournalArchiveService {
             contractCount: contracts.count,
             acceptanceCount: acceptances.count,
             revisionCount: revisions.count,
-            reviewCount: reviews.count,
+            reviewCount: deletedReviews.count,
+            reviewUpdateCount: reviewUpdates.count,
+            decisionCount: decisions.count,
             trailCount: trails.count,
             planCount: plans.count,
             phaseCount: phases.count,
@@ -262,7 +532,8 @@ public struct JournalArchiveService {
                 if case let .attachment(localPath, _, _) = proof.artifact { return localPath }
                 return nil
             }.sorted(),
-            references: references
+            references: references,
+            reviewUpdates: reviewUpdates
         )
     }
 
@@ -276,14 +547,33 @@ public struct JournalArchiveService {
             throw JournalArchiveError.invalidArchive
         }
         let impact = purgeImpact(projectID: projectID, snapshot: snapshot)
-        try repository.commit(JournalTransaction(deletions: impact.references, origin: .user))
-        try retryAttachmentCleanup(paths: impact.attachmentPaths)
+        try cleanupQueue?.enqueue(projectID: projectID, paths: impact.attachmentPaths)
+        try repository.commit(
+            JournalTransaction(
+                upserts: impact.reviewUpdates.map(JournalEntity.review),
+                deletions: impact.references,
+                origin: .user
+            )
+        )
+        try retryAttachmentCleanup(
+            projectID: projectID,
+            paths: impact.attachmentPaths,
+            repository: repository
+        )
+        try cleanupQueue?.remove(projectID: projectID, paths: impact.attachmentPaths)
         return impact
     }
 
     /// Retries only the file cleanup portion after a repository purge succeeded.
-    /// Missing files are treated as already cleaned, so this operation is safe to repeat.
-    public func retryAttachmentCleanup(paths: [String]) throws {
+    /// A canonical project tombstone is required before touching any file.
+    public func retryAttachmentCleanup(
+        projectID: UUID,
+        paths: [String],
+        repository: any JournalRepository
+    ) throws {
+        guard try projectIsPurged(projectID: projectID, repository: repository) else {
+            throw JournalArchiveError.projectNotPurged(projectID)
+        }
         var failedAttachmentPaths: [String] = []
         for path in paths {
             do {
@@ -295,6 +585,17 @@ public struct JournalArchiveService {
         guard failedAttachmentPaths.isEmpty else {
             throw JournalArchiveError.attachmentDeletionFailed(failedAttachmentPaths)
         }
+    }
+
+    private func projectIsPurged(
+        projectID: UUID,
+        repository: any JournalRepository
+    ) throws -> Bool {
+        guard let entity = try repository.entity(for: .init(.project, projectID)),
+              case let .project(project) = entity else {
+            return false
+        }
+        return project.deletedAt != nil && !project.isTrashed
     }
 
     public func automaticPurgeCandidates(
@@ -333,12 +634,77 @@ public struct JournalArchiveService {
     private func validateRelationships(in snapshot: JournalSnapshot) throws {
         let projects = Set(snapshot.projects.map(\.id))
         let sessions = Set(snapshot.sessions.map(\.id))
+        let proofs = Set(snapshot.proofs.map(\.id))
+        let reviews = Set(snapshot.reviews.map(\.id))
+        let contracts = Set(snapshot.evidenceContracts.map(\.id))
+        let proofRevisions = Set(snapshot.proofRevisions.map(\.id))
+        let decisions = Set(snapshot.reviewDecisions.map(\.id))
+        let plans = Set(snapshot.coursePlans.map(\.id))
+        let phases = Set(snapshot.planPhases.map(\.id))
+        let routines = Set(snapshot.practiceRoutines.map(\.id))
+        let allEntityIDs = projects
+            .union(sessions)
+            .union(proofs)
+            .union(reviews)
+            .union(contracts)
+            .union(snapshot.evidenceAcceptances.map(\.id))
+            .union(proofRevisions)
+            .union(decisions)
+            .union(snapshot.trailEvents.map(\.id))
+            .union(plans)
+            .union(phases)
+            .union(snapshot.plannedSessions.map(\.id))
+            .union(snapshot.availabilityRules.map(\.id))
+            .union(snapshot.schedulingPreferences.map(\.id))
+            .union(routines)
+            .union(snapshot.practiceSessions.map(\.id))
         guard snapshot.sessions.allSatisfy({ projects.contains($0.projectId) }) else {
             throw JournalArchiveError.invalidArchive
         }
         guard snapshot.proofs.allSatisfy({ proof in
             projects.contains(proof.projectId) && proof.sessionId.map(sessions.contains) != false
         }) else {
+            throw JournalArchiveError.invalidArchive
+        }
+        guard snapshot.evidenceContracts.allSatisfy({ projects.contains($0.projectId) }),
+              snapshot.evidenceAcceptances.allSatisfy({
+                  contracts.contains($0.contractId) && proofs.contains($0.proofId)
+              }),
+              snapshot.proofRevisions.allSatisfy({ proofs.contains($0.proofId) }),
+              snapshot.reviews.allSatisfy({ review in
+                  review.projectRecommendations.keys.allSatisfy(projects.contains)
+                      && review.nextSteps.keys.allSatisfy(projects.contains)
+                      && review.confirmedDecisionIds.allSatisfy(decisions.contains)
+                      && review.referencedProofRevisionIds.allSatisfy(proofRevisions.contains)
+                      && Set(review.sourceReferences.keys).isSubset(of: Set(review.facts + review.patterns + review.decisions))
+                      && review.confirmedDecisionIds.allSatisfy { decisionID in
+                          snapshot.reviewDecisions.contains {
+                              $0.id == decisionID && $0.reviewId == review.id
+                          }
+                      }
+              }),
+              snapshot.reviewDecisions.allSatisfy({ decision in
+                  reviews.contains(decision.reviewId)
+                      && projects.contains(decision.projectId)
+                      && decision.contractId.map(contracts.contains) ?? true
+                      && decision.capstoneProofId.map(proofs.contains) ?? true
+              }),
+              snapshot.coursePlans.allSatisfy({ projects.contains($0.projectId) }),
+              snapshot.planPhases.allSatisfy({ plans.contains($0.planId) }),
+              snapshot.plannedSessions.allSatisfy({ session in
+                  plans.contains(session.planId)
+                      && phases.contains(session.phaseId)
+                      && projects.contains(session.projectId)
+                      && session.completedSessionId.map(sessions.contains) ?? true
+              }),
+              snapshot.practiceRoutines.allSatisfy({ $0.projectId.map(projects.contains) ?? true }),
+              snapshot.practiceSessions.allSatisfy({ session in
+                  routines.contains(session.routineId)
+                      && session.linkedProjectId.map(projects.contains) ?? true
+              }),
+              snapshot.trailEvents.allSatisfy({
+                  projects.contains($0.projectId) && allEntityIDs.contains($0.sourceId)
+              }) else {
             throw JournalArchiveError.invalidArchive
         }
     }

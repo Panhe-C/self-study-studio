@@ -14,7 +14,10 @@ public final class JournalViewModel: ObservableObject {
     @Published public private(set) var coursePlanGenerationState: CoursePlanGenerationState
     @Published public private(set) var coursePlanValidationErrors: [CoursePlanningValidationError]
     @Published public private(set) var pendingCanonicalNextStepProposal: CanonicalNextStepProposal?
-    @Published public private(set) var pendingAttachmentCleanupPaths: [String]
+    @Published public private(set) var pendingAttachmentCleanupEntries: [AttachmentCleanupEntry]
+    public var pendingAttachmentCleanupPaths: [String] {
+        pendingAttachmentCleanupEntries.flatMap(\.paths)
+    }
     @Published private var rememberedCoursePlanningInputs: [UUID: CoursePlanningInput]
 
     private let journalService: JournalService
@@ -68,7 +71,7 @@ public final class JournalViewModel: ObservableObject {
         self.coursePlanGenerationState = .idle
         self.coursePlanValidationErrors = []
         self.pendingCanonicalNextStepProposal = nil
-        self.pendingAttachmentCleanupPaths = (try? self.cleanupQueue.load()) ?? []
+        self.pendingAttachmentCleanupEntries = (try? self.cleanupQueue.load()) ?? []
         self.rememberedCoursePlanningInputs = [:]
     }
 
@@ -331,36 +334,55 @@ public final class JournalViewModel: ObservableObject {
             throw JournalArchiveError.invalidArchive
         }
         defer { refresh() }
+        let impact = archiveService.purgeImpact(projectID: projectId, snapshot: snapshot)
+        try cleanupQueue.enqueue(projectID: projectId, paths: impact.attachmentPaths)
+        let result = try archiveService.purge(
+            projectID: projectId,
+            snapshot: snapshot,
+            from: repository
+        )
+        try cleanupQueue.remove(projectID: projectId, paths: result.attachmentPaths)
+        return result
+    }
+
+    public func retryAttachmentCleanup(projectID: UUID, paths: [String]) throws {
+        guard let repository = syncRepository else {
+            throw JournalArchiveError.invalidArchive
+        }
+        defer { refresh() }
         do {
-            return try archiveService.purge(
-                projectID: projectId,
-                snapshot: snapshot,
-                from: repository
+            try archiveService.retryAttachmentCleanup(
+                projectID: projectID,
+                paths: paths,
+                repository: repository
             )
+            try cleanupQueue.remove(projectID: projectID, paths: paths)
         } catch let error as JournalArchiveError {
-            if case let .attachmentDeletionFailed(paths) = error {
-                try cleanupQueue.enqueue(paths: paths)
+            if case let .attachmentDeletionFailed(failedPaths) = error {
+                let successfulPaths = Set(paths).subtracting(failedPaths)
+                try cleanupQueue.remove(projectID: projectID, paths: Array(successfulPaths))
             }
             throw error
         }
     }
 
     public func retryAttachmentCleanup(paths: [String]) throws {
-        defer { refresh() }
-        do {
-            try archiveService.retryAttachmentCleanup(paths: paths)
-            try cleanupQueue.remove(paths: paths)
-        } catch let error as JournalArchiveError {
-            if case let .attachmentDeletionFailed(failedPaths) = error {
-                let successfulPaths = Set(paths).subtracting(failedPaths)
-                try cleanupQueue.remove(paths: Array(successfulPaths))
-            }
-            throw error
-        }
+        guard let entry = pendingAttachmentCleanupEntries.first(where: {
+            !Set(paths).isDisjoint(with: $0.paths)
+        }) else { return }
+        try retryAttachmentCleanup(projectID: entry.projectID, paths: paths)
     }
 
     public func retryPendingAttachmentCleanup() throws {
-        try retryAttachmentCleanup(paths: pendingAttachmentCleanupPaths)
+        var firstError: Error?
+        for entry in pendingAttachmentCleanupEntries {
+            do {
+                try retryAttachmentCleanup(projectID: entry.projectID, paths: entry.paths)
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+        if let firstError { throw firstError }
     }
 
     @discardableResult
@@ -1051,7 +1073,7 @@ public final class JournalViewModel: ObservableObject {
     public func refresh() {
         journalService.refreshFromRepository()
         snapshot = journalService.snapshot()
-        pendingAttachmentCleanupPaths = (try? cleanupQueue.load()) ?? []
+        pendingAttachmentCleanupEntries = (try? cleanupQueue.load()) ?? []
         refreshSyncRepositoryDetails()
         scheduleAutomaticSyncIfNeeded()
     }

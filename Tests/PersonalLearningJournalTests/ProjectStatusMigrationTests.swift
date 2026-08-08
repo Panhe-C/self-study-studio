@@ -593,6 +593,50 @@ final class ProjectStatusMigrationTests: XCTestCase {
         XCTAssertFalse(try repository.hasCompletedMigration(identifier: ProductConvergenceMigration.statusMigrationIdentifier))
     }
 
+    func testMigrationRollbackPreservesPreexistingMigrationMarkers() throws {
+        let project = Project(
+            name: "Archived project",
+            area: "Test",
+            goal: "Preserve history",
+            status: .archived,
+            currentNextStep: "Review"
+        )
+        let snapshot = JournalSnapshot(projects: [project])
+        var shouldCorruptValidationSnapshot = true
+        let repository = InMemoryJournalRepository(
+            snapshot: snapshot,
+            snapshotHook: { stored in
+                guard shouldCorruptValidationSnapshot else { return nil }
+                shouldCorruptValidationSnapshot = false
+                var corrupted = stored
+                corrupted.projects[0].name = "unexpected post-commit mutation"
+                return corrupted
+            }
+        )
+        try repository.commit(
+            JournalTransaction(
+                origin: .migration,
+                completedMigrationIdentifiers: [
+                    ProductConvergenceMigration.identifier,
+                    ProductConvergenceMigration.statusMigrationIdentifier
+                ]
+            )
+        )
+
+        XCTAssertThrowsError(
+            try ProductConvergenceMigration().execute(
+                snapshot: snapshot,
+                resolutions: [.project(project.id, .pause)],
+                repository: repository,
+                backupDirectory: temporaryBackupDirectory()
+            )
+        ) { error in
+            XCTAssertEqual(error as? ProductConvergenceMigrationError, .repositoryValidationFailed)
+        }
+        XCTAssertTrue(try repository.hasCompletedMigration(identifier: ProductConvergenceMigration.identifier))
+        XCTAssertTrue(try repository.hasCompletedMigration(identifier: ProductConvergenceMigration.statusMigrationIdentifier))
+    }
+
     private func temporaryBackupDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
