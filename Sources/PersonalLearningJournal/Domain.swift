@@ -44,6 +44,22 @@ public enum ProjectStatus: String, Codable, CaseIterable, Sendable {
             nil
         }
     }
+
+    /// Canonicalizes a raw status for consumers that must never write legacy values.
+    /// Ambiguous archived/Trash values intentionally return nil until migration resolves them.
+    public static func canonicalizeLegacy(rawValue: String) -> ProjectStatus? {
+        ProjectStatus(rawValue: rawValue)?.canonicalStatus
+    }
+
+    /// The safe status to emit to a canonical transport. Ambiguous legacy values are omitted.
+    public var canonicalStatusForStorage: ProjectStatus? {
+        switch self {
+        case .archived, .trash:
+            nil
+        default:
+            canonicalStatus
+        }
+    }
 }
 
 public enum ProjectStatusMigrationDecision: String, Codable, CaseIterable, Sendable {
@@ -133,6 +149,7 @@ public enum JournalValidationError: Error, Equatable, Sendable {
     case missingReviewDecision
     case missingCapstoneProof
     case attentionBudgetExceeded
+    case unresolvedTrashStatus
 }
 
 extension JournalValidationError: LocalizedError {
@@ -176,6 +193,8 @@ extension JournalValidationError: LocalizedError {
             "Choose a qualifying Capstone Proof to complete this project."
         case .attentionBudgetExceeded:
             "Confirm that you want more than three active projects."
+        case .unresolvedTrashStatus:
+            "Choose the project's prior lifecycle status before restoring it from Trash."
         }
     }
 }

@@ -155,6 +155,28 @@ final class ReviewServiceTests: XCTestCase {
         XCTAssertEqual(draft.sourceSummary.count, 2)
     }
 
+    func testAIReviewDecoderNeverReturnsLegacyProjectRecommendations() throws {
+        let projectId = UUID()
+        let data = Data(
+            """
+            {
+              "facts": [],
+              "patterns": [],
+              "decisions": [],
+              "projectRecommendations": {
+                "\(projectId.uuidString)": "low-frequency"
+              },
+              "nextSteps": {},
+              "sourceSummary": []
+            }
+            """.utf8
+        )
+
+        let draft = try HTTPAIReviewProvider.decodeDraft(from: data)
+        XCTAssertEqual(draft.projectRecommendations[projectId], .active)
+        XCTAssertFalse(draft.projectRecommendations.values.contains { $0.isLegacy })
+    }
+
     func testOpenAICompatibleProviderParsesJSONContentFromChatCompletion() async throws {
         let projectId = UUID(uuidString: "00000000-0000-0000-0000-000000000301")!
         let completionData = Data(

@@ -171,10 +171,12 @@ disclosure.
 **Status.** Completed 2026-08-09. Canonical Project lifecycle values, legacy decoding,
 explicit archived-status resolution, Trash markers, startup migration gating, Archive and
 Permanent Deletion flows, cadence-based Review outcomes, Product Health eligibility, CloudKit
-mapping, and the shared v1 contract/fixtures are implemented. Verification: `swift test` 278
-tests / 0 failures, `npm test` in `WebWorkspace` 48 tests / 0 failures, `npm run lint`,
-`swift build`, unsigned iOS Simulator build, and `git diff --check` all pass. B2 remains
-unimplemented and is the next milestone.
+mapping, and the shared v1 contract/fixtures are implemented. The review hardening also adds
+atomic migration markers and first-backup preservation, fail-closed startup retry, observable
+Trash export, and retryable attachment cleanup. Verification: `swift test` 296 tests / 0
+failures, `npm test` in `WebWorkspace` 48 tests / 0 failures, `npm run lint`, `swift build`,
+unsigned iOS Simulator build, and `git diff --check` all pass. B2 remains unimplemented and is
+the next milestone.
 
 ### B2. Learning Plan rename and explicit Plan Revisions
 

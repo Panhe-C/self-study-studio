@@ -9,6 +9,7 @@ public enum JournalArchiveError: Error, Equatable, Sendable {
     case checksumMismatch
     case duplicateIdentifiers
     case unsafeAttachmentPath(String)
+    case attachmentDeletionFailed([String])
 }
 
 public struct JournalArchiveManifest: Codable, Equatable, Sendable {
@@ -60,13 +61,16 @@ public struct JournalArchiveService {
 
     private let now: () -> Date
     private let derivationRounds: Int
+    private let removeAttachment: (String) throws -> Void
 
     public init(
         now: @escaping () -> Date = Date.init,
-        derivationRounds: Int = 10_000
+        derivationRounds: Int = 10_000,
+        removeAttachment: @escaping (String) throws -> Void = AttachmentStore.removeAttachmentFile
     ) {
         self.now = now
         self.derivationRounds = max(1, derivationRounds)
+        self.removeAttachment = removeAttachment
     }
 
     public func export(
@@ -238,7 +242,24 @@ public struct JournalArchiveService {
         }
         let impact = purgeImpact(projectID: projectID, snapshot: snapshot)
         try repository.commit(JournalTransaction(deletions: impact.references, origin: .user))
+        try retryAttachmentCleanup(paths: impact.attachmentPaths)
         return impact
+    }
+
+    /// Retries only the file cleanup portion after a repository purge succeeded.
+    /// Missing files are treated as already cleaned, so this operation is safe to repeat.
+    public func retryAttachmentCleanup(paths: [String]) throws {
+        var failedAttachmentPaths: [String] = []
+        for path in paths {
+            do {
+                try removeAttachment(path)
+            } catch {
+                failedAttachmentPaths.append(path)
+            }
+        }
+        guard failedAttachmentPaths.isEmpty else {
+            throw JournalArchiveError.attachmentDeletionFailed(failedAttachmentPaths)
+        }
     }
 
     public func automaticPurgeCandidates(

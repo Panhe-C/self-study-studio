@@ -400,7 +400,7 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
             patterns: response.patterns,
             decisions: [],
             projectRecommendations: response.projectRecommendations.compactMapKeys(UUID.init)
-                .compactMapValues { ProjectStatus(rawValue: $0)?.canonicalStatus ?? ProjectStatus(rawValue: $0) },
+                .compactMapValues { ProjectStatus.canonicalizeLegacy(rawValue: $0) },
             nextSteps: response.nextSteps.compactMapKeys(UUID.init),
             sourceSummary: response.sourceSummary,
             sourceReferences: sourceReferences

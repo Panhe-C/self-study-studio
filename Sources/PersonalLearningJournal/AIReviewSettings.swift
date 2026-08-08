@@ -230,8 +230,9 @@ private struct OpenAIReviewDraftPayload: Decodable, Sendable {
             patterns: patterns,
             decisions: [],
             projectRecommendations: projectRecommendations.reduce(into: [:]) { result, item in
-                guard let id = UUID(uuidString: item.key), let status = ProjectStatus(rawValue: item.value) else { return }
-                result[id] = status.canonicalStatus ?? status
+                guard let id = UUID(uuidString: item.key),
+                      let status = ProjectStatus.canonicalizeLegacy(rawValue: item.value) else { return }
+                result[id] = status
             },
             nextSteps: nextSteps.reduce(into: [:]) { result, item in
                 guard let id = UUID(uuidString: item.key) else { return }

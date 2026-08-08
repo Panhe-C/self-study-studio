@@ -28,11 +28,44 @@ public struct PersonalLearningJournalApp: App {
                                     projectID: projectID,
                                     resolution: resolution
                                 )
+                            },
+                            onProofResolution: { proofID, resolution in
+                                session.resolveProof(proofID: proofID, resolution: resolution)
+                            },
+                            onPracticeResolution: { routineID, resolution in
+                                session.resolvePractice(routineID: routineID, resolution: resolution)
                             }
                         )
                     }
                     .alert(
                         "Migration could not continue",
+                        isPresented: Binding(
+                            get: { session.migrationError != nil },
+                            set: { if !$0 { session.clearMigrationError() } }
+                        )
+                    ) {
+                        Button("OK") { session.clearMigrationError() }
+                    } message: {
+                        Text(session.migrationError ?? "")
+                    }
+                } else if session.migrationGateBlocked {
+                    NavigationStack {
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.largeTitle)
+                                .foregroundStyle(.orange)
+                            Text("Migration is paused until the journal can be checked safely.")
+                                .multilineTextAlignment(.center)
+                            Button("Retry migration check") {
+                                session.retryMigrationGate()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        .padding(24)
+                        .navigationTitle("Safe Migration")
+                    }
+                    .alert(
+                        "Migration check failed",
                         isPresented: Binding(
                             get: { session.migrationError != nil },
                             set: { if !$0 { session.clearMigrationError() } }

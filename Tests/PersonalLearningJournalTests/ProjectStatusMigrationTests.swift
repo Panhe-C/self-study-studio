@@ -15,6 +15,21 @@ final class ProjectStatusMigrationTests: XCTestCase {
         XCTAssertNil(ProjectStatus.trash.canonicalStatus)
     }
 
+    func testCanonicalizationHelperIsTheOnlyTransportMappingForLegacyStatuses() {
+        XCTAssertEqual(
+            ProjectStatus.canonicalizeLegacy(rawValue: "low-frequency"),
+            .active
+        )
+        XCTAssertEqual(
+            ProjectStatus.active.canonicalStatusForStorage,
+            .active
+        )
+        XCTAssertNil(ProjectStatus.archived.canonicalStatusForStorage)
+        XCTAssertNil(ProjectStatus.trash.canonicalStatusForStorage)
+        XCTAssertNil(ProjectStatus.canonicalizeLegacy(rawValue: "archived"))
+        XCTAssertNil(ProjectStatus.canonicalizeLegacy(rawValue: "trash"))
+    }
+
     func testLegacyProjectStatusesRemainReadableFromJSONAndCloudRawValues() throws {
         for rawValue in ["low-frequency", "archived", "trash"] {
             let data = Data(
@@ -139,6 +154,93 @@ final class ProjectStatusMigrationTests: XCTestCase {
         XCTAssertNil(restored.previousStatusBeforeTrash)
     }
 
+    func testTrashWithLegacyOrMissingPreviousStatusRequiresExplicitResolution() throws {
+        let cases: [ProjectStatus?] = [.archived, nil]
+        for previous in cases {
+            let project = Project(
+                name: "Ambiguous trash",
+                area: "Test",
+                goal: "Keep history",
+                status: .trash,
+                currentNextStep: "Review",
+                deletedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                previousStatusBeforeTrash: previous
+            )
+            let snapshot = JournalSnapshot(projects: [project])
+            let repository = InMemoryJournalRepository(snapshot: snapshot)
+            let migration = ProductConvergenceMigration()
+            let dryRun = migration.dryRun(snapshot: snapshot)
+
+            XCTAssertTrue(
+                dryRun.issues.contains(.trashNeedsStatusResolution(project.id)),
+                "previous status \(String(describing: previous)) must be explicit"
+            )
+            XCTAssertThrowsError(
+                try migration.execute(
+                    snapshot: snapshot,
+                    resolutions: [],
+                    repository: repository,
+                    backupDirectory: temporaryBackupDirectory()
+                )
+            ) { error in
+                XCTAssertEqual(error as? ProductConvergenceMigrationError, .unresolvedIssues)
+            }
+        }
+    }
+
+    func testTrashResolutionPreservesChosenCanonicalPriorStatusForRestore() throws {
+        let project = Project(
+            name: "Ambiguous trash",
+            area: "Test",
+            goal: "Keep history",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            previousStatusBeforeTrash: nil
+        )
+        let snapshot = JournalSnapshot(projects: [project])
+        let repository = InMemoryJournalRepository(snapshot: snapshot)
+        let migration = ProductConvergenceMigration()
+
+        _ = try migration.execute(
+            snapshot: snapshot,
+            resolutions: [.project(project.id, .pause)],
+            repository: repository,
+            backupDirectory: temporaryBackupDirectory()
+        )
+
+        let migrated = try XCTUnwrap(repository.snapshot().projects.first)
+        XCTAssertEqual(migrated.status, .paused)
+        XCTAssertEqual(migrated.previousStatusBeforeTrash, .paused)
+
+        let service = JournalService(repository: repository)
+        try service.restoreFromTrash(projectId: project.id)
+        let restored = try XCTUnwrap(service.project(id: project.id))
+        XCTAssertEqual(restored.status, .paused)
+        XCTAssertNil(restored.previousStatusBeforeTrash)
+    }
+
+    func testRestoreFromTrashRejectsLegacyOrMissingPriorStatusInsteadOfFallingBackToIdea() throws {
+        for previous in [ProjectStatus.archived, nil] {
+            let project = Project(
+                name: "Ambiguous trash",
+                area: "Test",
+                goal: "Keep history",
+                status: .trash,
+                currentNextStep: "Review",
+                deletedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                previousStatusBeforeTrash: previous
+            )
+            let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+            let service = JournalService(repository: repository)
+
+            XCTAssertThrowsError(try service.restoreFromTrash(projectId: project.id)) { error in
+                XCTAssertEqual(error as? JournalValidationError, .unresolvedTrashStatus)
+            }
+            XCTAssertEqual(try repository.snapshot().projects.first?.status, .trash)
+        }
+    }
+
     func testMigrationCanonicalizesLowFrequencyAndTrashWithoutDroppingDependencies() throws {
         let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
         let activeID = UUID()
@@ -243,6 +345,121 @@ final class ProjectStatusMigrationTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: backupDirectory.appendingPathComponent("project-status-backup.json").path))
     }
 
+    func testMigrationCommitsDataAndBothMarkersInOneAtomicTransaction() throws {
+        let project = Project(
+            name: "Archived project",
+            area: "Test",
+            goal: "Keep history",
+            status: .archived,
+            currentNextStep: "Review"
+        )
+        let snapshot = JournalSnapshot(projects: [project])
+        var transactions: [JournalTransaction] = []
+        let repository = InMemoryJournalRepository(
+            snapshot: snapshot,
+            commitHook: { transactions.append($0) }
+        )
+
+        _ = try ProductConvergenceMigration().execute(
+            snapshot: snapshot,
+            resolutions: [.project(project.id, .pause)],
+            repository: repository,
+            backupDirectory: temporaryBackupDirectory()
+        )
+
+        XCTAssertEqual(transactions.count, 1)
+        XCTAssertEqual(
+            Set(transactions[0].completedMigrationIdentifiers),
+            [ProductConvergenceMigration.identifier, ProductConvergenceMigration.statusMigrationIdentifier]
+        )
+        XCTAssertFalse(transactions[0].upserts.isEmpty)
+        XCTAssertNotNil(transactions[0].stateMetadata)
+    }
+
+    func testMigrationPreservesFirstBackupAcrossRetries() throws {
+        let project = Project(
+            name: "Archived project",
+            area: "Test",
+            goal: "Keep history",
+            status: .archived,
+            currentNextStep: "Review"
+        )
+        let snapshot = JournalSnapshot(projects: [project])
+        let repository = InMemoryJournalRepository(snapshot: snapshot)
+        let backupDirectory = temporaryBackupDirectory()
+        try FileManager.default.createDirectory(at: backupDirectory, withIntermediateDirectories: true)
+        let backupURL = backupDirectory.appendingPathComponent("project-status-backup.json")
+        let originalBackup = Data("first snapshot".utf8)
+        try originalBackup.write(to: backupURL)
+
+        _ = try ProductConvergenceMigration().execute(
+            snapshot: snapshot,
+            resolutions: [.project(project.id, .pause)],
+            repository: repository,
+            backupDirectory: backupDirectory
+        )
+
+        XCTAssertEqual(try Data(contentsOf: backupURL), originalBackup)
+    }
+
+    func testMigrationCommitFailureRollsBackWithoutMarker() throws {
+        let project = Project(
+            name: "Archived project",
+            area: "Test",
+            goal: "Keep history",
+            status: .archived,
+            currentNextStep: "Review"
+        )
+        let snapshot = JournalSnapshot(projects: [project])
+        var commitCount = 0
+        let repository = InMemoryJournalRepository(
+            snapshot: snapshot,
+            commitHook: { _ in
+                commitCount += 1
+                if commitCount == 1 { throw InjectedCommitFailure() }
+            }
+        )
+
+        XCTAssertThrowsError(
+            try ProductConvergenceMigration().execute(
+                snapshot: snapshot,
+                resolutions: [.project(project.id, .pause)],
+                repository: repository,
+                backupDirectory: temporaryBackupDirectory()
+            )
+        )
+        XCTAssertEqual(try repository.snapshot(), snapshot)
+        XCTAssertFalse(try repository.hasCompletedMigration(identifier: ProductConvergenceMigration.statusMigrationIdentifier))
+        XCTAssertEqual(commitCount, 2, "the failed commit must be followed by an observable rollback")
+    }
+
+    func testMigrationBackupFailureDoesNotCommitDataOrMarker() throws {
+        let project = Project(
+            name: "Archived project",
+            area: "Test",
+            goal: "Keep history",
+            status: .archived,
+            currentNextStep: "Review"
+        )
+        let snapshot = JournalSnapshot(projects: [project])
+        let repository = InMemoryJournalRepository(snapshot: snapshot)
+        let blockedPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: false)
+        try Data("not a directory".utf8).write(to: blockedPath)
+        defer { try? FileManager.default.removeItem(at: blockedPath) }
+
+        XCTAssertThrowsError(
+            try ProductConvergenceMigration().execute(
+                snapshot: snapshot,
+                resolutions: [.project(project.id, .pause)],
+                repository: repository,
+                backupDirectory: blockedPath
+            )
+        )
+        XCTAssertEqual(try repository.snapshot(), snapshot)
+        XCTAssertFalse(try repository.hasCompletedMigration(identifier: ProductConvergenceMigration.statusMigrationIdentifier))
+    }
+
     func testMigrationRollbackKeepsOriginalSnapshotWhenValidationFails() throws {
         let project = Project(
             name: "Archived project",
@@ -279,4 +496,13 @@ final class ProjectStatusMigrationTests: XCTestCase {
         XCTAssertEqual(try repository.snapshot(), snapshot)
         XCTAssertFalse(try repository.hasCompletedMigration(identifier: ProductConvergenceMigration.statusMigrationIdentifier))
     }
+
+    private func temporaryBackupDirectory() -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return directory
+    }
+
+    private struct InjectedCommitFailure: Error {}
 }

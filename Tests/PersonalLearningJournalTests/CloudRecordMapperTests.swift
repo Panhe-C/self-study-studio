@@ -79,6 +79,23 @@ final class CloudRecordMapperTests: XCTestCase {
         XCTAssertEqual(try mapper.entity(from: record), .project(project))
     }
 
+    func testProjectTransportNeverWritesLegacyStatusValues() throws {
+        let mapper = CloudRecordMapper()
+        for status in [ProjectStatus.lowFrequency, .archived, .trash] {
+            let project = Project(
+                id: fixedID,
+                name: "Legacy",
+                area: "Test",
+                goal: "Keep",
+                status: status,
+                currentNextStep: "Review"
+            )
+            let record = try mapper.record(for: .project(project), zoneID: zoneID)
+            let encodedStatus = try XCTUnwrap(record["status"] as? String)
+            XCTAssertFalse(["low-frequency", "archived", "trash"].contains(encodedStatus))
+        }
+    }
+
     func testProofMappingExcludesLocalPathAndUsesAssetHash() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -159,7 +176,13 @@ final class CloudRecordMapperTests: XCTestCase {
 
         let record = try mapper.record(for: .review(review), zoneID: zoneID)
 
-        XCTAssertEqual(try mapper.entity(from: record), .review(review))
+        let recommendationPayload = try XCTUnwrap(
+            (record["projectRecommendations"] as? [String])?.first
+        )
+        XCTAssertFalse(recommendationPayload.contains("low-frequency"))
+        var canonicalReview = review
+        canonicalReview.projectRecommendations[projectID] = .active
+        XCTAssertEqual(try mapper.entity(from: record), .review(canonicalReview))
     }
 
     func testPlanningEntitiesRoundTripInPrivateZone() throws {

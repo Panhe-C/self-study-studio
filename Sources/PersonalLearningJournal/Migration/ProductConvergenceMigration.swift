@@ -5,6 +5,7 @@ public enum MigrationIssue: Equatable, Hashable, Sendable {
     case practiceNeedsProject(UUID)
     case projectNeedsSetup(UUID)
     case projectNeedsStatusResolution(UUID)
+    case trashNeedsStatusResolution(UUID)
 }
 
 public struct MigrationDryRun: Equatable, Sendable {
@@ -69,6 +70,7 @@ public enum ProductConvergenceMigrationError: Error, Equatable, Sendable {
     case missingAttachment(String)
     case missingChecksum(UUID)
     case repositoryValidationFailed
+    case rollbackFailed
 }
 
 public struct ProductConvergenceMigration {
@@ -94,6 +96,13 @@ public struct ProductConvergenceMigration {
                     && $0.status == .archived
             }
             .map { .projectNeedsStatusResolution($0.id) }
+
+        issues += snapshot.projects
+            .filter {
+                $0.isTrashed
+                    && $0.previousStatusBeforeTrash?.canonicalStatus == nil
+            }
+            .map { .trashNeedsStatusResolution($0.id) }
 
         issues += snapshot.projects
             .filter {
@@ -124,8 +133,12 @@ public struct ProductConvergenceMigration {
         })
         let projectResolutions = try projectResolutionMap(resolutions)
         let requiredProjects: Set<UUID> = Set(report.issues.compactMap { issue -> UUID? in
-            guard case let .projectNeedsStatusResolution(id) = issue else { return nil }
-            return id
+            switch issue {
+            case let .projectNeedsStatusResolution(id), let .trashNeedsStatusResolution(id):
+                return id
+            default:
+                return nil
+            }
         })
         guard Set(proofResolutions.keys) == requiredProofs,
               Set(practiceResolutions.keys) == requiredRoutines,
@@ -148,25 +161,17 @@ public struct ProductConvergenceMigration {
                 JournalTransaction(
                     upserts: targetEntities,
                     origin: .migration,
-                    stateMetadata: JournalStateMetadata(snapshot: migrated)
+                    stateMetadata: JournalStateMetadata(snapshot: migrated),
+                    completedMigrationIdentifiers: [
+                        Self.identifier,
+                        Self.statusMigrationIdentifier
+                    ]
                 )
             )
             let stored = try repository.snapshot()
             guard stored == migrated else {
                 throw ProductConvergenceMigrationError.repositoryValidationFailed
             }
-            try repository.commit(
-                JournalTransaction(
-                    origin: .migration,
-                    completedMigrationIdentifier: Self.identifier
-                )
-            )
-            try repository.commit(
-                JournalTransaction(
-                    origin: .migration,
-                    completedMigrationIdentifier: Self.statusMigrationIdentifier
-                )
-            )
             return MigrationValidationReport(
                 expectedEntityCount: validation.expectedEntityCount,
                 storedEntityCount: entities(in: stored).count,
@@ -174,13 +179,17 @@ public struct ProductConvergenceMigration {
                 isValid: true
             )
         } catch {
-            try? repository.commit(
-                JournalTransaction(
-                    upserts: entities(in: snapshot),
-                    origin: .migration,
-                    stateMetadata: JournalStateMetadata(snapshot: snapshot)
+            do {
+                try repository.commit(
+                    JournalTransaction(
+                        upserts: entities(in: snapshot),
+                        origin: .migration,
+                        stateMetadata: JournalStateMetadata(snapshot: snapshot)
+                    )
                 )
-            )
+            } catch {
+                throw ProductConvergenceMigrationError.rollbackFailed
+            }
             throw error
         }
     }
@@ -199,7 +208,14 @@ public struct ProductConvergenceMigration {
             if project.isTrashed {
                 // Trash is a deletion marker, not a lifecycle status. Keep the
                 // original canonical status so restore remains lossless.
-                let previous = project.previousStatusBeforeTrash?.canonicalStatus ?? .idea
+                let previous: ProjectStatus
+                if let canonicalPrevious = project.previousStatusBeforeTrash?.canonicalStatus {
+                    previous = canonicalPrevious
+                } else if let resolution = projectResolutions[project.id] {
+                    previous = resolution.decision.status
+                } else {
+                    throw ProductConvergenceMigrationError.unresolvedIssues
+                }
                 project.status = previous
                 project.previousStatusBeforeTrash = previous
                 if project.deletedAt == nil {
@@ -388,10 +404,9 @@ public struct ProductConvergenceMigration {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try ExportService(now: now).exportJSON(snapshot: snapshot)
         for filename in ["evidence-first-backup.json", "project-status-backup.json"] {
-            try data.write(
-                to: directory.appendingPathComponent(filename),
-                options: [.atomic]
-            )
+            let url = directory.appendingPathComponent(filename)
+            guard !FileManager.default.fileExists(atPath: url.path) else { continue }
+            try data.write(to: url, options: [.atomic])
         }
     }
 

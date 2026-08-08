@@ -39,6 +39,8 @@ public extension JournalRepository {
 }
 
 public final class InMemoryJournalRepository: JournalRepository {
+    public typealias CommitHook = (JournalTransaction) throws -> Void
+
     private let lock = NSLock()
     private let now: () -> Date
     private var entities: [JournalEntityReference: JournalEntity]
@@ -51,10 +53,12 @@ public final class InMemoryJournalRepository: JournalRepository {
     private var changeToken: Data?
     private var storedCalendarBindings: [UUID: CalendarBinding]
     private var storedTargetCalendarIdentifier: String?
+    private let commitHook: CommitHook?
 
     public init(
         snapshot: JournalSnapshot = JournalSnapshot(),
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        commitHook: CommitHook? = nil
     ) {
         self.now = now
         let initialEntities: [JournalEntity] =
@@ -86,6 +90,7 @@ public final class InMemoryJournalRepository: JournalRepository {
         self.changeToken = nil
         self.storedCalendarBindings = [:]
         self.storedTargetCalendarIdentifier = nil
+        self.commitHook = commitHook
     }
 
     public func snapshot() throws -> JournalSnapshot {
@@ -165,7 +170,8 @@ public final class InMemoryJournalRepository: JournalRepository {
     }
 
     public func commit(_ transaction: JournalTransaction) throws {
-        withLock {
+        try withLock {
+            try commitHook?(transaction)
             for entity in transaction.upserts {
                 let reference = entity.reference
                 if entities[reference] == nil {
@@ -184,7 +190,7 @@ public final class InMemoryJournalRepository: JournalRepository {
             if let metadata = transaction.stateMetadata {
                 stateMetadata = metadata
             }
-            if let identifier = transaction.completedMigrationIdentifier {
+            for identifier in transaction.completedMigrationIdentifiers {
                 completedMigrations.insert(identifier)
             }
         }

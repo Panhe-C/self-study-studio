@@ -108,6 +108,106 @@ final class JournalArchiveServiceTests: XCTestCase {
         XCTAssertEqual(try repository.pendingMutations(limit: 100).count, 3)
     }
 
+    func testPurgeDeletesAttachmentFilesAfterRepositoryCommit() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let project = Project(
+            name: "Archive Project",
+            area: "Learning",
+            goal: "Preserve work",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let attachmentURL = root.appendingPathComponent("record.txt")
+        try Data("record".utf8).write(to: attachmentURL)
+        let proof = try Proof(
+            projectId: project.id,
+            type: .file,
+            title: "Record",
+            statement: "The record",
+            localPath: attachmentURL.path
+        )
+        let snapshot = JournalSnapshot(projects: [project], proofs: [proof])
+        let repository = InMemoryJournalRepository(snapshot: snapshot)
+        let service = JournalArchiveService(
+            derivationRounds: 20,
+            removeAttachment: { path in
+                try FileManager.default.removeItem(atPath: path)
+            }
+        )
+
+        _ = try service.purge(projectID: project.id, snapshot: snapshot, from: repository)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: attachmentURL.path))
+        XCTAssertTrue(try repository.snapshot().projects.isEmpty)
+    }
+
+    func testPurgeReportsAttachmentCleanupFailureAfterRepositoryCommit() throws {
+        let project = Project(
+            name: "Archive Project",
+            area: "Learning",
+            goal: "Preserve work",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let proof = try Proof(
+            projectId: project.id,
+            type: .file,
+            title: "Record",
+            statement: "The record",
+            localPath: "/unavailable/record.txt"
+        )
+        let snapshot = JournalSnapshot(projects: [project], proofs: [proof])
+        let repository = InMemoryJournalRepository(snapshot: snapshot)
+        let service = JournalArchiveService(
+            derivationRounds: 20,
+            removeAttachment: { _ in throw InjectedAttachmentDeletionFailure() }
+        )
+
+        XCTAssertThrowsError(
+            try service.purge(projectID: project.id, snapshot: snapshot, from: repository)
+        ) { error in
+            XCTAssertEqual(
+                error as? JournalArchiveError,
+                .attachmentDeletionFailed(["/unavailable/record.txt"])
+            )
+        }
+        XCTAssertTrue(try repository.snapshot().projects.isEmpty)
+    }
+
+    func testAttachmentCleanupFailureExposesRetryablePath() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let attachmentURL = root.appendingPathComponent("record.txt")
+        try Data("record".utf8).write(to: attachmentURL)
+        var shouldFail = true
+        let service = JournalArchiveService(
+            derivationRounds: 20,
+            removeAttachment: { path in
+                if shouldFail {
+                    shouldFail = false
+                    throw InjectedAttachmentDeletionFailure()
+                }
+                try FileManager.default.removeItem(atPath: path)
+            }
+        )
+
+        XCTAssertThrowsError(
+            try service.retryAttachmentCleanup(paths: [attachmentURL.path])
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: attachmentURL.path))
+        XCTAssertNoThrow(try service.retryAttachmentCleanup(paths: [attachmentURL.path]))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: attachmentURL.path))
+    }
+
     private func makeFixture() throws -> (snapshot: JournalSnapshot, project: Project) {
         let project = Project(
             name: "Archive Project",
@@ -137,4 +237,6 @@ final class JournalArchiveServiceTests: XCTestCase {
         )
         return (JournalSnapshot(projects: [project], sessions: [session], proofs: [proof]), project)
     }
+
+    private struct InjectedAttachmentDeletionFailure: Error {}
 }

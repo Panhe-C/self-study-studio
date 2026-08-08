@@ -7,34 +7,41 @@ public final class JournalApplicationSession: ObservableObject {
     @Published public private(set) var calendarViewModel: CalendarViewModel
     @Published public private(set) var pendingMigration: MigrationDryRun?
     @Published public private(set) var migrationError: String?
+    @Published public private(set) var migrationGateBlocked = false
 
     private let documentsDirectory: URL
     private let accountCoordinator: CloudAccountCoordinator
     private let accountProvider: any CloudAccountProviding
     private let practiceTimer: PracticeTimerRuntime
+    private let repositoryOverride: (any JournalRepository)?
     private var migrationRepository: any JournalRepository
     private var migrationResolutions: [UUID: ProjectStatusMigrationResolution] = [:]
+    private var proofMigrationResolutions: [UUID: ProofMigrationResolution] = [:]
+    private var practiceMigrationResolutions: [UUID: PracticeMigrationResolution] = [:]
 
     public init(
         documentsDirectory: URL,
-        accountProvider: any CloudAccountProviding = SystemCloudAccountProvider()
+        accountProvider: any CloudAccountProviding = SystemCloudAccountProvider(),
+        repositoryOverride: (any JournalRepository)? = nil
     ) {
         self.documentsDirectory = documentsDirectory
         self.accountCoordinator = CloudAccountCoordinator(rootDirectory: documentsDirectory)
         self.accountProvider = accountProvider
+        self.repositoryOverride = repositoryOverride
         self.practiceTimer = PracticeTimerRuntime(
             store: UserDefaultsPracticeTimerStateStore()
         )
-        if let localRepository = accountCoordinator.activeRepository {
+        if repositoryOverride == nil, let localRepository = accountCoordinator.activeRepository {
             Self.migrateLegacyStore(
                 documentsDirectory: documentsDirectory,
                 into: localRepository
             )
         }
-        let repository = accountCoordinator.activeRepository ?? InMemoryJournalRepository()
+        let repository = repositoryOverride ?? accountCoordinator.activeRepository ?? InMemoryJournalRepository()
         self.migrationRepository = repository
         self.pendingMigration = nil
         self.migrationError = nil
+        self.migrationGateBlocked = false
         self.calendarViewModel = CalendarViewModel(
             repository: repository,
             calendarClient: EventKitCalendarClient()
@@ -53,14 +60,20 @@ public final class JournalApplicationSession: ObservableObject {
 
     public func refreshAccount() async {
         await accountCoordinator.refresh(using: accountProvider)
-        guard let repository = accountCoordinator.activeRepository else { return }
+        guard let repository = repositoryOverride ?? accountCoordinator.activeRepository else {
+            migrationGateBlocked = true
+            migrationError = "The journal repository is unavailable. Retry to continue safely."
+            return
+        }
         migrationRepository = repository
         rebuildViewModels(using: repository)
         prepareMigrationGate(for: repository)
-        if case .cloud = accountCoordinator.state.mode {
+        if case .cloud = accountCoordinator.state.mode,
+           !migrationGateBlocked,
+           pendingMigration == nil {
             await viewModel.refreshSyncSummary()
             try? await viewModel.syncNow()
-        } else {
+        } else if !migrationGateBlocked {
             await viewModel.refreshSyncSummary()
         }
     }
@@ -72,14 +85,37 @@ public final class JournalApplicationSession: ObservableObject {
         migrationResolutions[projectID] = resolution
     }
 
+    public func resolveProof(
+        proofID: UUID,
+        resolution: ProofMigrationResolution
+    ) {
+        proofMigrationResolutions[proofID] = resolution
+    }
+
+    public func resolvePractice(
+        routineID: UUID,
+        resolution: PracticeMigrationResolution
+    ) {
+        practiceMigrationResolutions[routineID] = resolution
+    }
+
+    public func retryMigrationGate() {
+        prepareMigrationGate(for: migrationRepository)
+    }
+
+    public var isMigrationBlockingSync: Bool {
+        migrationGateBlocked || pendingMigration != nil
+    }
+
     public func clearMigrationError() {
         migrationError = nil
     }
 
     public func continueMigration() {
-        let resolutions: [MigrationResolution] = migrationResolutions.map {
-            .project($0.key, $0.value)
-        }
+        let resolutions: [MigrationResolution] =
+            migrationResolutions.map { .project($0.key, $0.value) }
+            + proofMigrationResolutions.map { .proof($0.key, $0.value) }
+            + practiceMigrationResolutions.map { .practice($0.key, $0.value) }
         continueMigration(with: resolutions)
     }
 
@@ -98,27 +134,56 @@ public final class JournalApplicationSession: ObservableObject {
                 backupDirectory: backupDirectory
             )
             migrationError = nil
+            migrationGateBlocked = false
             migrationResolutions = [:]
+            proofMigrationResolutions = [:]
+            practiceMigrationResolutions = [:]
             pendingMigration = nil
             rebuildViewModels(using: migrationRepository)
+            if case .cloud = accountCoordinator.state.mode {
+                Task { [weak self] in
+                    guard let self, !self.isMigrationBlockingSync else { return }
+                    try? await self.viewModel.syncNow()
+                }
+            }
         } catch {
             migrationError = error.localizedDescription
         }
     }
 
     private func prepareMigrationGate(for repository: any JournalRepository) {
-        guard (try? repository.hasCompletedMigration(
-            identifier: ProductConvergenceMigration.statusMigrationIdentifier
-        )) != true else {
+        do {
+            if try repository.hasCompletedMigration(
+                identifier: ProductConvergenceMigration.statusMigrationIdentifier
+            ) {
+                pendingMigration = nil
+                migrationGateBlocked = false
+                migrationError = nil
+                return
+            }
+        } catch {
+            migrationGateBlocked = true
+            migrationError = "Could not inspect migration state: \(error.localizedDescription)"
             pendingMigration = nil
             return
         }
-        guard let snapshot = try? repository.snapshot() else { return }
+
+        let snapshot: JournalSnapshot
+        do {
+            snapshot = try repository.snapshot()
+        } catch {
+            migrationGateBlocked = true
+            migrationError = "Could not inspect journal data: \(error.localizedDescription)"
+            pendingMigration = nil
+            return
+        }
         let dryRun = ProductConvergenceMigration().dryRun(snapshot: snapshot)
         let hasLegacyStatus = snapshot.projects.contains {
             $0.status.isLegacy || $0.isTrashed
         }
         pendingMigration = dryRun.issues.isEmpty && !hasLegacyStatus ? nil : dryRun
+        migrationGateBlocked = false
+        if pendingMigration == nil { migrationError = nil }
     }
 
     private func rebuildViewModels(using repository: any JournalRepository) {

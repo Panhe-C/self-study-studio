@@ -331,6 +331,10 @@ public final class JournalViewModel: ObservableObject {
         return impact
     }
 
+    public func retryAttachmentCleanup(paths: [String]) throws {
+        try JournalArchiveService().retryAttachmentCleanup(paths: paths)
+    }
+
     @discardableResult
     public func quickLog(
         projectId: UUID,

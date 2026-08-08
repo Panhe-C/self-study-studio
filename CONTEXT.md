@@ -10,7 +10,7 @@ This is the accepted target domain language. It is ahead of the code. Every term
 - `[partial]` — a related mechanism exists, but the term's defining constraint is not enforced yet. The gap is stated.
 - `[planned]` — decided but not built.
 
-Statuses were checked against the repository on 2026-08-08. The sequence that closes the gaps is [跨端迁移路线图](docs/cross-surface-migration-roadmap.md); when a milestone lands, update the affected statuses in the same change.
+Statuses were checked against the repository on 2026-08-09. The sequence that closes the gaps is [跨端迁移路线图](docs/cross-surface-migration-roadmap.md); when a milestone lands, update the affected statuses in the same change.
 
 ## Surfaces
 
@@ -32,24 +32,24 @@ The primary Web context that brings one Project's Overview, Plan, Practice, Proo
 _Avoid_: Feature dashboard, global practice manager, folder
 _Gap_: the Web tab structure exists on demo data; the iPhone equivalent is a Project detail screen with a different shape.
 
-**Project Status** `[partial]`:
+**Project Status** `[shipped]`:
 The learner's explicit lifecycle decision for a Project: Active, Paused, Completed, or Abandoned; status changes preserve the Project's Journal history.
 _Avoid_: Progress percentage, deletion state, plan status
-_Gap_: `ProjectStatus` has seven values (`idea`, `active`, `low-frequency`, `paused`, `archived`, `completed`, `trash`). Mapping is settled in `docs/adr/0032`, `docs/adr/0033`, and roadmap milestone B1.
+_Gap_: Legacy `low-frequency`, `archived`, and `trash` values remain readable for migration compatibility; canonical writes use the four lifecycle values plus pre-commitment `idea`.
 
 **Pre-commitment Project** `[shipped]`:
 A Project the learner has recorded but not yet committed to, carrying no Goal, canonical Next Step, or Evidence Contract, and counting toward neither the attention budget nor the Today Agenda.
 _Avoid_: Active Project, draft plan, archived project
 
-**Project Archive** `[partial]`:
+**Project Archive** `[shipped]`:
 The read-accessible collection of Paused, Completed, and Abandoned Projects removed from active planning and the Today Agenda while retaining their Plans, Practice, Proof, Trail, and Reviews.
 _Avoid_: Trash, backup, deleted projects
-_Gap_: archived Projects are excluded from Today and keep their history, but the collection is not organized around the four accepted statuses.
+_Gap_: Physical-device and production-data acceptance remains a later release gate; the iPhone archive view and status filters are implemented.
 
-**Permanent Deletion** `[partial]`:
+**Permanent Deletion** `[shipped]`:
 A separate destructive operation that removes a Project and its dependent records and attachments after impact disclosure and explicit confirmation, optionally preceded by export.
 _Avoid_: Archive, abandon, complete
-_Gap_: recoverable Trash, 30-day retention, and explicit purge impact exist; deletion is not yet fully separated from the lifecycle statuses.
+_Gap_: Repository purge commits first and attachment cleanup is retryable when the filesystem reports a failure; physical-device acceptance remains unverified.
 
 **Review Inbox** `[partial]`:
 The global list of Stage Reviews that are ready or in draft plus the entry point for Weekly Review, without moving project-specific review content out of its Project Workspace.
@@ -285,7 +285,7 @@ _Avoid_: Automatic decision, fact, instruction
 **Review Decision** `[shipped]`:
 A learner-confirmed outcome of a Review that may advance a Phase or change a Project, Learning Plan, Practice Routine, or Next Step.
 _Avoid_: AI recommendation, generated conclusion
-_Gap_: `ReviewDecisionKind` cannot advance a Plan Phase yet, and its `changeFrequency` and `archive` cases still reflect the old status model.
+_Gap_: `ReviewDecisionKind` cannot advance a Plan Phase yet; legacy `archive` remains decode-only compatibility for migrated records.
 
 **Qualifying Proof** `[partial]`:
 Proof explicitly accepted as satisfying a Plan Phase's expected outcome; it is required before a Stage Review can complete that Phase or advance to the next one.

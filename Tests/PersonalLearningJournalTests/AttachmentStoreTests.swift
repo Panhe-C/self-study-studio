@@ -63,4 +63,23 @@ final class AttachmentStoreTests: XCTestCase {
         )
         XCTAssertEqual(try Data(contentsOf: attachment.fileURL), Data("pdf".utf8))
     }
+
+    func testRemovingAttachmentIsIdempotent() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AttachmentStore(rootDirectory: root)
+        let file = try store.saveData(
+            Data("proof".utf8),
+            projectId: UUID(),
+            sessionId: nil,
+            proofId: UUID(),
+            originalFileName: "proof.txt",
+            mimeType: "text/plain"
+        )
+
+        try store.removeAttachment(at: file.fileURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.fileURL.path))
+        XCTAssertNoThrow(try store.removeAttachment(at: file.fileURL))
+    }
 }

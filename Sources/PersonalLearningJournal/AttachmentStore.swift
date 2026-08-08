@@ -103,6 +103,17 @@ public struct AttachmentStore: Sendable {
         return destination
     }
 
+    public func removeAttachment(at url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    public static func removeAttachmentFile(at path: String) throws {
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
     public func attachmentURL(
         projectId: UUID,
         sessionId: UUID?,

@@ -103,7 +103,7 @@ public struct CloudRecordMapper {
         record["name"] = value.name
         record["area"] = value.area
         record["goal"] = value.goal
-        record["status"] = (value.status.canonicalStatus ?? value.status).rawValue
+        record["status"] = (value.status.canonicalStatusForStorage ?? .idea).rawValue
         record["currentNextStep"] = value.currentNextStep
         record["lastActionType"] = value.lastActionType.rawValue
         record["defaultDurationMinutes"] = value.defaultDurationMinutes
@@ -112,7 +112,7 @@ public struct CloudRecordMapper {
         record["activeEvidenceContractId"] = value.activeEvidenceContractId?.uuidString
         record["completedAt"] = value.completedAt
         record["previousStatusBeforeTrash"] = value.previousStatusBeforeTrash
-            .flatMap { $0.canonicalStatus ?? $0 }
+            .flatMap(\.canonicalStatusForStorage)
             .map(\.rawValue)
         record["statusMigrationSource"] = value.statusMigrationProvenance?.sourceStatus
         record["statusMigrationDecision"] = value.statusMigrationProvenance?.decision.rawValue
@@ -162,8 +162,13 @@ public struct CloudRecordMapper {
         record["facts"] = value.facts as NSArray
         record["patterns"] = value.patterns as NSArray
         record["decisions"] = value.decisions as NSArray
-        record["projectRecommendations"] = value.projectRecommendations
-            .map { encodePair($0.key.uuidString, $0.value.rawValue) } as NSArray
+        let projectRecommendations: [String] = value.projectRecommendations
+            .compactMap { item in
+                let (key, status) = item
+                guard let canonical = status.canonicalStatusForStorage else { return nil }
+                return encodePair(key.uuidString, canonical.rawValue)
+            }
+        record["projectRecommendations"] = projectRecommendations as NSArray
         record["nextSteps"] = value.nextSteps
             .map { encodePair($0.key.uuidString, $0.value) } as NSArray
         record["aiSourceSummary"] = value.aiSourceSummary as NSArray
@@ -655,7 +660,8 @@ public struct CloudRecordMapper {
     private func statusDictionary(_ values: [String]) throws -> [UUID: ProjectStatus] {
         try Dictionary(uniqueKeysWithValues: values.map { value in
             let parts = try decodePair(value)
-            guard let id = UUID(uuidString: parts.0), let status = ProjectStatus(rawValue: parts.1) else {
+            guard let id = UUID(uuidString: parts.0),
+                  let status = ProjectStatus.canonicalizeLegacy(rawValue: parts.1) else {
                 throw CloudRecordMapperError.invalidField("projectRecommendations")
             }
             return (id, status)

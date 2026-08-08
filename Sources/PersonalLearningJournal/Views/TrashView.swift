@@ -3,20 +3,25 @@ import SwiftUI
 public struct TrashView: View {
     @ObservedObject private var viewModel: JournalViewModel
     private let archiveService: JournalArchiveService
+    private let trashExportService: TrashExportService
     private let onPermanentDelete: ((TrashPurgeImpact) -> Void)?
     private let onExport: ((Project, Data) -> Void)?
     @State private var pendingImpact: TrashPurgeImpact?
     @State private var errorMessage: String?
     @State private var noticeMessage: String?
+    @State private var exportDocument: TrashExportDocument?
+    @State private var pendingAttachmentCleanupPaths: [String]?
 
     public init(
         viewModel: JournalViewModel,
         archiveService: JournalArchiveService = JournalArchiveService(),
+        trashExportService: TrashExportService = TrashExportService(),
         onPermanentDelete: ((TrashPurgeImpact) -> Void)? = nil,
         onExport: ((Project, Data) -> Void)? = nil
     ) {
         self.viewModel = viewModel
         self.archiveService = archiveService
+        self.trashExportService = trashExportService
         self.onPermanentDelete = onPermanentDelete
         self.onExport = onExport
     }
@@ -61,6 +66,11 @@ public struct TrashView: View {
                     } else {
                         do {
                             _ = try viewModel.permanentlyDelete(projectId: pendingImpact.projectID)
+                        } catch let error as JournalArchiveError {
+                            if case let .attachmentDeletionFailed(paths) = error {
+                                pendingAttachmentCleanupPaths = paths
+                            }
+                            errorMessage = error.localizedDescription
                         } catch {
                             errorMessage = error.localizedDescription
                         }
@@ -73,14 +83,47 @@ public struct TrashView: View {
                 Text("This cannot be undone. It affects \(impact.sessionCount) sessions, \(impact.proofCount) proofs, and \(impact.attachmentPaths.count) attachments.")
             }
         }
-        .alert("Could not restore project", isPresented: Binding(
+        .alert("Could not complete action", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
-        )) { Button("OK") { errorMessage = nil } } message: { Text(errorMessage ?? "") }
+        )) {
+            if let paths = pendingAttachmentCleanupPaths {
+                Button("Retry attachment cleanup") {
+                    do {
+                        try viewModel.retryAttachmentCleanup(paths: paths)
+                        pendingAttachmentCleanupPaths = nil
+                        errorMessage = nil
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+            Button("OK") {
+                errorMessage = nil
+                pendingAttachmentCleanupPaths = nil
+            }
+        } message: { Text(errorMessage ?? "") }
         .alert("Export ready", isPresented: Binding(
             get: { noticeMessage != nil },
             set: { if !$0 { noticeMessage = nil } }
         )) { Button("OK") { noticeMessage = nil } } message: { Text(noticeMessage ?? "") }
+        .sheet(item: $exportDocument) { document in
+            NavigationStack {
+                VStack(spacing: 16) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.largeTitle)
+                        .foregroundStyle(.green)
+                    Text("Export is ready to save or share.")
+                        .multilineTextAlignment(.center)
+                    ShareLink(item: document.url) {
+                        Label("Save or Share Export", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(24)
+                .navigationTitle("Export Ready")
+            }
+        }
     }
 
     private var trashedProjects: [Project] {
@@ -94,11 +137,25 @@ public struct TrashView: View {
 
     private func export(_ project: Project) {
         do {
-            let data = try viewModel.exportJSON()
-            onExport?(project, data)
-            noticeMessage = "A journal export was prepared before deleting \(project.name)."
+            let documents = FileManager.default.urls(
+                for: .documentDirectory,
+                in: .userDomainMask
+            ).first ?? FileManager.default.temporaryDirectory
+            let exportDirectory = documents
+                .appendingPathComponent("LearningJournal", isDirectory: true)
+                .appendingPathComponent("TrashExports", isDirectory: true)
+            let document = try trashExportService.prepare(
+                snapshot: viewModel.snapshot,
+                project: project,
+                to: exportDirectory
+            )
+            if let onExport {
+                onExport(project, try viewModel.exportJSON())
+            }
+            exportDocument = document
+            noticeMessage = "Export prepared with \(document.attachmentCount) attachments before deleting \(project.name)."
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Export failed: \(error.localizedDescription)"
         }
     }
 }

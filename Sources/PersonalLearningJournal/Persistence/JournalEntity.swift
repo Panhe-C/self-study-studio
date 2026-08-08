@@ -193,19 +193,29 @@ public struct JournalTransaction: Sendable {
     public var deletions: [JournalEntityReference]
     public var origin: MutationOrigin
     public var stateMetadata: JournalStateMetadata?
-    public var completedMigrationIdentifier: String?
+    public var completedMigrationIdentifiers: [String]
+
+    public var completedMigrationIdentifier: String? {
+        completedMigrationIdentifiers.first
+    }
 
     public init(
         upserts: [JournalEntity] = [],
         deletions: [JournalEntityReference] = [],
         origin: MutationOrigin,
         stateMetadata: JournalStateMetadata? = nil,
-        completedMigrationIdentifier: String? = nil
+        completedMigrationIdentifier: String? = nil,
+        completedMigrationIdentifiers: [String] = []
     ) {
         self.upserts = upserts
         self.deletions = deletions
         self.origin = origin
         self.stateMetadata = stateMetadata
-        self.completedMigrationIdentifier = completedMigrationIdentifier
+        var identifiers = completedMigrationIdentifiers
+        if let completedMigrationIdentifier,
+           !identifiers.contains(completedMigrationIdentifier) {
+            identifiers.append(completedMigrationIdentifier)
+        }
+        self.completedMigrationIdentifiers = identifiers
     }
 }

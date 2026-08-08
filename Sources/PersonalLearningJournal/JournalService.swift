@@ -745,7 +745,10 @@ public final class JournalService {
             throw JournalValidationError.missingProject
         }
         var project = state.projects[index]
-        project.status = project.previousStatusBeforeTrash?.canonicalStatus ?? .idea
+        guard let previousStatus = project.previousStatusBeforeTrash?.canonicalStatus else {
+            throw JournalValidationError.unresolvedTrashStatus
+        }
+        project.status = previousStatus
         project.previousStatusBeforeTrash = nil
         project.deletedAt = nil
         project.updatedAt = now()

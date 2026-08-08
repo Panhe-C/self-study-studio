@@ -77,7 +77,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
                     value: JSONEncoder.journal.encode(metadata)
                 )
             }
-            if let identifier = transaction.completedMigrationIdentifier {
+            for identifier in transaction.completedMigrationIdentifiers {
                 try storeRepositoryMetadata(
                     key: Self.migrationKey(identifier),
                     value: Data("complete".utf8)
