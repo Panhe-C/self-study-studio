@@ -320,6 +320,7 @@
         "color": { "type": "enum", "required": true, "values": ["coral", "teal", "yellow", "blue", "green", "pink"] },
         "targetMinutes": { "type": "integer", "required": true, "minimum": 1, "maximum": 1440 },
         "weekdays": { "type": "integerArray", "required": true, "sort": "ascending" },
+        "blocks": { "type": "json", "required": false },
         "reminderTime": {
           "type": "object",
           "required": false,
@@ -344,6 +345,8 @@
         "startedAt": { "type": "date", "required": true },
         "endedAt": { "type": "date", "required": true },
         "activeDurationSeconds": { "type": "integer", "required": true, "minimum": 0 },
+        "segments": { "type": "json", "required": false },
+        "summary": { "type": "json", "required": false },
         "note": { "type": "string", "required": false, "trim": true },
         "createdAt": { "type": "date", "required": true },
         "updatedAt": { "type": "date", "required": true },

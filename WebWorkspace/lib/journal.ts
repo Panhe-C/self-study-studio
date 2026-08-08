@@ -34,10 +34,37 @@ export type PracticeBlock = {
   id: string;
   name: string;
   targetMinutes: number;
+  ordinal?: number;
+  focus?: string;
+  nextFocusCandidates?: string[];
   actualMinutes: number;
   focus: string;
   nextFocus: string;
   tone: "coral" | "blue" | "green";
+};
+
+export type PracticeSegment = {
+  id: string;
+  blockID: string;
+  startedAt: string;
+  endedAt: string;
+  activeDurationSeconds: number;
+  isPause: boolean;
+};
+
+export type PracticeBlockSummary = {
+  blockID: string;
+  targetMinutes: number;
+  activeDurationSeconds: number;
+  visitCount: number;
+  wasSkipped: boolean;
+  wasExtended: boolean;
+};
+
+export type PracticeSummary = {
+  totalActiveDurationSeconds: number;
+  blockSummaries: PracticeBlockSummary[];
+  attentionMarker?: string;
 };
 
 export type TrailItem = {

@@ -23,6 +23,172 @@ public struct PracticeReminderTime: Codable, Equatable, Sendable {
     }
 }
 
+/// An ordered, soft-targeted part of a composite practice routine. Block
+/// targets guide the session but never make a block mandatory or complete.
+public struct PracticeBlock: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+    public var targetMinutes: Int
+    public var ordinal: Int
+    public var focus: String?
+    public var nextFocusCandidates: [String]
+
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        targetMinutes: Int,
+        ordinal: Int,
+        focus: String? = nil,
+        nextFocusCandidates: [String] = []
+    ) {
+        self.id = id
+        self.name = name.trimmedForJournal
+        self.targetMinutes = targetMinutes
+        self.ordinal = ordinal
+        self.focus = focus.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 }
+        self.nextFocusCandidates = nextFocusCandidates
+            .map { $0.trimmedForJournal }
+            .filter { !$0.isEmpty }
+    }
+
+    public var currentFocus: String? {
+        get { focus }
+        set { focus = newValue.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 } }
+    }
+
+    public func validated() throws -> PracticeBlock {
+        guard !name.trimmedForJournal.isEmpty else {
+            throw PracticeValidationError.blankName
+        }
+        guard (1...1_440).contains(targetMinutes) else {
+            throw PracticeValidationError.invalidTargetMinutes
+        }
+        guard ordinal >= 0 else {
+            throw PracticeValidationError.invalidTargetMinutes
+        }
+        var normalized = self
+        normalized.name = name.trimmedForJournal
+        normalized.focus = focus.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 }
+        normalized.nextFocusCandidates = nextFocusCandidates
+            .map { $0.trimmedForJournal }
+            .filter { !$0.isEmpty }
+        return normalized
+    }
+}
+
+/// One active interval attributed to a routine block. Pauses are represented
+/// explicitly when imported from a player, but never contribute to a summary.
+public struct PracticeSegment: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var blockID: UUID
+    public var startedAt: Date
+    public var endedAt: Date
+    public var activeDurationSeconds: Int
+    public var isPause: Bool
+
+    public init(
+        id: UUID = UUID(),
+        blockID: UUID,
+        startedAt: Date,
+        endedAt: Date,
+        activeDurationSeconds: Int,
+        isPause: Bool = false
+    ) {
+        self.id = id
+        self.blockID = blockID
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.activeDurationSeconds = activeDurationSeconds
+        self.isPause = isPause
+    }
+
+    public func validated() throws -> PracticeSegment {
+        guard endedAt >= startedAt,
+              activeDurationSeconds >= 0,
+              Double(activeDurationSeconds) <= endedAt.timeIntervalSince(startedAt) + 1,
+              !isPause || activeDurationSeconds == 0 else {
+            throw PracticeValidationError.invalidSessionTiming
+        }
+        return self
+    }
+}
+
+public struct PracticeBlockSummary: Codable, Equatable, Sendable {
+    public let blockID: UUID
+    public let targetMinutes: Int
+    public let activeDurationSeconds: Int
+    public let visitCount: Int
+    public let wasSkipped: Bool
+    public let wasExtended: Bool
+
+    public init(
+        blockID: UUID,
+        targetMinutes: Int,
+        activeDurationSeconds: Int,
+        visitCount: Int,
+        wasSkipped: Bool,
+        wasExtended: Bool
+    ) {
+        self.blockID = blockID
+        self.targetMinutes = targetMinutes
+        self.activeDurationSeconds = activeDurationSeconds
+        self.visitCount = visitCount
+        self.wasSkipped = wasSkipped
+        self.wasExtended = wasExtended
+    }
+}
+
+public struct PracticeSummary: Codable, Equatable, Sendable {
+    public let totalActiveDurationSeconds: Int
+    public let blockSummaries: [PracticeBlockSummary]
+    public let attentionMarker: String?
+
+    public init(
+        totalActiveDurationSeconds: Int,
+        blockSummaries: [PracticeBlockSummary],
+        attentionMarker: String? = nil
+    ) {
+        self.totalActiveDurationSeconds = totalActiveDurationSeconds
+        self.blockSummaries = blockSummaries
+        self.attentionMarker = attentionMarker.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    public static func from(
+        blocks: [PracticeBlock],
+        segments: [PracticeSegment],
+        attentionMarker: String?
+    ) -> PracticeSummary {
+        var durations: [UUID: Int] = [:]
+        var visits: [UUID: Int] = [:]
+        for segment in segments where !segment.isPause && segment.activeDurationSeconds > 0 {
+            durations[segment.blockID, default: 0] += segment.activeDurationSeconds
+            visits[segment.blockID, default: 0] += 1
+        }
+
+        let orderedBlocks = blocks.sorted {
+            if $0.ordinal != $1.ordinal { return $0.ordinal < $1.ordinal }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+        let blockSummaries = orderedBlocks.map { block in
+            let active = durations[block.id, default: 0]
+            let targetSeconds = block.targetMinutes * 60
+            return PracticeBlockSummary(
+                blockID: block.id,
+                targetMinutes: block.targetMinutes,
+                activeDurationSeconds: active,
+                visitCount: visits[block.id, default: 0],
+                wasSkipped: active == 0,
+                wasExtended: active > targetSeconds
+            )
+        }
+        return PracticeSummary(
+            totalActiveDurationSeconds: durations.values.reduce(0, +),
+            blockSummaries: blockSummaries,
+            attentionMarker: attentionMarker
+        )
+    }
+}
+
 public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var projectId: UUID?
@@ -37,6 +203,10 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
     public var color: PracticeSemanticColor
     public var targetMinutes: Int
     public var weekdays: Set<Int>
+    /// Empty keeps legacy flat routines readable. New writes should carry
+    /// ordered blocks; `migratedToBlocks()` supplies a stable single block
+    /// for legacy values.
+    public var blocks: [PracticeBlock]
     public var reminderTime: PracticeReminderTime?
     public var isArchived: Bool
     public var createdAt: Date
@@ -55,6 +225,7 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
         color: PracticeSemanticColor,
         targetMinutes: Int,
         weekdays: Set<Int>,
+        blocks: [PracticeBlock] = [],
         reminderTime: PracticeReminderTime? = nil,
         isArchived: Bool = false,
         createdAt: Date = Date(),
@@ -72,6 +243,7 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
         self.color = color
         self.targetMinutes = targetMinutes
         self.weekdays = weekdays
+        self.blocks = blocks
         self.reminderTime = reminderTime
         self.isArchived = isArchived
         self.createdAt = createdAt
@@ -101,12 +273,37 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
         var normalized = self
         normalized.name = name.trimmedForJournal
         normalized.symbolName = symbolName.trimmedForJournal
+        normalized.blocks = try blocks.map { try $0.validated() }
         return normalized
+    }
+
+    public var orderedBlocks: [PracticeBlock] {
+        blocks.sorted {
+            if $0.ordinal != $1.ordinal { return $0.ordinal < $1.ordinal }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+    }
+
+    /// Converts a legacy flat routine to one stable block without changing
+    /// routine identity or its overall target. A non-flat routine needs no
+    /// migration and returns nil.
+    public func migratedToBlocks() -> PracticeRoutine? {
+        guard blocks.isEmpty else { return nil }
+        var migrated = self
+        migrated.blocks = [
+            PracticeBlock(
+                id: id,
+                name: name,
+                targetMinutes: targetMinutes,
+                ordinal: 0
+            )
+        ]
+        return migrated
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, projectId, planRevisionID, planSeriesID, isStructuralLocked
-        case name, symbolName, color, targetMinutes, weekdays, reminderTime
+        case name, symbolName, color, targetMinutes, weekdays, blocks, reminderTime
         case isArchived, createdAt, updatedAt, deletedAt, schemaVersion
     }
 
@@ -123,6 +320,7 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
             color: try container.decode(PracticeSemanticColor.self, forKey: .color),
             targetMinutes: try container.decode(Int.self, forKey: .targetMinutes),
             weekdays: try container.decode(Set<Int>.self, forKey: .weekdays),
+            blocks: try container.decodeIfPresent([PracticeBlock].self, forKey: .blocks) ?? [],
             reminderTime: try container.decodeIfPresent(PracticeReminderTime.self, forKey: .reminderTime),
             isArchived: try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false,
             createdAt: try container.decode(Date.self, forKey: .createdAt),
@@ -130,6 +328,27 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
             deletedAt: try container.decodeIfPresent(Date.self, forKey: .deletedAt),
             schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
         )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(projectId, forKey: .projectId)
+        try container.encodeIfPresent(planRevisionID, forKey: .planRevisionID)
+        try container.encodeIfPresent(planSeriesID, forKey: .planSeriesID)
+        try container.encode(isStructuralLocked, forKey: .isStructuralLocked)
+        try container.encode(name, forKey: .name)
+        try container.encode(symbolName, forKey: .symbolName)
+        try container.encode(color, forKey: .color)
+        try container.encode(targetMinutes, forKey: .targetMinutes)
+        try container.encode(weekdays, forKey: .weekdays)
+        if !blocks.isEmpty { try container.encode(blocks, forKey: .blocks) }
+        try container.encodeIfPresent(reminderTime, forKey: .reminderTime)
+        try container.encode(isArchived, forKey: .isArchived)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(deletedAt, forKey: .deletedAt)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
     }
 }
 
@@ -140,6 +359,8 @@ public struct PracticeSession: Codable, Equatable, Identifiable, Sendable {
     public var startedAt: Date
     public var endedAt: Date
     public var activeDurationSeconds: Int
+    public var segments: [PracticeSegment]
+    public var summary: PracticeSummary?
     public var note: String?
     public var createdAt: Date
     public var updatedAt: Date
@@ -153,6 +374,8 @@ public struct PracticeSession: Codable, Equatable, Identifiable, Sendable {
         startedAt: Date,
         endedAt: Date,
         activeDurationSeconds: Int,
+        segments: [PracticeSegment] = [],
+        summary: PracticeSummary? = nil,
         note: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -165,6 +388,8 @@ public struct PracticeSession: Codable, Equatable, Identifiable, Sendable {
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.activeDurationSeconds = activeDurationSeconds
+        self.segments = segments
+        self.summary = summary
         self.note = note?.trimmedForJournal
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -182,11 +407,19 @@ public struct PracticeSession: Codable, Equatable, Identifiable, Sendable {
 
         var normalized = self
         normalized.note = note?.trimmedForJournal
+        normalized.segments = try segments.map { try $0.validated() }
+        if let summary {
+            guard summary.totalActiveDurationSeconds >= 0 else {
+                throw PracticeValidationError.invalidSessionTiming
+            }
+            normalized.summary = summary
+        }
         return normalized
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, routineId, linkedProjectId, startedAt, endedAt, activeDurationSeconds
+        case segments, summary
         case note, createdAt, updatedAt, deletedAt, schemaVersion
     }
 
@@ -199,11 +432,30 @@ public struct PracticeSession: Codable, Equatable, Identifiable, Sendable {
             startedAt: try container.decode(Date.self, forKey: .startedAt),
             endedAt: try container.decode(Date.self, forKey: .endedAt),
             activeDurationSeconds: try container.decode(Int.self, forKey: .activeDurationSeconds),
+            segments: try container.decodeIfPresent([PracticeSegment].self, forKey: .segments) ?? [],
+            summary: try container.decodeIfPresent(PracticeSummary.self, forKey: .summary),
             note: try container.decodeIfPresent(String.self, forKey: .note),
             createdAt: try container.decode(Date.self, forKey: .createdAt),
             updatedAt: try container.decode(Date.self, forKey: .updatedAt),
             deletedAt: try container.decodeIfPresent(Date.self, forKey: .deletedAt),
             schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
         )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(routineId, forKey: .routineId)
+        try container.encodeIfPresent(linkedProjectId, forKey: .linkedProjectId)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encode(endedAt, forKey: .endedAt)
+        try container.encode(activeDurationSeconds, forKey: .activeDurationSeconds)
+        if !segments.isEmpty { try container.encode(segments, forKey: .segments) }
+        try container.encodeIfPresent(summary, forKey: .summary)
+        try container.encodeIfPresent(note, forKey: .note)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(deletedAt, forKey: .deletedAt)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
     }
 }

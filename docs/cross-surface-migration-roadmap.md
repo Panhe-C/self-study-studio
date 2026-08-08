@@ -223,11 +223,16 @@ existing EventKit preview and confirmation boundary untouched.
 
 ### B3. Practice Blocks, Focus, and Segments
 
-**Current.** `PracticeRoutine` is flat: one name, one `targetMinutes`, one weekday set.
-`PracticeSession` records only `activeDurationSeconds`. There is no block structure, no Focus,
-no per-block attribution, and no constraint limiting a Project to one active Routine.
+**Status (2026-08-09, partial).** The domain/contract slice now carries ordered Practice Blocks,
+optional Focus and Next Focus candidates, per-Block Segments/Summaries, and a dry-run/backup/
+idempotent explicit merge-or-archive migration. The Guided Routine Player and service/UI wiring
+remain out of this partial slice.
 
-**Work.** Add ordered Practice Blocks with soft targets, one current Practice Focus per Block,
+**Current.** Runtime behavior is still legacy: the timer records only `activeDurationSeconds`,
+and there is no production Block authoring, Focus capture, or per-Block attribution. Multiple
+active Routines are represented by a migration gate rather than silently resolved.
+
+**Remaining work.** Wire the Guided Routine Player and service/UI behavior. Add ordered Practice Blocks with soft targets, one current Practice Focus per Block,
 and optional Next Focus candidates (`docs/adr/0005`–`0007`, `0021`). Add Practice Segments so
 active time is attributed per Block, excluding pauses and combining repeated visits
 (`docs/adr/0022`). Add the Practice Summary with per-Block time, skipped or extended targets,

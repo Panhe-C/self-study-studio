@@ -273,6 +273,9 @@ function validateValue(
         invalid(kind, field);
       }
       break;
+    case "json":
+      if (!isJSONValue(value)) invalid(kind, field);
+      break;
     default:
       invalid(kind, field);
   }
@@ -471,4 +474,12 @@ function isISO8601(
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isJSONValue(value: unknown): boolean {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJSONValue);
+  if (isObject(value)) return Object.values(value).every(isJSONValue);
+  return false;
 }

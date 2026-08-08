@@ -39,8 +39,8 @@ public struct CloudRecordMapper {
         case let .plannedSession(value): encode(value, into: record)
         case let .availabilityRule(value): encode(value, into: record)
         case let .schedulingPreferences(value): encode(value, into: record)
-        case let .practiceRoutine(value): encode(value, into: record)
-        case let .practiceSession(value): encode(value, into: record)
+        case let .practiceRoutine(value): try encode(value, into: record)
+        case let .practiceSession(value): try encode(value, into: record)
         }
         return record
     }
@@ -286,7 +286,7 @@ public struct CloudRecordMapper {
         record["schemaVersion"] = value.schemaVersion
     }
 
-    private func encode(_ value: PracticeRoutine, into record: CKRecord) {
+    private func encode(_ value: PracticeRoutine, into record: CKRecord) throws {
         record["projectId"] = value.projectId?.uuidString
         record["planRevisionID"] = value.planRevisionID?.uuidString
         record["planSeriesID"] = value.planSeriesID?.uuidString
@@ -296,18 +296,29 @@ public struct CloudRecordMapper {
         record["color"] = value.color.rawValue
         record["targetMinutes"] = value.targetMinutes
         record["weekdays"] = value.weekdays.sorted().map(NSNumber.init(value:)) as NSArray
+        record["blocks"] = value.blocks.isEmpty
+            ? nil
+            : try JSONEncoder.journal.encode(value.blocks)
         record["reminderHour"] = value.reminderTime?.hour
         record["reminderMinute"] = value.reminderTime?.minute
         record["isArchived"] = value.isArchived
         encodeDates(value.createdAt, value.updatedAt, nil, value.deletedAt, value.schemaVersion, into: record)
     }
 
-    private func encode(_ value: PracticeSession, into record: CKRecord) {
+    private func encode(_ value: PracticeSession, into record: CKRecord) throws {
         record["routineId"] = value.routineId.uuidString
         record["linkedProjectId"] = value.linkedProjectId?.uuidString
         record["startedAt"] = value.startedAt
         record["endedAt"] = value.endedAt
         record["activeDurationSeconds"] = value.activeDurationSeconds
+        record["segments"] = value.segments.isEmpty
+            ? nil
+            : try JSONEncoder.journal.encode(value.segments)
+        record["summary"] = if let summary = value.summary {
+            try JSONEncoder.journal.encode(summary)
+        } else {
+            nil
+        }
         record["note"] = value.note
         encodeDates(value.createdAt, value.updatedAt, nil, value.deletedAt, value.schemaVersion, into: record)
     }
@@ -609,6 +620,7 @@ public struct CloudRecordMapper {
             color: color,
             targetMinutes: try integer("targetMinutes", from: record),
             weekdays: Set(integers("weekdays", from: record)),
+            blocks: try optionalJSON([PracticeBlock].self, key: "blocks", from: record) ?? [],
             reminderTime: reminderHour.map { PracticeReminderTime(hour: $0, minute: reminderMinute!) },
             isArchived: try boolean("isArchived", from: record),
             createdAt: try date("createdAt", from: record),
@@ -626,6 +638,8 @@ public struct CloudRecordMapper {
             startedAt: try date("startedAt", from: record),
             endedAt: try date("endedAt", from: record),
             activeDurationSeconds: try integer("activeDurationSeconds", from: record),
+            segments: try optionalJSON([PracticeSegment].self, key: "segments", from: record) ?? [],
+            summary: try optionalJSON(PracticeSummary.self, key: "summary", from: record),
             note: optionalString("note", from: record),
             createdAt: try date("createdAt", from: record),
             updatedAt: try date("updatedAt", from: record),
@@ -637,6 +651,19 @@ public struct CloudRecordMapper {
     private func contentHash(of url: URL) throws -> String {
         let digest = SHA256.hash(data: try Data(contentsOf: url))
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func optionalJSON<Value: Decodable>(
+        _ type: Value.Type,
+        key: String,
+        from record: CKRecord
+    ) throws -> Value? {
+        guard let data = record[key] as? Data else { return nil }
+        do {
+            return try JSONDecoder.journal.decode(Value.self, from: data)
+        } catch {
+            throw CloudRecordMapperError.invalidField(key)
+        }
     }
 
     private func string(_ key: String, from record: CKRecord) throws -> String {

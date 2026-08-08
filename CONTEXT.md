@@ -221,11 +221,12 @@ _Avoid_: Completed session, deleted session, missed practice occurrence
 **Practice Routine** `[partial]`:
 A repeatable, Project-owned practice format with one schedule, one overall target, and an ordered set of Practice Blocks; a Project has at most one active Routine.
 _Avoid_: Learning Plan, daily task list, collection of unrelated drills
-_Gap_: `PracticeRoutine` is still flat with a single `targetMinutes` and has no Blocks; B2 now carries optional Plan Revision identity/structural locking while a Project may still hold several active Routines until B3.
+_Gap_: the domain now carries optional ordered Blocks and an explicit dry-run/backup/merge-or-archive migration, while the Guided Routine Player, active-Routine service guard, and end-to-end Block authoring remain pending; B2 Plan Revision identity/structural locking remains compatible.
 
-**Practice Block** `[planned]`:
+**Practice Block** `[partial]`:
 A named part of a Practice Routine that preserves a distinct training purpose and target duration while participating in one continuous practice experience.
 _Avoid_: Separate Practice Routine, Planned Session, checklist item
+_Gap_: ordered Block targets, current Focus, and Next Focus candidates exist in the domain and shared contract, but iPhone authoring and guided execution are not wired yet.
 
 **Practice Focus** `[planned]`:
 The single current emphasis within a Practice Block, usually derived from the active Plan Phase and optionally carrying guidance, resources, and a success cue without changing the Routine's stable structure.
@@ -238,21 +239,22 @@ _Avoid_: Exercise task, checklist item, planned session
 **Practice Session** `[partial]`:
 One completed run of a Practice Routine that records both total active time and the actual time spent in each Practice Block.
 _Avoid_: Learning Session, block session, timer run
-_Gap_: `PracticeSession` records only `activeDurationSeconds`; there is no per-Block attribution.
+_Gap_: `PracticeSession` can now persist optional per-Block Segments and a derived Summary compatibly, but the timer still records only the legacy total until Guided Routine Player work lands.
 
 **Guided Routine Player** `[partial]`:
 The iPhone execution flow that starts and finishes a Practice Session once, presents one current Block at a time, and attributes active time as the learner advances, skips, or directly switches Blocks.
 _Avoid_: Block checklist, separate timers, forced sequence
 _Gap_: the timer starts, pauses, resumes, and recovers from a crash, but presents no Blocks and attributes no per-Block time.
 
-**Practice Segment** `[planned]`:
+**Practice Segment** `[partial]`:
 A contiguous interval of active time attributed to one Practice Block inside a Practice Session; pauses are excluded and repeated visits to the same Block are combined in the session summary.
 _Avoid_: Practice Session, exercise timer, planned session
+_Gap_: Codable/CloudKit mapping and summary aggregation exist; runtime pause/skip/direct-selection attribution remains pending.
 
 **Practice Summary** `[partial]`:
 The automatically saved outcome of a Practice Session containing total active time, per-Block time, skipped or extended targets, and the Practice Focus used, with optional notes, Proof, and one Attention Marker.
 _Avoid_: Required reflection, block report, stage review
-_Gap_: sessions save automatically with total time and an optional note; per-Block time, target outcomes, Focus, and Attention Marker are missing.
+_Gap_: the domain computes and persists per-Block time, skipped/extended targets, and an optional Attention Marker; automatic save ordering, Focus capture, notes/Proof attachment, and runtime production use remain pending.
 
 **Attention Marker** `[planned]`:
 An optional indication that one Practice Block deserves attention in the next session or Review; it is a learner signal rather than a score or failure state.
@@ -261,7 +263,7 @@ _Avoid_: Rating, failed block, automatic recommendation
 **Practice Target** `[partial]`:
 A soft time goal for a Practice Routine or Block; the Routine's total target determines whether the day met its goal, while Block targets guide balance without blocking completion.
 _Avoid_: Required checklist, completion gate, quota
-_Gap_: the Routine target exists and is already soft; Block targets do not exist.
+_Gap_: Routine and Block targets now exist and remain soft; target feedback and guided UI wiring are still pending.
 
 **Published Review** `[shipped]`:
 A completed reflection whose decisions become part of the Personal Learning Journal and may change a project's status or Next Step.

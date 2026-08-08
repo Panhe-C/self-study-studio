@@ -635,6 +635,98 @@
         "updatedAt": "2026-01-01T19:10:00Z",
         "schemaVersion": 1
       }
+    },
+    {
+      "id": "practice-session-with-block-summary",
+      "kind": "practiceSession",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000017",
+        "routineId": "00000000-0000-0000-0000-000000000015",
+        "linkedProjectId": "00000000-0000-0000-0000-000000000001",
+        "startedAt": "2026-01-02T19:00:00Z",
+        "endedAt": "2026-01-02T19:05:00Z",
+        "activeDurationSeconds": 240,
+        "segments": [
+          {
+            "id": "00000000-0000-0000-0000-000000000018",
+            "blockID": "00000000-0000-0000-0000-000000000019",
+            "startedAt": "2026-01-02T19:00:00Z",
+            "endedAt": "2026-01-02T19:02:00Z",
+            "activeDurationSeconds": 120,
+            "isPause": false
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000020",
+            "blockID": "00000000-0000-0000-0000-000000000019",
+            "startedAt": "2026-01-02T19:03:00Z",
+            "endedAt": "2026-01-02T19:05:00Z",
+            "activeDurationSeconds": 120,
+            "isPause": false
+          }
+        ],
+        "summary": {
+          "totalActiveDurationSeconds": 240,
+          "blockSummaries": [
+            {
+              "blockID": "00000000-0000-0000-0000-000000000019",
+              "targetMinutes": 5,
+              "activeDurationSeconds": 240,
+              "visitCount": 2,
+              "wasSkipped": false,
+              "wasExtended": false
+            }
+          ],
+          "attentionMarker": "Keep the loop small"
+        },
+        "note": "Block revisit",
+        "createdAt": "2026-01-02T19:05:00Z",
+        "updatedAt": "2026-01-02T19:05:00Z",
+        "schemaVersion": 3
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000017",
+        "routineId": "00000000-0000-0000-0000-000000000015",
+        "linkedProjectId": "00000000-0000-0000-0000-000000000001",
+        "startedAt": "2026-01-02T19:00:00Z",
+        "endedAt": "2026-01-02T19:05:00Z",
+        "activeDurationSeconds": 240,
+        "segments": [
+          {
+            "id": "00000000-0000-0000-0000-000000000018",
+            "blockID": "00000000-0000-0000-0000-000000000019",
+            "startedAt": "2026-01-02T19:00:00Z",
+            "endedAt": "2026-01-02T19:02:00Z",
+            "activeDurationSeconds": 120,
+            "isPause": false
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000020",
+            "blockID": "00000000-0000-0000-0000-000000000019",
+            "startedAt": "2026-01-02T19:03:00Z",
+            "endedAt": "2026-01-02T19:05:00Z",
+            "activeDurationSeconds": 120,
+            "isPause": false
+          }
+        ],
+        "summary": {
+          "totalActiveDurationSeconds": 240,
+          "blockSummaries": [
+            {
+              "blockID": "00000000-0000-0000-0000-000000000019",
+              "targetMinutes": 5,
+              "activeDurationSeconds": 240,
+              "visitCount": 2,
+              "wasSkipped": false,
+              "wasExtended": false
+            }
+          ],
+          "attentionMarker": "Keep the loop small"
+        },
+        "note": "Block revisit",
+        "createdAt": "2026-01-02T19:05:00Z",
+        "updatedAt": "2026-01-02T19:05:00Z",
+        "schemaVersion": 3
+      }
     }
   ],
   "invalid": [

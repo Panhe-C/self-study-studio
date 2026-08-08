@@ -507,6 +507,8 @@ public enum JournalRecordContractDecoder {
                 guard let values = item as? [Any] else { return false }
                 return values.allSatisfy { $0 is String }
             }) else { throw invalid(kind, field) }
+        case "json":
+            guard JSONSerialization.isValidJSONObject(value) else { throw invalid(kind, field) }
         default:
             throw invalid(kind, field)
         }
