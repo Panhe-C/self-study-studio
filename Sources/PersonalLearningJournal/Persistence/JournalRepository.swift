@@ -311,7 +311,16 @@ public final class InMemoryJournalRepository: JournalRepository {
     public func discardTerminalMutations(_ mutationIDs: Set<UUID>) throws {
         guard !mutationIDs.isEmpty else { return }
         withLock {
-            outbox.removeAll { mutationIDs.contains($0.id) && $0.isTerminal }
+            let transactionIDs = Set(
+                outbox
+                    .filter { mutationIDs.contains($0.id) && $0.isTerminal }
+                    .map(\.transactionID)
+            )
+            outbox.removeAll {
+                $0.isTerminal && (
+                    mutationIDs.contains($0.id) || transactionIDs.contains($0.transactionID)
+                )
+            }
         }
     }
 

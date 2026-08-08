@@ -278,8 +278,11 @@ public final class PracticeService {
 
     public func deleteRoutineIfUnused(_ routineId: UUID) throws {
         let snapshot = try repository.snapshot()
-        guard liveRoutine(id: routineId, in: snapshot) != nil else {
+        guard let routine = liveRoutine(id: routineId, in: snapshot) else {
             throw PracticeServiceError.missingRoutine
+        }
+        guard !routine.isStructuralLocked else {
+            throw PracticeServiceError.lockedRoutineCannotBeModified
         }
         guard !snapshot.practiceSessions.contains(where: {
             $0.routineId == routineId && $0.deletedAt == nil

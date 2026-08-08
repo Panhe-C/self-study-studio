@@ -187,7 +187,14 @@ public final class SwiftDataJournalRepository: JournalRepository {
         guard !mutationIDs.isEmpty else { return }
         do {
             let records = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
-            for record in records where mutationIDs.contains(record.id) && record.isTerminal {
+            let transactionIDs = Set(
+                records
+                    .filter { mutationIDs.contains($0.id) && $0.isTerminal }
+                    .map(\.transactionID)
+            )
+            for record in records where record.isTerminal && (
+                mutationIDs.contains(record.id) || transactionIDs.contains(record.transactionID)
+            ) {
                 context.delete(record)
             }
             try context.save()

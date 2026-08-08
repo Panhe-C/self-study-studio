@@ -201,7 +201,11 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
     }
 
     private func performSync() async throws {
-        let pending = try repository.pendingMutations(limit: 100)
+        // Never let a fixed page boundary bisect a transaction. Fetching with
+        // an expanding limit keeps the existing repository API source
+        // compatible while ensuring all pending mutations are available for
+        // transaction grouping before the first CloudKit call.
+        let pending = try allPendingMutations()
         currentStatus = .syncing(pending: pending.count)
         do {
             try await client.ensureZone(named: Self.zoneName)
@@ -221,7 +225,7 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
                     ? "Terminal sync item requires review"
                     : messages.joined(separator: "; ")
                 currentStatus = .failed(
-                    pending: (try? repository.pendingMutations(limit: 100).count) ?? 0,
+                    pending: (try? allPendingMutations().count) ?? 0,
                     conflicts: conflicts,
                     message: message
                 )
@@ -229,7 +233,7 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
             }
             currentStatus = .synced(lastSuccess: now())
         } catch {
-            let remaining = (try? repository.pendingMutations(limit: 100).count) ?? pending.count
+            let remaining = (try? allPendingMutations().count) ?? pending.count
             let conflicts = (try? repository.conflicts().count) ?? 0
             currentStatus = .failed(
                 pending: remaining,
@@ -237,6 +241,19 @@ public final class CloudSyncCoordinator: CloudSyncCoordinating {
                 message: error.localizedDescription
             )
             throw error
+        }
+    }
+
+    private func allPendingMutations() throws -> [PendingMutation] {
+        var limit = 100
+        while true {
+            let page = try repository.pendingMutations(limit: limit)
+            guard page.count >= limit else { return page }
+            // A repository returning exactly Int.max items is already at the
+            // largest representable request; returning that complete page is
+            // safer than overflowing the doubling arithmetic.
+            guard limit <= Int.max / 2 else { return page }
+            limit *= 2
         }
     }
 

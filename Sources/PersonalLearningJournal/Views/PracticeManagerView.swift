@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PracticeRoutineDraft: Equatable {
     let routineId: UUID?
+    let isStructuralLocked: Bool
     let isArchived: Bool
     var projectId: UUID?
     var name: String
@@ -12,6 +13,7 @@ struct PracticeRoutineDraft: Equatable {
 
     init(routine: PracticeRoutine? = nil) {
         routineId = routine?.id
+        isStructuralLocked = routine?.isStructuralLocked ?? false
         isArchived = routine?.isArchived ?? false
         projectId = routine?.projectId
         name = routine?.name ?? ""
@@ -29,6 +31,7 @@ struct PracticeRoutineDraft: Equatable {
         comparedWith routines: [PracticeRoutine],
         activeRoutineId: UUID? = nil
     ) -> Bool {
+        if isStructuralLocked { return false }
         if let activeRoutineId, routineId == activeRoutineId { return false }
         guard !trimmedName.isEmpty,
               projectId != nil,
@@ -206,6 +209,11 @@ public struct PracticeManagerView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(routineAccessibilityLabel(routine, sessions: sessions))
+        .accessibilityHint(
+            routine.isStructuralLocked
+                ? "Create a new plan revision to change this routine."
+                : "Open routine details"
+        )
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if practiceTimer.snapshot.activeRoutineId != routine.id,
                !routine.isArchived,
@@ -218,7 +226,9 @@ public struct PracticeManagerView: View {
                 .tint(StudioTheme.accent)
             }
 
-            if practiceTimer.snapshot.activeRoutineId != routine.id, sessions.isEmpty {
+            if practiceTimer.snapshot.activeRoutineId != routine.id,
+               sessions.isEmpty,
+               !routine.isStructuralLocked {
                 Button(role: .destructive) {
                     routinePendingDeletion = routine
                 } label: {

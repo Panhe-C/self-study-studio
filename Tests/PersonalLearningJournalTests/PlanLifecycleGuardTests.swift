@@ -1,3 +1,4 @@
+import CloudKit
 import XCTest
 @testable import PersonalLearningJournal
 
@@ -78,6 +79,121 @@ final class PlanLifecycleGuardTests: XCTestCase {
             guardGroups.flatMap { $0 }.first { $0.key == revised.reference }
         )
         XCTAssertEqual(planGuard.value.recordState, .existingRecord)
+    }
+
+    @MainActor
+    func testPendingPaginationKeepsLargeTransactionAtomicAndSendsOtherTransactionSeparately() async throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let firstTransactionID = UUID()
+        let projects = (0..<121).map { index in
+            Project(
+                name: "Batch \(index)", area: "AI", goal: "Learn",
+                currentNextStep: "Read", createdAt: timestamp, updatedAt: timestamp
+            )
+        }
+        let otherProject = Project(
+            name: "Other", area: "AI", goal: "Learn", currentNextStep: "Read",
+            createdAt: timestamp, updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository()
+        try repository.commit(
+            JournalTransaction(
+                upserts: projects.map(JournalEntity.project),
+                origin: .user,
+                transactionID: firstTransactionID
+            )
+        )
+        try repository.commit(JournalTransaction(upserts: [.project(otherProject)], origin: .user))
+
+        let client = PlanningBatchCloudClient()
+        try await CloudSyncCoordinator(repository: repository, client: client).syncNow()
+
+        let groups = await client.groups()
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertEqual(Set(groups.map(\.count)), Set([121, 1]))
+        XCTAssertTrue(try repository.pendingMutations(limit: 1_000).isEmpty)
+    }
+
+    func testProductionEquivalentGuardAcceptsBaseRevisionCreatedEarlierInSameBatch() throws {
+        let zoneID = CKRecordZone.ID(
+            zoneName: CloudSyncCoordinator.zoneName,
+            ownerName: CKCurrentUserDefaultName
+        )
+        let baseID = UUID()
+        let baseRecord = CKRecord(
+            recordType: "CoursePlan",
+            recordID: CKRecord.ID(recordName: baseID.uuidString, zoneID: zoneID)
+        )
+        var state = CKSyncEngineBatchPreflightState()
+        state.stage(baseRecord)
+
+        let target = try LearningPlan(
+            projectId: UUID(),
+            revision: 2,
+            baseRevisionID: baseID,
+            status: .active,
+            courseURL: nil,
+            courseTitle: "Revision",
+            courseOutline: "",
+            goal: "Learn",
+            expectedOutcome: "Notes",
+            startsOn: Date(timeIntervalSince1970: 1_700_000_000),
+            deadline: nil,
+            weeklyBudgetMinutes: 60,
+            summary: "Summary"
+        )
+        let expectation = CloudRevisionExpectation(
+            entity: target.reference,
+            revisionExpectation: .existing(baseRevisionID: baseID, recordChangeTag: nil)
+        )
+
+        XCTAssertNoThrow(
+            try state.validateBaseRevision(
+                baseRecordID: baseRecord.recordID,
+                expectation: expectation,
+                entity: .coursePlan(target)
+            )
+        )
+
+        let staleExpectation = CloudRevisionExpectation(
+            entity: target.reference,
+            revisionExpectation: .existing(baseRevisionID: baseID, recordChangeTag: "server-v1")
+        )
+        XCTAssertThrowsError(
+            try state.validateBaseRevision(
+                baseRecordID: baseRecord.recordID,
+                expectation: staleExpectation,
+                entity: .coursePlan(target)
+            )
+        )
+    }
+
+    @MainActor
+    func testOfflineRevisionLifecyclePassesStatefulProductionEquivalentBatchGuard() async throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(
+            name: "Offline cloud guard", area: "AI", goal: "Learn",
+            currentNextStep: "Read", createdAt: timestamp, updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = CoursePlanningService(repository: repository, now: { timestamp })
+        let first = try service.saveDraft(input: planningInput(project.id), draft: planningDraft)
+        _ = try service.activate(draftPlanID: first.id)
+        let revised = try service.revise(
+            planID: first.id,
+            input: planningInput(project.id),
+            draft: planningDraft
+        )
+        _ = try service.activate(draftPlanID: revised.id)
+
+        let client = StatefulProductionEquivalentCloudClient()
+        try await CloudSyncCoordinator(repository: repository, client: client).syncNow()
+
+        let sendCallCount = await client.sendCallCount()
+        let guardFailures = await client.guardFailures()
+        XCTAssertEqual(sendCallCount, 1)
+        XCTAssertTrue(guardFailures.isEmpty)
+        XCTAssertTrue(try repository.pendingMutations(limit: 1_000).isEmpty)
     }
 
     func testSyncedNewDraftActivationRetainsCapturedTargetExpectation() throws {
@@ -191,6 +307,55 @@ final class PlanLifecycleGuardTests: XCTestCase {
             XCTAssertEqual(error as? PracticeServiceError, .lockedRoutineCannotBeModified)
         }
         XCTAssertEqual(try repository.snapshot().practiceRoutines, [routine])
+    }
+
+    func testLockedRoutineDeleteIsRejectedWithoutChangingIdentity() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(
+            name: "Practice", area: "Music", goal: "Learn", currentNextStep: "Play",
+            createdAt: timestamp, updatedAt: timestamp
+        )
+        let routine = PracticeRoutine(
+            projectId: project.id,
+            planRevisionID: UUID(),
+            planSeriesID: UUID(),
+            isStructuralLocked: true,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project], practiceRoutines: [routine])
+        )
+        let service = PracticeService(repository: repository, now: { timestamp })
+
+        XCTAssertThrowsError(try service.deleteRoutineIfUnused(routine.id)) { error in
+            XCTAssertEqual(error as? PracticeServiceError, .lockedRoutineCannotBeModified)
+        }
+        XCTAssertEqual(try repository.snapshot().practiceRoutines, [routine])
+        XCTAssertTrue(try repository.pendingMutations(limit: 10).isEmpty)
+    }
+
+    func testPracticeManagerDraftCannotSavePublishedRoutineAndExposesRevisionGuidanceState() {
+        let routine = PracticeRoutine(
+            projectId: UUID(),
+            planRevisionID: UUID(),
+            planSeriesID: UUID(),
+            isStructuralLocked: true,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let draft = PracticeRoutineDraft(routine: routine)
+
+        XCTAssertTrue(draft.isStructuralLocked)
+        XCTAssertFalse(draft.canSave(comparedWith: [routine]))
     }
 
     func testOperationalRoutinePresentationUsesLegacyAndActiveRevisionOnlyAfterRevisionActivation() throws {
@@ -336,4 +501,106 @@ private actor PlanningBatchCloudClient: CloudDatabaseClient {
     func guardGroups() -> [[JournalEntityReference: CloudRevisionExpectation]] {
         sentGuardGroups
     }
+}
+
+/// Models the production preflight rule that a base record may be either
+/// server-backed or one of the saves in the current atomic request. It is
+/// intentionally stateful so an offline create/revise/activate sequence does
+/// not accidentally pass only because the fake blindly acknowledges writes.
+private actor StatefulProductionEquivalentCloudClient: CloudDatabaseClient {
+    private var serverTags: [JournalEntityReference: String] = [:]
+    private var calls = 0
+    private var failures: [String] = []
+
+    func ensureZone(named: String) async throws {}
+
+    func send(_ mutations: [CloudMutation]) async throws -> CloudSendResult {
+        try await send(mutations, revisionExpectations: [:])
+    }
+
+    func send(
+        _ mutations: [CloudMutation],
+        revisionExpectations: [JournalEntityReference: CloudRevisionExpectation]
+    ) async throws -> CloudSendResult {
+        calls += 1
+        let savedReferences = Set(mutations.compactMap { mutation -> JournalEntityReference? in
+            guard case let .save(_, entity) = mutation else { return nil }
+            return entity.reference
+        })
+
+        do {
+            for mutation in mutations {
+                guard case let .save(_, entity) = mutation else { continue }
+                guard let expectation = revisionExpectations[entity.reference] else { continue }
+
+                if let baseRevisionID = expectation.baseRevisionID,
+                   baseRevisionID != entity.reference.id {
+                    let baseReference = JournalEntityReference(.coursePlan, baseRevisionID)
+                    let baseExists = serverTags[baseReference] != nil
+                        || savedReferences.contains(baseReference)
+                    let actualTag = serverTags[baseReference]
+                    guard baseExists, actualTag == expectation.recordChangeTag else {
+                        throw CloudRevisionGuardError.stale(
+                            entity: entity.reference,
+                            expectedRecordChangeTag: expectation.recordChangeTag,
+                            actualRecordChangeTag: actualTag
+                        )
+                    }
+                }
+
+                let targetTag = serverTags[entity.reference]
+                switch expectation.targetRecordState {
+                case .newRecord:
+                    guard targetTag == nil else {
+                        throw CloudRevisionGuardError.stale(
+                            entity: entity.reference,
+                            expectedRecordChangeTag: expectation.recordChangeTag,
+                            actualRecordChangeTag: targetTag
+                        )
+                    }
+                case .existingRecord:
+                    guard targetTag == expectation.recordChangeTag else {
+                        throw CloudRevisionGuardError.stale(
+                            entity: entity.reference,
+                            expectedRecordChangeTag: expectation.recordChangeTag,
+                            actualRecordChangeTag: targetTag
+                        )
+                    }
+                }
+            }
+        } catch let error as CloudRevisionGuardError {
+            failures.append(String(describing: error))
+            throw error
+        }
+
+        let acknowledged = Set(mutations.map { mutation in
+            switch mutation {
+            case let .save(id, _), let .delete(id, _): id
+            }
+        })
+        var metadata: [SyncRecordMetadata] = []
+        for mutation in mutations {
+            guard case let .save(_, entity) = mutation else { continue }
+            let tag = "server-v\(serverTags.count + 1)"
+            serverTags[entity.reference] = tag
+            metadata.append(
+                SyncRecordMetadata(
+                    entity: entity.reference,
+                    zoneName: CloudSyncCoordinator.zoneName,
+                    recordName: entity.reference.id.uuidString,
+                    recordChangeTag: tag,
+                    state: .synced
+                )
+            )
+        }
+        return CloudSendResult(acknowledgedMutationIDs: acknowledged, metadata: metadata)
+    }
+
+    func fetchChanges(after tokenData: Data?) async throws -> CloudChangeBatch {
+        CloudChangeBatch()
+    }
+
+    func sendCallCount() -> Int { calls }
+
+    func guardFailures() -> [String] { failures }
 }

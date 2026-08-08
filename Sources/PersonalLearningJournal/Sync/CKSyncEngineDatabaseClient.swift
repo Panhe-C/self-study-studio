@@ -64,6 +64,21 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
         var recordIDsToDelete: [CKRecord.ID] = []
 
         do {
+            // CloudKit does not make records created in this modifyRecords
+            // request visible to a separate preflight fetch. Stage every
+            // encoded record first so a revision guard can resolve a base
+            // revision that is also being created by this atomic batch.
+            var batchPreflight = CKSyncEngineBatchPreflightState()
+            var encodedRecords: [CKRecord.ID: CKRecord] = [:]
+            for mutation in mutations {
+                if case let .save(_, entity) = mutation {
+                    let encoded = try mapper.record(for: entity, zoneID: zoneID)
+                    encodedRecords[encoded.recordID] = encoded
+                    batchPreflight.stage(encoded)
+                }
+            }
+            var materializedRecords: [CKRecord.ID: CKRecord] = [:]
+
             // Guarded preflight belongs to the same error-store boundary as
             // modifyRecords: a stale/missing tag becomes a terminal result
             // for this atomic transaction instead of an untracked throw.
@@ -72,7 +87,13 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
                 case let .save(_, entity):
                     let record = try await recordForSave(
                         entity,
-                        expectation: revisionExpectations[entity.reference]
+                        expectation: revisionExpectations[entity.reference],
+                        encoded: try encodedRecord(
+                            for: entity,
+                            from: encodedRecords
+                        ),
+                        batchPreflight: batchPreflight,
+                        materializedRecords: &materializedRecords
                     )
                     mutationByRecordID[record.recordID] = mutation
                     recordsToSave.append(record)
@@ -148,15 +169,39 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
 
     private func recordForSave(
         _ entity: JournalEntity,
-        expectation: CloudRevisionExpectation?
+        expectation: CloudRevisionExpectation?,
+        encoded: CKRecord,
+        batchPreflight: CKSyncEngineBatchPreflightState,
+        materializedRecords: inout [CKRecord.ID: CKRecord]
     ) async throws -> CKRecord {
-        let encoded = try mapper.record(for: entity, zoneID: zoneID)
-        let targetResult = try await database.records(for: [encoded.recordID])[encoded.recordID]
+        let targetResult: Result<CKRecord, Error>?
+        if let materialized = materializedRecords[encoded.recordID] {
+            targetResult = .success(materialized)
+        } else {
+            targetResult = try await database.records(for: [encoded.recordID])[encoded.recordID]
+        }
         if let expectation {
             if let baseRevisionID = expectation.baseRevisionID,
                baseRevisionID.uuidString != encoded.recordID.recordName {
                 let baseID = CKRecord.ID(recordName: baseRevisionID.uuidString, zoneID: zoneID)
-                let baseResult = try await database.records(for: [baseID])[baseID]
+                let baseResult: Result<CKRecord, Error>?
+                if let materialized = materializedRecords[baseID] {
+                    baseResult = .success(materialized)
+                } else if expectation.recordChangeTag == nil,
+                          batchPreflight.stagedRecord(for: baseID) != nil {
+                    // A nil tag is the intentional representation of a new
+                    // base record. It is safe to validate against the
+                    // pre-staged in-batch record without asking CloudKit for
+                    // a record that cannot exist server-side yet.
+                    try batchPreflight.validateBaseRevision(
+                        baseRecordID: baseID,
+                        expectation: expectation,
+                        entity: entity
+                    )
+                    baseResult = .success(try batchPreflight.stagedRecord(for: baseID).unwrap())
+                } else {
+                    baseResult = try await database.records(for: [baseID])[baseID]
+                }
                 guard case let .success(baseRecord)? = baseResult,
                       baseRecord.recordChangeTag == expectation.recordChangeTag else {
                     throw CloudRevisionGuardError.stale(
@@ -195,7 +240,19 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
         for key in encoded.allKeys() {
             existing[key] = encoded[key]
         }
+        materializedRecords[encoded.recordID] = existing
         return existing
+    }
+
+    private func encodedRecord(
+        for entity: JournalEntity,
+        from records: [CKRecord.ID: CKRecord]
+    ) throws -> CKRecord {
+        let recordID = CKRecord.ID(recordName: entity.reference.id.uuidString, zoneID: zoneID)
+        guard let record = records[recordID] else {
+            throw CloudRecordMapperError.mismatchedRecordIdentifier
+        }
+        return record
     }
 
     private func validateTarget(
@@ -339,6 +396,48 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
         guard let data else { return nil }
         return try NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: data)
     }
+}
+
+/// In-memory view of records staged by one atomic CloudKit write. CloudKit
+/// preflight reads cannot observe these records until the request commits, so
+/// revision guards use this state for new base revisions created in the same
+/// request.
+struct CKSyncEngineBatchPreflightState {
+    private var stagedRecords: [CKRecord.ID: CKRecord] = [:]
+
+    mutating func stage(_ record: CKRecord) {
+        stagedRecords[record.recordID] = record
+    }
+
+    func stagedRecord(for recordID: CKRecord.ID) -> CKRecord? {
+        stagedRecords[recordID]
+    }
+
+    func validateBaseRevision(
+        baseRecordID: CKRecord.ID,
+        expectation: CloudRevisionExpectation,
+        entity: JournalEntity
+    ) throws {
+        guard let baseRecord = stagedRecords[baseRecordID],
+              baseRecord.recordChangeTag == expectation.recordChangeTag else {
+            throw CloudRevisionGuardError.stale(
+                entity: entity.reference,
+                expectedRecordChangeTag: expectation.recordChangeTag,
+                actualRecordChangeTag: stagedRecords[baseRecordID]?.recordChangeTag
+            )
+        }
+    }
+}
+
+private extension Optional {
+    func unwrap(or error: Error = CKRecordUnwrapError.missing) throws -> Wrapped {
+        guard let value = self else { throw error }
+        return value
+    }
+}
+
+private enum CKRecordUnwrapError: Error {
+    case missing
 }
 
 private struct CloudSyncEngineCheckpoint: Codable {
