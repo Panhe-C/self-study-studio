@@ -19,15 +19,21 @@ public enum CloudMutation: Sendable {
 public struct CloudRevisionExpectation: Equatable, Sendable {
     public let entity: JournalEntityReference
     public let baseRevisionID: UUID?
-    public let recordChangeTag: String?
+    public let baseRecordChangeTag: String?
+    public let targetRecordChangeTag: String?
     public let recordState: RevisionGuardRecordState
     public let targetRecordState: RevisionGuardRecordState
+
+    /// Compatibility view for clients that still provide or inspect one tag.
+    /// Guard preflight uses the explicit base/target properties instead.
+    public var recordChangeTag: String? { baseRecordChangeTag }
 
     public init(entity: JournalEntityReference, recordChangeTag: String) {
         self.init(
             entity: entity,
             baseRevisionID: nil,
-            recordChangeTag: recordChangeTag,
+            baseRecordChangeTag: recordChangeTag,
+            targetRecordChangeTag: recordChangeTag,
             recordState: .existingRecord,
             targetRecordState: .existingRecord
         )
@@ -40,7 +46,8 @@ public struct CloudRevisionExpectation: Equatable, Sendable {
         self.init(
             entity: entity,
             baseRevisionID: revisionExpectation.baseRevisionID,
-            recordChangeTag: revisionExpectation.recordChangeTag,
+            baseRecordChangeTag: revisionExpectation.baseRecordChangeTag,
+            targetRecordChangeTag: revisionExpectation.targetRecordChangeTag,
             recordState: revisionExpectation.recordState,
             targetRecordState: revisionExpectation.targetRecordState
         )
@@ -53,9 +60,30 @@ public struct CloudRevisionExpectation: Equatable, Sendable {
         recordState: RevisionGuardRecordState,
         targetRecordState: RevisionGuardRecordState
     ) {
+        self.init(
+            entity: entity,
+            baseRevisionID: baseRevisionID,
+            baseRecordChangeTag: recordChangeTag,
+            targetRecordChangeTag: targetRecordState == .existingRecord
+                ? recordChangeTag
+                : nil,
+            recordState: recordState,
+            targetRecordState: targetRecordState
+        )
+    }
+
+    public init(
+        entity: JournalEntityReference,
+        baseRevisionID: UUID?,
+        baseRecordChangeTag: String?,
+        targetRecordChangeTag: String?,
+        recordState: RevisionGuardRecordState,
+        targetRecordState: RevisionGuardRecordState = .newRecord
+    ) {
         self.entity = entity
         self.baseRevisionID = baseRevisionID
-        self.recordChangeTag = recordChangeTag
+        self.baseRecordChangeTag = baseRecordChangeTag
+        self.targetRecordChangeTag = targetRecordChangeTag
         self.recordState = recordState
         self.targetRecordState = targetRecordState
     }

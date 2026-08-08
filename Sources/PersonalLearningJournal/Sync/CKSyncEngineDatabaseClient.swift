@@ -187,7 +187,7 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
                 let baseResult: Result<CKRecord, Error>?
                 if let materialized = materializedRecords[baseID] {
                     baseResult = .success(materialized)
-                } else if expectation.recordChangeTag == nil,
+                } else if expectation.baseRecordChangeTag == nil,
                           batchPreflight.stagedRecord(for: baseID) != nil {
                     // A nil tag is the intentional representation of a new
                     // base record. It is safe to validate against the
@@ -203,10 +203,10 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
                     baseResult = try await database.records(for: [baseID])[baseID]
                 }
                 guard case let .success(baseRecord)? = baseResult,
-                      baseRecord.recordChangeTag == expectation.recordChangeTag else {
+                      baseRecord.recordChangeTag == expectation.baseRecordChangeTag else {
                     throw CloudRevisionGuardError.stale(
                         entity: entity.reference,
-                        expectedRecordChangeTag: expectation.recordChangeTag,
+                        expectedRecordChangeTag: expectation.baseRecordChangeTag,
                         actualRecordChangeTag: (try? actualTag(from: baseResult)) ?? nil
                     )
                 }
@@ -265,14 +265,14 @@ public final class CKSyncEngineDatabaseClient: NSObject, CloudDatabaseClient, CK
         case .newRecord where currentExists:
             throw CloudRevisionGuardError.stale(
                 entity: entity.reference,
-                expectedRecordChangeTag: expectation.recordChangeTag,
+                expectedRecordChangeTag: expectation.targetRecordChangeTag,
                 actualRecordChangeTag: currentTag
             )
         case .existingRecord:
-            guard currentExists, currentTag == expectation.recordChangeTag else {
+            guard currentExists, currentTag == expectation.targetRecordChangeTag else {
                 throw CloudRevisionGuardError.stale(
                     entity: entity.reference,
-                    expectedRecordChangeTag: expectation.recordChangeTag,
+                    expectedRecordChangeTag: expectation.targetRecordChangeTag,
                     actualRecordChangeTag: currentTag
                 )
             }
@@ -419,10 +419,10 @@ struct CKSyncEngineBatchPreflightState {
         entity: JournalEntity
     ) throws {
         guard let baseRecord = stagedRecords[baseRecordID],
-              baseRecord.recordChangeTag == expectation.recordChangeTag else {
+              baseRecord.recordChangeTag == expectation.baseRecordChangeTag else {
             throw CloudRevisionGuardError.stale(
                 entity: entity.reference,
-                expectedRecordChangeTag: expectation.recordChangeTag,
+                expectedRecordChangeTag: expectation.baseRecordChangeTag,
                 actualRecordChangeTag: stagedRecords[baseRecordID]?.recordChangeTag
             )
         }

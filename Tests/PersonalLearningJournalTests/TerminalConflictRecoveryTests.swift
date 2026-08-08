@@ -282,6 +282,191 @@ final class TerminalConflictRecoveryTests: XCTestCase {
         )
     }
 
+    func testExistingBaseNewTargetRefreshesTargetGuardWithoutDroppingBaseIdentity() throws {
+        let base = Project(name: "Base", area: "AI", goal: "Learn", currentNextStep: "Read")
+        let target = Project(name: "Revision", area: "AI", goal: "Learn", currentNextStep: "Practice")
+        let baseReference = JournalEntityReference(.project, base.id)
+        let targetReference = JournalEntityReference(.project, target.id)
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [base, target])
+        )
+        let original = RevisionGuardExpectation.existing(
+            baseRevisionID: base.id,
+            recordChangeTag: "base-v1"
+        )
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.project(target)],
+                origin: .user,
+                revisionExpectations: [targetReference: original]
+            )
+        )
+        let mutation = try XCTUnwrap(repository.pendingMutations(limit: 1).first)
+        try repository.recordSyncFailures(retryable: [:], terminal: [mutation.id: "target already exists"])
+        try repository.acknowledge([], metadata: [
+            SyncRecordMetadata(
+                entity: baseReference,
+                zoneName: CloudSyncCoordinator.zoneName,
+                recordName: base.id.uuidString,
+                recordChangeTag: "base-v2",
+                state: .synced
+            ),
+            SyncRecordMetadata(
+                entity: targetReference,
+                zoneName: CloudSyncCoordinator.zoneName,
+                recordName: target.id.uuidString,
+                recordChangeTag: "target-v2",
+                state: .synced
+            )
+        ])
+
+        let fresh = try SyncConflictRecoveryService(repository: repository)
+            .freshRevisionExpectation(for: mutation)
+
+        XCTAssertEqual(fresh.baseRevisionID, base.id)
+        XCTAssertEqual(fresh.recordState, .existingRecord)
+        XCTAssertEqual(fresh.targetRecordState, .existingRecord)
+        XCTAssertEqual(fresh.baseRecordChangeTag, "base-v2")
+        XCTAssertEqual(fresh.targetRecordChangeTag, "target-v2")
+    }
+
+    func testExistingBaseNewTargetWithoutTargetMetadataKeepsNewTargetGuard() throws {
+        let base = Project(name: "Base", area: "AI", goal: "Learn", currentNextStep: "Read")
+        let target = Project(name: "Revision", area: "AI", goal: "Learn", currentNextStep: "Practice")
+        let baseReference = JournalEntityReference(.project, base.id)
+        let targetReference = JournalEntityReference(.project, target.id)
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [base, target])
+        )
+        let original = RevisionGuardExpectation.existing(
+            baseRevisionID: base.id,
+            recordChangeTag: "base-v1"
+        )
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.project(target)],
+                origin: .user,
+                revisionExpectations: [targetReference: original]
+            )
+        )
+        let mutation = try XCTUnwrap(repository.pendingMutations(limit: 1).first)
+        try repository.recordSyncFailures(retryable: [:], terminal: [mutation.id: "stale"])
+        try repository.acknowledge([], metadata: [
+            SyncRecordMetadata(
+                entity: baseReference,
+                zoneName: CloudSyncCoordinator.zoneName,
+                recordName: base.id.uuidString,
+                recordChangeTag: "base-v2",
+                state: .synced
+            )
+        ])
+
+        let fresh = try SyncConflictRecoveryService(repository: repository)
+            .freshRevisionExpectation(for: mutation)
+
+        XCTAssertEqual(fresh.baseRevisionID, base.id)
+        XCTAssertEqual(fresh.recordState, .existingRecord)
+        XCTAssertEqual(fresh.targetRecordState, .newRecord)
+        XCTAssertEqual(fresh.baseRecordChangeTag, "base-v2")
+        XCTAssertNil(fresh.targetRecordChangeTag)
+    }
+
+    func testRevisionGuardExpectationCodablePreservesIndependentTagsAndReadsLegacyPayload() throws {
+        let baseRevisionID = UUID()
+        let expectation = RevisionGuardExpectation(
+            baseRevisionID: baseRevisionID,
+            baseRecordChangeTag: "base-v2",
+            targetRecordChangeTag: "target-v2",
+            recordState: .existingRecord,
+            targetRecordState: .existingRecord
+        )
+
+        let encoded = try JSONEncoder().encode(expectation)
+        let decoded = try JSONDecoder().decode(RevisionGuardExpectation.self, from: encoded)
+        XCTAssertEqual(decoded, expectation)
+        XCTAssertEqual(decoded.baseRecordChangeTag, "base-v2")
+        XCTAssertEqual(decoded.targetRecordChangeTag, "target-v2")
+
+        let legacyJSON = """
+        {"baseRevisionID":"\(baseRevisionID.uuidString)","recordChangeTag":"legacy-v1","recordState":"existingRecord","targetRecordState":"existingRecord"}
+        """.data(using: .utf8)!
+        let legacy = try JSONDecoder().decode(RevisionGuardExpectation.self, from: legacyJSON)
+        XCTAssertEqual(legacy.baseRecordChangeTag, "legacy-v1")
+        XCTAssertEqual(legacy.targetRecordChangeTag, "legacy-v1")
+        XCTAssertEqual(legacy.recordChangeTag, "legacy-v1")
+    }
+
+    func testCloudRevisionExpectationCarriesIndependentBaseAndTargetTags() {
+        let targetReference = JournalEntityReference(.project, UUID())
+        let expectation = RevisionGuardExpectation(
+            baseRevisionID: UUID(),
+            baseRecordChangeTag: "base-v2",
+            targetRecordChangeTag: "target-v2",
+            recordState: .existingRecord,
+            targetRecordState: .existingRecord
+        )
+
+        let cloudExpectation = CloudRevisionExpectation(
+            entity: targetReference,
+            revisionExpectation: expectation
+        )
+
+        XCTAssertEqual(cloudExpectation.baseRecordChangeTag, "base-v2")
+        XCTAssertEqual(cloudExpectation.targetRecordChangeTag, "target-v2")
+        XCTAssertEqual(cloudExpectation.recordChangeTag, "base-v2")
+    }
+
+    func testSwiftDataPersistsIndependentRevisionGuardTagsAcrossRestart() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("independent-guard-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("journal.store")
+        let base = Project(name: "Base", area: "AI", goal: "Learn", currentNextStep: "Read")
+        let target = Project(name: "Target", area: "AI", goal: "Learn", currentNextStep: "Practice")
+        let targetReference = JournalEntityReference(.project, target.id)
+        let expectation = RevisionGuardExpectation(
+            baseRevisionID: base.id,
+            baseRecordChangeTag: "base-v2",
+            targetRecordChangeTag: "target-v2",
+            recordState: .existingRecord,
+            targetRecordState: .existingRecord
+        )
+        var targetMutationID: UUID?
+
+        try autoreleasepool {
+            let repository = try SwiftDataJournalRepository(url: url)
+            try repository.commit(
+                JournalTransaction(
+                    upserts: [.project(base), .project(target)],
+                    origin: .user,
+                    revisionExpectations: [targetReference: expectation]
+                )
+            )
+            let targetMutation = try XCTUnwrap(
+                repository.pendingMutations(limit: 10).first { $0.entity == targetReference }
+            )
+            targetMutationID = targetMutation.id
+            try repository.recordSyncFailures(
+                retryable: [:],
+                terminal: [targetMutation.id: "stale"]
+            )
+            try repository.replaceTerminalMutations([
+                TerminalMutationReplacement(
+                    mutationID: targetMutation.id,
+                    entity: .project(target),
+                    revisionExpectation: expectation
+                )
+            ])
+        }
+
+        let reopened = try SwiftDataJournalRepository(url: url)
+        let pending = try XCTUnwrap(
+            reopened.pendingMutations(limit: 10).first { $0.id == targetMutationID }
+        )
+        XCTAssertEqual(pending.revisionExpectation?.baseRecordChangeTag, "base-v2")
+        XCTAssertEqual(pending.revisionExpectation?.targetRecordChangeTag, "target-v2")
+    }
+
     @MainActor
     func testDiscardedTerminalMutationDoesNotKeepCoordinatorFailed() async throws {
         let project = Project(name: "Discard", area: "AI", goal: "Learn", currentNextStep: "Read")

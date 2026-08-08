@@ -39,23 +39,47 @@ public final class SyncConflictRecoveryService: @unchecked Sendable {
                     recordChangeTag: targetMetadata.recordChangeTag
                 )
             }
-            let refreshedTag: String?
+            let refreshedBaseTag: String?
             switch original.recordState {
             case .newRecord:
-                refreshedTag = nil
+                refreshedBaseTag = nil
             case .existingRecord:
                 // If a pull has not populated metadata for the base yet,
                 // retain the captured tag rather than replacing it with nil
                 // (which would turn a valid guard into a guaranteed mismatch).
-                refreshedTag = baseMetadata?.recordChangeTag
-                    ?? targetMetadata?.recordChangeTag
+                refreshedBaseTag = baseMetadata?.recordChangeTag
+                    ?? original.baseRecordChangeTag
                     ?? original.recordChangeTag
+            }
+
+            let refreshedTargetState: RevisionGuardRecordState
+            let refreshedTargetTag: String?
+            switch original.targetRecordState {
+            case .newRecord:
+                if let targetMetadata {
+                    // The target may have been created by an earlier partial
+                    // attempt. Promote only the target guard to existing and
+                    // keep the base identity/tag independent.
+                    refreshedTargetState = .existingRecord
+                    refreshedTargetTag = targetMetadata.recordChangeTag
+                } else {
+                    refreshedTargetState = .newRecord
+                    refreshedTargetTag = nil
+                }
+            case .existingRecord:
+                refreshedTargetState = .existingRecord
+                // Preserve an existing target guard if metadata is currently
+                // unavailable; unlike the base tag, it must never be replaced
+                // with the base record's tag.
+                refreshedTargetTag = targetMetadata?.recordChangeTag
+                    ?? original.targetRecordChangeTag
             }
             return RevisionGuardExpectation(
                 baseRevisionID: original.baseRevisionID,
-                recordChangeTag: refreshedTag,
+                baseRecordChangeTag: refreshedBaseTag,
+                targetRecordChangeTag: refreshedTargetTag,
                 recordState: original.recordState,
-                targetRecordState: original.targetRecordState
+                targetRecordState: refreshedTargetState
             )
         }
 

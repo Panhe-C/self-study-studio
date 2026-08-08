@@ -539,10 +539,10 @@ private actor StatefulProductionEquivalentCloudClient: CloudDatabaseClient {
                     let baseExists = serverTags[baseReference] != nil
                         || savedReferences.contains(baseReference)
                     let actualTag = serverTags[baseReference]
-                    guard baseExists, actualTag == expectation.recordChangeTag else {
+                    guard baseExists, actualTag == expectation.baseRecordChangeTag else {
                         throw CloudRevisionGuardError.stale(
                             entity: entity.reference,
-                            expectedRecordChangeTag: expectation.recordChangeTag,
+                            expectedRecordChangeTag: expectation.baseRecordChangeTag,
                             actualRecordChangeTag: actualTag
                         )
                     }
@@ -554,15 +554,15 @@ private actor StatefulProductionEquivalentCloudClient: CloudDatabaseClient {
                     guard targetTag == nil else {
                         throw CloudRevisionGuardError.stale(
                             entity: entity.reference,
-                            expectedRecordChangeTag: expectation.recordChangeTag,
+                            expectedRecordChangeTag: expectation.targetRecordChangeTag,
                             actualRecordChangeTag: targetTag
                         )
                     }
                 case .existingRecord:
-                    guard targetTag == expectation.recordChangeTag else {
+                    guard targetTag == expectation.targetRecordChangeTag else {
                         throw CloudRevisionGuardError.stale(
                             entity: entity.reference,
-                            expectedRecordChangeTag: expectation.recordChangeTag,
+                            expectedRecordChangeTag: expectation.targetRecordChangeTag,
                             actualRecordChangeTag: targetTag
                         )
                     }

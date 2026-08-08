@@ -519,29 +519,61 @@ public enum RevisionGuardRecordState: String, Codable, Sendable {
 
 public struct RevisionGuardExpectation: Equatable, Codable, Sendable {
     public let baseRevisionID: UUID?
-    public let recordChangeTag: String?
+    /// The server tag captured for the base revision. This is intentionally
+    /// independent from the tag of an already-existing target revision.
+    public let baseRecordChangeTag: String?
+    /// The server tag captured for the target revision when the target is an
+    /// existing record. It remains nil for a target guarded as new.
+    public let targetRecordChangeTag: String?
     public let recordState: RevisionGuardRecordState
     /// The record being written may be new even when the base record is
     /// existing (the normal adjustment flow).
     public let targetRecordState: RevisionGuardRecordState
 
+    /// Compatibility view for callers and payloads written before base and
+    /// target tags were separated. New code should use the explicit fields.
+    public var recordChangeTag: String? { baseRecordChangeTag }
+
     public init(baseRevisionID: UUID, recordChangeTag: String) {
         self.init(
             baseRevisionID: baseRevisionID,
-            recordChangeTag: recordChangeTag,
+            baseRecordChangeTag: recordChangeTag,
+            targetRecordChangeTag: nil,
             recordState: .existingRecord,
             targetRecordState: .newRecord
         )
     }
 
+    /// Source-compatible initializer for the pre-split representation. When
+    /// the target is existing, the single legacy tag is copied to both roles;
+    /// otherwise it is treated as the base tag.
     public init(
         baseRevisionID: UUID?,
         recordChangeTag: String?,
         recordState: RevisionGuardRecordState,
         targetRecordState: RevisionGuardRecordState = .newRecord
     ) {
+        self.init(
+            baseRevisionID: baseRevisionID,
+            baseRecordChangeTag: recordChangeTag,
+            targetRecordChangeTag: targetRecordState == .existingRecord
+                ? recordChangeTag
+                : nil,
+            recordState: recordState,
+            targetRecordState: targetRecordState
+        )
+    }
+
+    public init(
+        baseRevisionID: UUID?,
+        baseRecordChangeTag: String?,
+        targetRecordChangeTag: String?,
+        recordState: RevisionGuardRecordState,
+        targetRecordState: RevisionGuardRecordState = .newRecord
+    ) {
         self.baseRevisionID = baseRevisionID
-        self.recordChangeTag = recordChangeTag
+        self.baseRecordChangeTag = baseRecordChangeTag
+        self.targetRecordChangeTag = targetRecordChangeTag
         self.recordState = recordState
         self.targetRecordState = targetRecordState
     }
@@ -552,7 +584,8 @@ public struct RevisionGuardExpectation: Equatable, Codable, Sendable {
     ) -> RevisionGuardExpectation {
         RevisionGuardExpectation(
             baseRevisionID: baseRevisionID,
-            recordChangeTag: recordChangeTag,
+            baseRecordChangeTag: recordChangeTag,
+            targetRecordChangeTag: nil,
             recordState: .existingRecord,
             targetRecordState: .newRecord
         )
@@ -564,7 +597,8 @@ public struct RevisionGuardExpectation: Equatable, Codable, Sendable {
     ) -> RevisionGuardExpectation {
         RevisionGuardExpectation(
             baseRevisionID: revisionID,
-            recordChangeTag: recordChangeTag,
+            baseRecordChangeTag: recordChangeTag,
+            targetRecordChangeTag: recordChangeTag,
             recordState: .existingRecord,
             targetRecordState: .existingRecord
         )
@@ -573,9 +607,61 @@ public struct RevisionGuardExpectation: Equatable, Codable, Sendable {
     public static func newRecord() -> RevisionGuardExpectation {
         RevisionGuardExpectation(
             baseRevisionID: nil,
-            recordChangeTag: nil,
+            baseRecordChangeTag: nil,
+            targetRecordChangeTag: nil,
             recordState: .newRecord,
             targetRecordState: .newRecord
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case baseRevisionID
+        case recordChangeTag
+        case baseRecordChangeTag
+        case targetRecordChangeTag
+        case recordState
+        case targetRecordState
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(baseRevisionID, forKey: .baseRevisionID)
+        // Keep writing the old key so older app versions can still inspect a
+        // pending mutation. It is only a compatibility projection; the
+        // explicit keys below carry the lossless representation.
+        try container.encodeIfPresent(recordChangeTag, forKey: .recordChangeTag)
+        try container.encodeIfPresent(baseRecordChangeTag, forKey: .baseRecordChangeTag)
+        try container.encodeIfPresent(targetRecordChangeTag, forKey: .targetRecordChangeTag)
+        try container.encode(recordState, forKey: .recordState)
+        try container.encode(targetRecordState, forKey: .targetRecordState)
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let baseRevisionID = try container.decodeIfPresent(UUID.self, forKey: .baseRevisionID)
+        let legacyTag = try container.decodeIfPresent(String.self, forKey: .recordChangeTag)
+        let recordState = try container.decodeIfPresent(
+            RevisionGuardRecordState.self,
+            forKey: .recordState
+        ) ?? (baseRevisionID == nil ? .newRecord : .existingRecord)
+        let targetRecordState = try container.decodeIfPresent(
+            RevisionGuardRecordState.self,
+            forKey: .targetRecordState
+        ) ?? .newRecord
+        let baseRecordChangeTag = try container.decodeIfPresent(
+            String.self,
+            forKey: .baseRecordChangeTag
+        ) ?? legacyTag
+        let targetRecordChangeTag = try container.decodeIfPresent(
+            String.self,
+            forKey: .targetRecordChangeTag
+        ) ?? (targetRecordState == .existingRecord ? legacyTag : nil)
+        self.init(
+            baseRevisionID: baseRevisionID,
+            baseRecordChangeTag: baseRecordChangeTag,
+            targetRecordChangeTag: targetRecordChangeTag,
+            recordState: recordState,
+            targetRecordState: targetRecordState
         )
     }
 }
@@ -613,18 +699,18 @@ public enum RevisionGuard {
               currentRecordExists else {
             throw RevisionGuardError.stale(
                 baseRevisionID: expectation.baseRevisionID ?? currentRevisionID,
-                expectedRecordChangeTag: expectation.recordChangeTag,
+                expectedRecordChangeTag: expectation.baseRecordChangeTag,
                 actualRecordChangeTag: currentRecordChangeTag
             )
         }
 
-        if expectation.recordChangeTag != currentRecordChangeTag {
-            if expectation.recordChangeTag != nil, currentRecordChangeTag == nil {
+        if expectation.baseRecordChangeTag != currentRecordChangeTag {
+            if expectation.baseRecordChangeTag != nil, currentRecordChangeTag == nil {
                 throw RevisionGuardError.missingRecordChangeTag(baseRevisionID)
             }
             throw RevisionGuardError.stale(
                 baseRevisionID: baseRevisionID,
-                expectedRecordChangeTag: expectation.recordChangeTag,
+                expectedRecordChangeTag: expectation.baseRecordChangeTag,
                 actualRecordChangeTag: currentRecordChangeTag
             )
         }
