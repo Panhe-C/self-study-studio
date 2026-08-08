@@ -52,6 +52,65 @@ final class JournalViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.shouldShowMainTabs)
     }
 
+    func testPermanentDeleteRefreshesAfterCleanupFailureAndRetry() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let attachmentURL = root.appendingPathComponent("record.txt")
+        try Data("record".utf8).write(to: attachmentURL)
+        let project = Project(
+            name: "Trash project",
+            area: "Test",
+            goal: "Delete safely",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let proof = try Proof(
+            projectId: project.id,
+            type: .file,
+            title: "Record",
+            statement: "A record",
+            localPath: attachmentURL.path
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project], proofs: [proof])
+        )
+        var shouldFail = true
+        let archiveService = JournalArchiveService(
+            removeAttachment: { path in
+                if shouldFail {
+                    shouldFail = false
+                    throw InjectedAttachmentDeletionFailure()
+                }
+                try FileManager.default.removeItem(atPath: path)
+            }
+        )
+        let journalService = JournalService(repository: repository)
+        let viewModel = JournalViewModel(
+            journalService: journalService,
+            reviewService: ReviewService(journalService: journalService),
+            exportService: ExportService(),
+            attachmentStore: AttachmentStore(rootDirectory: root),
+            archiveService: archiveService,
+            practiceService: PracticeService(repository: repository),
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore()),
+            syncRepository: repository
+        )
+
+        XCTAssertThrowsError(try viewModel.permanentlyDelete(projectId: project.id)) { error in
+            XCTAssertEqual(
+                error as? JournalArchiveError,
+                .attachmentDeletionFailed([attachmentURL.path])
+            )
+        }
+        XCTAssertFalse(viewModel.projects.contains(where: { $0.id == project.id }))
+        try viewModel.retryAttachmentCleanup(paths: [attachmentURL.path])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: attachmentURL.path))
+    }
+
     @MainActor
     func testSyncSummaryShowsQueuedChangesAndConflictCount() async throws {
         let repository = InMemoryJournalRepository()
@@ -603,6 +662,8 @@ final class JournalViewModelTests: XCTestCase {
         )
     }
 }
+
+private struct InjectedAttachmentDeletionFailure: Error {}
 
 @MainActor
 private final class ViewModelPracticeTimerStateStore: PracticeTimerStateStore {

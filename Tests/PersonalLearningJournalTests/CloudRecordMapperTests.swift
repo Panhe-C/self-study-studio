@@ -81,7 +81,17 @@ final class CloudRecordMapperTests: XCTestCase {
 
     func testProjectTransportNeverWritesLegacyStatusValues() throws {
         let mapper = CloudRecordMapper()
-        for status in [ProjectStatus.lowFrequency, .archived, .trash] {
+        let lowFrequency = Project(
+            id: fixedID,
+            name: "Legacy",
+            area: "Test",
+            goal: "Keep",
+            status: .lowFrequency,
+            currentNextStep: "Review"
+        )
+        let lowFrequencyRecord = try mapper.record(for: .project(lowFrequency), zoneID: zoneID)
+        XCTAssertEqual(lowFrequencyRecord["status"] as? String, ProjectStatus.active.rawValue)
+        for status in [ProjectStatus.archived, .trash] {
             let project = Project(
                 id: fixedID,
                 name: "Legacy",
@@ -90,9 +100,32 @@ final class CloudRecordMapperTests: XCTestCase {
                 status: status,
                 currentNextStep: "Review"
             )
-            let record = try mapper.record(for: .project(project), zoneID: zoneID)
-            let encodedStatus = try XCTUnwrap(record["status"] as? String)
-            XCTAssertFalse(["low-frequency", "archived", "trash"].contains(encodedStatus))
+            XCTAssertThrowsError(try mapper.record(for: .project(project), zoneID: zoneID)) { error in
+                XCTAssertEqual(error as? CloudRecordMapperError, .invalidField("project status"))
+            }
+        }
+    }
+
+    func testReviewTransportRejectsAmbiguousLegacyStatuses() throws {
+        let projectID = UUID()
+        let review = Review(
+            id: fixedID,
+            periodStart: Date(timeIntervalSince1970: 10_000),
+            periodEnd: Date(timeIntervalSince1970: 20_000),
+            facts: [],
+            patterns: [],
+            decisions: [],
+            projectRecommendations: [projectID: .archived],
+            nextSteps: [:],
+            aiSourceSummary: [],
+            createdAt: Date(timeIntervalSince1970: 30_000),
+            updatedAt: Date(timeIntervalSince1970: 30_000)
+        )
+
+        XCTAssertThrowsError(
+            try CloudRecordMapper().record(for: .review(review), zoneID: zoneID)
+        ) { error in
+            XCTAssertEqual(error as? CloudRecordMapperError, .invalidField("project recommendation status"))
         }
     }
 

@@ -88,12 +88,133 @@ final class JournalArchiveServiceTests: XCTestCase {
         )
     }
 
+    func testPurgeImpactIncludesPracticeDependenciesWithoutTouchingOtherProjects() throws {
+        let project = Project(
+            name: "Archive Project",
+            area: "Learning",
+            goal: "Preserve work",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let otherProject = Project(
+            name: "Other Project",
+            area: "Learning",
+            goal: "Preserve work",
+            status: .active,
+            currentNextStep: "Review"
+        )
+        let routine = PracticeRoutine(
+            projectId: project.id,
+            name: "Archive routine",
+            symbolName: "book",
+            color: .blue,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let practiceSession = PracticeSession(
+            routineId: routine.id,
+            linkedProjectId: project.id,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_600),
+            activeDurationSeconds: 600
+        )
+        let otherRoutine = PracticeRoutine(
+            projectId: otherProject.id,
+            name: "Other routine",
+            symbolName: "book",
+            color: .green,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let otherSession = PracticeSession(
+            routineId: otherRoutine.id,
+            linkedProjectId: otherProject.id,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_600),
+            activeDurationSeconds: 600
+        )
+        let snapshot = JournalSnapshot(
+            projects: [project, otherProject],
+            practiceRoutines: [routine, otherRoutine],
+            practiceSessions: [practiceSession, otherSession]
+        )
+        let service = JournalArchiveService(derivationRounds: 20)
+        let impact = service.purgeImpact(projectID: project.id, snapshot: snapshot)
+
+        XCTAssertEqual(impact.routineCount, 1)
+        XCTAssertEqual(impact.practiceSessionCount, 1)
+        XCTAssertTrue(impact.references.contains(.init(.practiceRoutine, routine.id)))
+        XCTAssertTrue(impact.references.contains(.init(.practiceSession, practiceSession.id)))
+        XCTAssertFalse(impact.references.contains(.init(.practiceRoutine, otherRoutine.id)))
+        XCTAssertFalse(impact.references.contains(.init(.practiceSession, otherSession.id)))
+
+        let repository = InMemoryJournalRepository(snapshot: snapshot)
+        _ = try service.purge(projectID: project.id, snapshot: snapshot, from: repository)
+        let remaining = try repository.snapshot()
+        XCTAssertTrue(remaining.practiceRoutines.contains(where: { $0.id == otherRoutine.id }))
+        XCTAssertTrue(remaining.practiceSessions.contains(where: { $0.id == otherSession.id }))
+        XCTAssertFalse(remaining.practiceRoutines.contains(where: { $0.id == routine.id }))
+        XCTAssertFalse(remaining.practiceSessions.contains(where: { $0.id == practiceSession.id }))
+    }
+
+    func testPurgeImpactIncludesDecisionsAttachedToDeletedReview() throws {
+        let project = Project(
+            name: "Archive Project",
+            area: "Learning",
+            goal: "Preserve work",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let otherProject = Project(
+            name: "Other Project",
+            area: "Learning",
+            goal: "Preserve work",
+            status: .active,
+            currentNextStep: "Review"
+        )
+        let review = Review(
+            periodStart: Date(timeIntervalSince1970: 1_000),
+            periodEnd: Date(timeIntervalSince1970: 2_000),
+            facts: [],
+            patterns: [],
+            decisions: [],
+            projectRecommendations: [project.id: .active],
+            nextSteps: [:],
+            aiSourceSummary: []
+        )
+        let decision = ReviewDecision(
+            reviewId: review.id,
+            projectId: otherProject.id,
+            kind: .continueUnchanged
+        )
+        let snapshot = JournalSnapshot(
+            projects: [project, otherProject],
+            reviews: [review],
+            reviewDecisions: [decision]
+        )
+
+        let impact = JournalArchiveService(derivationRounds: 20).purgeImpact(
+            projectID: project.id,
+            snapshot: snapshot
+        )
+
+        XCTAssertTrue(impact.references.contains(.init(.review, review.id)))
+        XCTAssertTrue(impact.references.contains(.init(.reviewDecision, decision.id)))
+    }
+
     func testConfirmedPurgeCreatesTombstonesForEveryEnumeratedRecord() throws {
         var fixture = try makeFixture()
         fixture.snapshot.projects[0].status = .trash
         fixture.snapshot.projects[0].deletedAt = Date(timeIntervalSince1970: 1_000)
         let repository = InMemoryJournalRepository(snapshot: fixture.snapshot)
-        let service = JournalArchiveService(derivationRounds: 20)
+        let service = JournalArchiveService(
+            derivationRounds: 20,
+            removeAttachment: { _ in }
+        )
 
         let impact = try service.purge(
             projectID: fixture.project.id,

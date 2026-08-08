@@ -69,10 +69,13 @@ public struct MigrationReviewView: View {
                             .tint(practiceResolutions[routineID] == .keepUnlinked ? StudioTheme.accent : nil)
                         }
                         if case let .projectNeedsStatusResolution(projectID) = issue {
-                            statusDecisionPicker(for: projectID)
+                            statusDecisionPicker(
+                                for: projectID,
+                                allowed: [.paused, .completed, .abandoned]
+                            )
                         }
-                        if case let .trashNeedsStatusResolution(projectID) = issue {
-                            statusDecisionPicker(for: projectID)
+                        if case let .trashNeedsStatusResolution(projectID, allowed) = issue {
+                            statusDecisionPicker(for: projectID, allowed: allowed)
                         }
                     }
                 }
@@ -100,7 +103,9 @@ public struct MigrationReviewView: View {
                 return proofResolutions[id] == nil
             case let .practiceNeedsProject(id):
                 return practiceResolutions[id] == nil
-            case let .projectNeedsStatusResolution(id), let .trashNeedsStatusResolution(id):
+            case let .projectNeedsStatusResolution(id):
+                return statusResolutions[id] == nil
+            case let .trashNeedsStatusResolution(id, _):
                 return statusResolutions[id] == nil
             default:
                 return false
@@ -109,13 +114,19 @@ public struct MigrationReviewView: View {
     }
 
     @ViewBuilder
-    private func statusDecisionPicker(for projectID: UUID) -> some View {
+    private func statusDecisionPicker(
+        for projectID: UUID,
+        allowed: [ProjectStatus]
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Choose the canonical lifecycle status. No status is inferred from evidence.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {
-                ForEach(ProjectStatusMigrationResolution.allCases, id: \.self) { resolution in
+                ForEach(
+                    ProjectStatusMigrationResolution.allCases.filter { allowed.contains($0.status) },
+                    id: \.self
+                ) { resolution in
                     Button(resolution.title) {
                         statusResolutions[projectID] = resolution
                         onStatusResolution?(projectID, resolution)
@@ -131,6 +142,8 @@ public struct MigrationReviewView: View {
 private extension ProjectStatusMigrationResolution {
     var title: String {
         switch self {
+        case .keepIdea: "Idea"
+        case .activate: "Active"
         case .pause: "Paused"
         case .complete: "Completed"
         case .abandon: "Abandoned"

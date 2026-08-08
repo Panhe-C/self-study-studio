@@ -177,6 +177,31 @@ final class ReviewServiceTests: XCTestCase {
         XCTAssertFalse(draft.projectRecommendations.values.contains { $0.isLegacy })
     }
 
+    func testAIReviewDecoderRejectsAmbiguousLegacyProjectRecommendations() throws {
+        let projectId = UUID()
+        let data = Data(
+            """
+            {
+              "facts": [],
+              "patterns": [],
+              "decisions": [],
+              "projectRecommendations": {
+                "\(projectId.uuidString)": "archived"
+              },
+              "nextSteps": {},
+              "sourceSummary": []
+            }
+            """.utf8
+        )
+
+        XCTAssertThrowsError(try HTTPAIReviewProvider.decodeDraft(from: data)) { error in
+            XCTAssertEqual(
+                error as? AIReviewPayloadError,
+                .ambiguousProjectStatus(projectId, "archived")
+            )
+        }
+    }
+
     func testOpenAICompatibleProviderParsesJSONContentFromChatCompletion() async throws {
         let projectId = UUID(uuidString: "00000000-0000-0000-0000-000000000301")!
         let completionData = Data(

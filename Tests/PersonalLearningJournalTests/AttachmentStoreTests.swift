@@ -82,4 +82,42 @@ final class AttachmentStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.fileURL.path))
         XCTAssertNoThrow(try store.removeAttachment(at: file.fileURL))
     }
+
+    func testRemovingAttachmentRejectsTraversalOutsideAttachmentRoot() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let outside = root.appendingPathComponent("outside.txt")
+        try Data("do not delete".utf8).write(to: outside)
+        let traversal = root
+            .appendingPathComponent("LearningJournal/Attachments/project/session/../../../../outside.txt")
+
+        XCTAssertThrowsError(try AttachmentStore(rootDirectory: root).removeAttachment(at: traversal)) { error in
+            XCTAssertEqual(error as? AttachmentStoreError, .unsafePath(traversal.path))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outside.path))
+    }
+
+    func testRemovingAttachmentRejectsSymlinkEvenWhenItPointsInsideRoot() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AttachmentStore(rootDirectory: root)
+        let real = try store.saveData(
+            Data("proof".utf8),
+            projectId: UUID(),
+            sessionId: nil,
+            proofId: UUID(),
+            originalFileName: "proof.txt",
+            mimeType: "text/plain"
+        )
+        let symlink = real.fileURL.deletingLastPathComponent().appendingPathComponent("link.txt")
+        try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: real.fileURL)
+
+        XCTAssertThrowsError(try store.removeAttachment(at: symlink)) { error in
+            XCTAssertEqual(error as? AttachmentStoreError, .unsafePath(symlink.path))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: real.fileURL.path))
+    }
 }

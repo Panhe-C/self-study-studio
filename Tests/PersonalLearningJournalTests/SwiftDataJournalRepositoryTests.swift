@@ -2,6 +2,31 @@ import XCTest
 @testable import PersonalLearningJournal
 
 final class SwiftDataJournalRepositoryTests: XCTestCase {
+    func testMigrationMarkerRemovalsPersistAcrossSwiftDataTransactions() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = try SwiftDataJournalRepository(
+            url: root.appendingPathComponent("markers.store")
+        )
+        let marker = "status-marker"
+
+        try repository.commit(
+            JournalTransaction(
+                origin: .migration,
+                completedMigrationIdentifiers: [marker]
+            )
+        )
+        XCTAssertTrue(try repository.hasCompletedMigration(identifier: marker))
+
+        try repository.commit(
+            JournalTransaction(
+                origin: .migration,
+                removedMigrationIdentifiers: [marker]
+            )
+        )
+        XCTAssertFalse(try repository.hasCompletedMigration(identifier: marker))
+    }
+
     func testEvidenceFirstEntitiesRoundTripWithOutboxAcrossRestart() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

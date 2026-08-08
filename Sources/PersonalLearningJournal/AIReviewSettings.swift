@@ -27,6 +27,10 @@ public enum AIReviewSettingsError: Error, Equatable, Sendable {
     case keychainFailure(OSStatus)
 }
 
+public enum AIReviewPayloadError: Error, Equatable, Sendable {
+    case ambiguousProjectStatus(UUID, String)
+}
+
 public protocol APIKeyStore: Sendable {
     func value(for key: String) throws -> String?
     func setValue(_ value: String?, for key: String) throws
@@ -177,7 +181,7 @@ public struct OpenAICompatibleReviewProvider: AIReviewProvider {
                 periodEnd: periodEnd
             )
         )
-        return response.reviewDraft
+        return try response.makeReviewDraft()
     }
 
     private static let systemPrompt = """
@@ -220,7 +224,7 @@ private struct OpenAIReviewDraftPayload: Decodable, Sendable {
     var sourceSummary: [String]
     var sourceReferences: [String: [String]]?
 
-    var reviewDraft: ReviewDraft {
+    func makeReviewDraft() throws -> ReviewDraft {
         var references = sourceReferences ?? [:]
         for insight in facts + patterns where references[insight, default: []].isEmpty {
             references[insight] = sourceSummary
@@ -229,9 +233,12 @@ private struct OpenAIReviewDraftPayload: Decodable, Sendable {
             facts: facts,
             patterns: patterns,
             decisions: [],
-            projectRecommendations: projectRecommendations.reduce(into: [:]) { result, item in
-                guard let id = UUID(uuidString: item.key),
-                      let status = ProjectStatus.canonicalizeLegacy(rawValue: item.value) else { return }
+            projectRecommendations: try projectRecommendations.reduce(into: [:]) { result, item in
+                guard let id = UUID(uuidString: item.key) else { return }
+                guard let rawStatus = ProjectStatus(rawValue: item.value) else { return }
+                guard let status = rawStatus.canonicalStatusForStorage else {
+                    throw AIReviewPayloadError.ambiguousProjectStatus(id, item.value)
+                }
                 result[id] = status
             },
             nextSteps: nextSteps.reduce(into: [:]) { result, item in

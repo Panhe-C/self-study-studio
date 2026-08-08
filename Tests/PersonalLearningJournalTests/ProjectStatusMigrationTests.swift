@@ -171,10 +171,14 @@ final class ProjectStatusMigrationTests: XCTestCase {
             let migration = ProductConvergenceMigration()
             let dryRun = migration.dryRun(snapshot: snapshot)
 
-            XCTAssertTrue(
-                dryRun.issues.contains(.trashNeedsStatusResolution(project.id)),
-                "previous status \(String(describing: previous)) must be explicit"
-            )
+            XCTAssertTrue(dryRun.issues.contains(where: { issue in
+                guard case let .trashNeedsStatusResolution(id, allowed) = issue,
+                      id == project.id else { return false }
+                let expected: [ProjectStatus] = previous == .archived
+                    ? [.paused, .completed, .abandoned]
+                    : ProjectStatus.allCases
+                return allowed == expected
+            }), "previous status \(String(describing: previous)) must be explicit")
             XCTAssertThrowsError(
                 try migration.execute(
                     snapshot: snapshot,
@@ -186,6 +190,62 @@ final class ProjectStatusMigrationTests: XCTestCase {
                 XCTAssertEqual(error as? ProductConvergenceMigrationError, .unresolvedIssues)
             }
         }
+    }
+
+    func testTrashStatusResolutionAllowsOnlySafeChoicesForEachAmbiguity() throws {
+        let archived = Project(
+            name: "Archived trash",
+            area: "Test",
+            goal: "Keep history",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .archived
+        )
+        let missing = Project(
+            name: "Missing trash",
+            area: "Test",
+            goal: "Keep history",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: nil
+        )
+        let dryRun = ProductConvergenceMigration().dryRun(
+            snapshot: JournalSnapshot(projects: [archived, missing])
+        )
+        XCTAssertTrue(dryRun.issues.contains(where: {
+            if case let .trashNeedsStatusResolution(id, allowed) = $0, id == archived.id {
+                return allowed == [.paused, .completed, .abandoned]
+            }
+            return false
+        }))
+        XCTAssertTrue(dryRun.issues.contains(where: {
+            if case let .trashNeedsStatusResolution(id, allowed) = $0, id == missing.id {
+                return allowed == ProjectStatus.allCases
+            }
+            return false
+        }))
+
+        XCTAssertThrowsError(
+            try ProductConvergenceMigration().execute(
+                snapshot: JournalSnapshot(projects: [archived]),
+                resolutions: [.project(archived.id, .activate)],
+                repository: InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [archived])),
+                backupDirectory: temporaryBackupDirectory()
+            )
+        ) { error in
+            XCTAssertEqual(error as? ProductConvergenceMigrationError, .invalidResolution)
+        }
+
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [missing]))
+        _ = try ProductConvergenceMigration().execute(
+            snapshot: JournalSnapshot(projects: [missing]),
+            resolutions: [.project(missing.id, .activate)],
+            repository: repository,
+            backupDirectory: temporaryBackupDirectory()
+        )
+        XCTAssertEqual(try repository.snapshot().projects.first?.status, .active)
     }
 
     func testTrashResolutionPreservesChosenCanonicalPriorStatusForRestore() throws {
@@ -494,6 +554,42 @@ final class ProjectStatusMigrationTests: XCTestCase {
             XCTAssertEqual(error as? ProductConvergenceMigrationError, .invalidRelationship)
         }
         XCTAssertEqual(try repository.snapshot(), snapshot)
+        XCTAssertFalse(try repository.hasCompletedMigration(identifier: ProductConvergenceMigration.statusMigrationIdentifier))
+    }
+
+    func testPostCommitValidationFailureRollsBackEntitiesAndMigrationMarkers() throws {
+        let project = Project(
+            name: "Archived project",
+            area: "Test",
+            goal: "Preserve history",
+            status: .archived,
+            currentNextStep: "Review"
+        )
+        let snapshot = JournalSnapshot(projects: [project])
+        var shouldCorruptValidationSnapshot = true
+        let repository = InMemoryJournalRepository(
+            snapshot: snapshot,
+            snapshotHook: { stored in
+                guard shouldCorruptValidationSnapshot else { return nil }
+                shouldCorruptValidationSnapshot = false
+                var corrupted = stored
+                corrupted.projects[0].name = "unexpected post-commit mutation"
+                return corrupted
+            }
+        )
+
+        XCTAssertThrowsError(
+            try ProductConvergenceMigration().execute(
+                snapshot: snapshot,
+                resolutions: [.project(project.id, .pause)],
+                repository: repository,
+                backupDirectory: temporaryBackupDirectory()
+            )
+        ) { error in
+            XCTAssertEqual(error as? ProductConvergenceMigrationError, .repositoryValidationFailed)
+        }
+        XCTAssertEqual(try repository.snapshot(), snapshot)
+        XCTAssertFalse(try repository.hasCompletedMigration(identifier: ProductConvergenceMigration.identifier))
         XCTAssertFalse(try repository.hasCompletedMigration(identifier: ProductConvergenceMigration.statusMigrationIdentifier))
     }
 

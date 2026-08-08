@@ -40,6 +40,7 @@ public extension JournalRepository {
 
 public final class InMemoryJournalRepository: JournalRepository {
     public typealias CommitHook = (JournalTransaction) throws -> Void
+    public typealias SnapshotHook = (JournalSnapshot) throws -> JournalSnapshot?
 
     private let lock = NSLock()
     private let now: () -> Date
@@ -54,11 +55,13 @@ public final class InMemoryJournalRepository: JournalRepository {
     private var storedCalendarBindings: [UUID: CalendarBinding]
     private var storedTargetCalendarIdentifier: String?
     private let commitHook: CommitHook?
+    private let snapshotHook: SnapshotHook?
 
     public init(
         snapshot: JournalSnapshot = JournalSnapshot(),
         now: @escaping () -> Date = Date.init,
-        commitHook: CommitHook? = nil
+        commitHook: CommitHook? = nil,
+        snapshotHook: SnapshotHook? = nil
     ) {
         self.now = now
         let initialEntities: [JournalEntity] =
@@ -91,10 +94,11 @@ public final class InMemoryJournalRepository: JournalRepository {
         self.storedCalendarBindings = [:]
         self.storedTargetCalendarIdentifier = nil
         self.commitHook = commitHook
+        self.snapshotHook = snapshotHook
     }
 
     public func snapshot() throws -> JournalSnapshot {
-        withLock {
+        let stored = withLock {
             let visibleEntities = entityOrder.compactMap { reference in
                 entities[reference].flatMap { $0.isDeleted ? nil : $0 }
             }
@@ -167,6 +171,7 @@ public final class InMemoryJournalRepository: JournalRepository {
                 pendingFirstRecordProjectId: stateMetadata.pendingFirstRecordProjectId
             )
         }
+        return try snapshotHook?(stored) ?? stored
     }
 
     public func commit(_ transaction: JournalTransaction) throws {
@@ -189,6 +194,9 @@ public final class InMemoryJournalRepository: JournalRepository {
             }
             if let metadata = transaction.stateMetadata {
                 stateMetadata = metadata
+            }
+            for identifier in transaction.removedMigrationIdentifiers {
+                completedMigrations.remove(identifier)
             }
             for identifier in transaction.completedMigrationIdentifiers {
                 completedMigrations.insert(identifier)

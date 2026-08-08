@@ -194,6 +194,7 @@ public struct JournalTransaction: Sendable {
     public var origin: MutationOrigin
     public var stateMetadata: JournalStateMetadata?
     public var completedMigrationIdentifiers: [String]
+    public var removedMigrationIdentifiers: [String]
 
     public var completedMigrationIdentifier: String? {
         completedMigrationIdentifiers.first
@@ -205,7 +206,9 @@ public struct JournalTransaction: Sendable {
         origin: MutationOrigin,
         stateMetadata: JournalStateMetadata? = nil,
         completedMigrationIdentifier: String? = nil,
-        completedMigrationIdentifiers: [String] = []
+        completedMigrationIdentifiers: [String] = [],
+        removedMigrationIdentifier: String? = nil,
+        removedMigrationIdentifiers: [String] = []
     ) {
         self.upserts = upserts
         self.deletions = deletions
@@ -217,5 +220,11 @@ public struct JournalTransaction: Sendable {
             identifiers.append(completedMigrationIdentifier)
         }
         self.completedMigrationIdentifiers = identifiers
+        var removedIdentifiers = removedMigrationIdentifiers
+        if let removedMigrationIdentifier,
+           !removedIdentifiers.contains(removedMigrationIdentifier) {
+            removedIdentifiers.append(removedMigrationIdentifier)
+        }
+        self.removedMigrationIdentifiers = removedIdentifiers
     }
 }

@@ -5,7 +5,7 @@ public enum MigrationIssue: Equatable, Hashable, Sendable {
     case practiceNeedsProject(UUID)
     case projectNeedsSetup(UUID)
     case projectNeedsStatusResolution(UUID)
-    case trashNeedsStatusResolution(UUID)
+    case trashNeedsStatusResolution(UUID, allowed: [ProjectStatus])
 }
 
 public struct MigrationDryRun: Equatable, Sendable {
@@ -24,12 +24,25 @@ public enum PracticeMigrationResolution: Equatable, Sendable {
 }
 
 public enum ProjectStatusMigrationResolution: Equatable, CaseIterable, Sendable {
+    case keepIdea
+    case activate
     case pause
     case complete
     case abandon
 
-    public var decision: ProjectStatusMigrationDecision {
+    public var status: ProjectStatus {
         switch self {
+        case .keepIdea: .idea
+        case .activate: .active
+        case .pause: .paused
+        case .complete: .completed
+        case .abandon: .abandoned
+        }
+    }
+
+    public var decision: ProjectStatusMigrationDecision? {
+        switch self {
+        case .keepIdea, .activate: nil
         case .pause: .paused
         case .complete: .completed
         case .abandon: .abandoned
@@ -102,7 +115,14 @@ public struct ProductConvergenceMigration {
                 $0.isTrashed
                     && $0.previousStatusBeforeTrash?.canonicalStatus == nil
             }
-            .map { .trashNeedsStatusResolution($0.id) }
+            .map {
+                .trashNeedsStatusResolution(
+                    $0.id,
+                    allowed: $0.previousStatusBeforeTrash == .archived
+                        ? [.paused, .completed, .abandoned]
+                        : ProjectStatus.allCases
+                )
+            }
 
         issues += snapshot.projects
             .filter {
@@ -134,7 +154,7 @@ public struct ProductConvergenceMigration {
         let projectResolutions = try projectResolutionMap(resolutions)
         let requiredProjects: Set<UUID> = Set(report.issues.compactMap { issue -> UUID? in
             switch issue {
-            case let .projectNeedsStatusResolution(id), let .trashNeedsStatusResolution(id):
+            case let .projectNeedsStatusResolution(id), let .trashNeedsStatusResolution(id, _):
                 return id
             default:
                 return nil
@@ -144,6 +164,23 @@ public struct ProductConvergenceMigration {
               Set(practiceResolutions.keys) == requiredRoutines,
               Set(projectResolutions.keys) == requiredProjects else {
             throw ProductConvergenceMigrationError.unresolvedIssues
+        }
+        for issue in report.issues {
+            let allowed: [ProjectStatus]
+            let id: UUID
+            switch issue {
+            case let .projectNeedsStatusResolution(projectID):
+                id = projectID
+                allowed = [.paused, .completed, .abandoned]
+            case let .trashNeedsStatusResolution(projectID, choices):
+                id = projectID
+                allowed = choices
+            default:
+                continue
+            }
+            if let resolution = projectResolutions[id], !allowed.contains(resolution.status) {
+                throw ProductConvergenceMigrationError.invalidResolution
+            }
         }
 
         try writeBackup(snapshot: snapshot, to: backupDirectory)
@@ -184,7 +221,11 @@ public struct ProductConvergenceMigration {
                     JournalTransaction(
                         upserts: entities(in: snapshot),
                         origin: .migration,
-                        stateMetadata: JournalStateMetadata(snapshot: snapshot)
+                        stateMetadata: JournalStateMetadata(snapshot: snapshot),
+                        removedMigrationIdentifiers: [
+                            Self.identifier,
+                            Self.statusMigrationIdentifier
+                        ]
                     )
                 )
             } catch {
@@ -212,7 +253,7 @@ public struct ProductConvergenceMigration {
                 if let canonicalPrevious = project.previousStatusBeforeTrash?.canonicalStatus {
                     previous = canonicalPrevious
                 } else if let resolution = projectResolutions[project.id] {
-                    previous = resolution.decision.status
+                    previous = resolution.status
                 } else {
                     throw ProductConvergenceMigrationError.unresolvedIssues
                 }
@@ -234,7 +275,7 @@ public struct ProductConvergenceMigration {
                     throw ProductConvergenceMigrationError.unresolvedIssues
                 }
                 let sourceArchivedAt = project.archivedAt
-                project.status = resolution.decision.status
+                project.status = resolution.status
                 project.statusMigrationProvenance = ProjectStatusMigrationProvenance(
                     sourceStatus: ProjectStatus.archived.rawValue,
                     decision: project.status,

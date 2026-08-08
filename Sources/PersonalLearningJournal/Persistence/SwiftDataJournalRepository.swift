@@ -77,6 +77,14 @@ public final class SwiftDataJournalRepository: JournalRepository {
                     value: JSONEncoder.journal.encode(metadata)
                 )
             }
+            if !transaction.removedMigrationIdentifiers.isEmpty {
+                let metadata = try context.fetch(FetchDescriptor<StoredRepositoryMetadataV2>())
+                for identifier in transaction.removedMigrationIdentifiers {
+                    if let existing = metadata.first(where: { $0.key == Self.migrationKey(identifier) }) {
+                        context.delete(existing)
+                    }
+                }
+            }
             for identifier in transaction.completedMigrationIdentifiers {
                 try storeRepositoryMetadata(
                     key: Self.migrationKey(identifier),

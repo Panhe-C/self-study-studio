@@ -14,12 +14,15 @@ public final class JournalViewModel: ObservableObject {
     @Published public private(set) var coursePlanGenerationState: CoursePlanGenerationState
     @Published public private(set) var coursePlanValidationErrors: [CoursePlanningValidationError]
     @Published public private(set) var pendingCanonicalNextStepProposal: CanonicalNextStepProposal?
+    @Published public private(set) var pendingAttachmentCleanupPaths: [String]
     @Published private var rememberedCoursePlanningInputs: [UUID: CoursePlanningInput]
 
     private let journalService: JournalService
     private let reviewService: ReviewService
     private let exportService: ExportService
     private let attachmentStore: AttachmentStore
+    private let archiveService: JournalArchiveService
+    private let cleanupQueue: AttachmentCleanupQueue
     private let practiceService: PracticeService
     public let practiceTimer: PracticeTimerRuntime
     private let coursePlanningService: CoursePlanningService?
@@ -33,6 +36,8 @@ public final class JournalViewModel: ObservableObject {
         reviewService: ReviewService,
         exportService: ExportService,
         attachmentStore: AttachmentStore = .defaultStore(),
+        archiveService: JournalArchiveService = JournalArchiveService(),
+        cleanupQueue: AttachmentCleanupQueue? = nil,
         practiceService: PracticeService,
         practiceTimer: PracticeTimerRuntime,
         coursePlanningService: CoursePlanningService? = nil,
@@ -44,6 +49,8 @@ public final class JournalViewModel: ObservableObject {
         self.reviewService = reviewService
         self.exportService = exportService
         self.attachmentStore = attachmentStore
+        self.archiveService = archiveService
+        self.cleanupQueue = cleanupQueue ?? AttachmentCleanupQueue(rootDirectory: attachmentStore.rootDirectory)
         self.practiceService = practiceService
         self.practiceTimer = practiceTimer
         self.coursePlanningService = coursePlanningService
@@ -61,6 +68,7 @@ public final class JournalViewModel: ObservableObject {
         self.coursePlanGenerationState = .idle
         self.coursePlanValidationErrors = []
         self.pendingCanonicalNextStepProposal = nil
+        self.pendingAttachmentCleanupPaths = (try? self.cleanupQueue.load()) ?? []
         self.rememberedCoursePlanningInputs = [:]
     }
 
@@ -322,17 +330,37 @@ public final class JournalViewModel: ObservableObject {
         guard let repository = syncRepository else {
             throw JournalArchiveError.invalidArchive
         }
-        let impact = try JournalArchiveService().purge(
-            projectID: projectId,
-            snapshot: snapshot,
-            from: repository
-        )
-        refresh()
-        return impact
+        defer { refresh() }
+        do {
+            return try archiveService.purge(
+                projectID: projectId,
+                snapshot: snapshot,
+                from: repository
+            )
+        } catch let error as JournalArchiveError {
+            if case let .attachmentDeletionFailed(paths) = error {
+                try cleanupQueue.enqueue(paths: paths)
+            }
+            throw error
+        }
     }
 
     public func retryAttachmentCleanup(paths: [String]) throws {
-        try JournalArchiveService().retryAttachmentCleanup(paths: paths)
+        defer { refresh() }
+        do {
+            try archiveService.retryAttachmentCleanup(paths: paths)
+            try cleanupQueue.remove(paths: paths)
+        } catch let error as JournalArchiveError {
+            if case let .attachmentDeletionFailed(failedPaths) = error {
+                let successfulPaths = Set(paths).subtracting(failedPaths)
+                try cleanupQueue.remove(paths: Array(successfulPaths))
+            }
+            throw error
+        }
+    }
+
+    public func retryPendingAttachmentCleanup() throws {
+        try retryAttachmentCleanup(paths: pendingAttachmentCleanupPaths)
     }
 
     @discardableResult
@@ -1023,6 +1051,7 @@ public final class JournalViewModel: ObservableObject {
     public func refresh() {
         journalService.refreshFromRepository()
         snapshot = journalService.snapshot()
+        pendingAttachmentCleanupPaths = (try? cleanupQueue.load()) ?? []
         refreshSyncRepositoryDetails()
         scheduleAutomaticSyncIfNeeded()
     }

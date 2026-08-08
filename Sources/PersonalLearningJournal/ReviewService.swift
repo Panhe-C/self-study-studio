@@ -395,12 +395,20 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
                 sourceReferences[insight] = response.sourceSummary
             }
         }
+        var projectRecommendations: [UUID: ProjectStatus] = [:]
+        for (rawID, rawStatus) in response.projectRecommendations {
+            guard let id = UUID(uuidString: rawID) else { continue }
+            guard let status = ProjectStatus(rawValue: rawStatus) else { continue }
+            guard let canonical = status.canonicalStatusForStorage else {
+                throw AIReviewPayloadError.ambiguousProjectStatus(id, rawStatus)
+            }
+            projectRecommendations[id] = canonical
+        }
         return ReviewDraft(
             facts: response.facts,
             patterns: response.patterns,
             decisions: [],
-            projectRecommendations: response.projectRecommendations.compactMapKeys(UUID.init)
-                .compactMapValues { ProjectStatus.canonicalizeLegacy(rawValue: $0) },
+            projectRecommendations: projectRecommendations,
             nextSteps: response.nextSteps.compactMapKeys(UUID.init),
             sourceSummary: response.sourceSummary,
             sourceReferences: sourceReferences

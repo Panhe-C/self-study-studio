@@ -9,6 +9,7 @@ public enum JournalArchiveError: Error, Equatable, Sendable {
     case checksumMismatch
     case duplicateIdentifiers
     case unsafeAttachmentPath(String)
+    case missingAttachment(String)
     case attachmentDeletionFailed([String])
 }
 
@@ -44,8 +45,16 @@ public struct TrashPurgeImpact: Equatable, Sendable {
     public var projectID: UUID
     public var sessionCount: Int
     public var proofCount: Int
+    public var contractCount: Int
+    public var acceptanceCount: Int
     public var revisionCount: Int
+    public var reviewCount: Int
+    public var trailCount: Int
     public var planCount: Int
+    public var phaseCount: Int
+    public var plannedSessionCount: Int
+    public var routineCount: Int
+    public var practiceSessionCount: Int
     public var attachmentPaths: [String]
     public var references: [JournalEntityReference]
 }
@@ -203,30 +212,56 @@ public struct JournalArchiveService {
             contractIDs.contains($0.contractId) || proofIDs.contains($0.proofId)
         }
         let revisions = snapshot.proofRevisions.filter { proofIDs.contains($0.proofId) }
-        let decisions = snapshot.reviewDecisions.filter { $0.projectId == projectID }
+        let reviews = snapshot.reviews.filter {
+            $0.projectRecommendations.keys.contains(projectID) || $0.nextSteps.keys.contains(projectID)
+        }
+        let reviewIDs = Set(reviews.map(\.id))
+        let decisions = snapshot.reviewDecisions.filter {
+            $0.projectId == projectID || reviewIDs.contains($0.reviewId)
+        }
         let trails = snapshot.trailEvents.filter { $0.projectId == projectID }
         let plans = snapshot.coursePlans.filter { $0.projectId == projectID }
         let planIDs = Set(plans.map(\.id))
         let phases = snapshot.planPhases.filter { planIDs.contains($0.planId) }
         let plannedSessions = snapshot.plannedSessions.filter { $0.projectId == projectID || planIDs.contains($0.planId) }
+        let routines = snapshot.practiceRoutines.filter { $0.projectId == projectID }
+        let routineIDs = Set(routines.map(\.id))
+        let practiceSessions = snapshot.practiceSessions.filter {
+            routineIDs.contains($0.routineId) || $0.linkedProjectId == projectID
+        }
         var references = [JournalEntityReference(.project, projectID)]
         references += sessions.map { JournalEntityReference(.session, $0.id) }
         references += proofs.map { JournalEntityReference(.proof, $0.id) }
         references += contracts.map { JournalEntityReference(.evidenceContract, $0.id) }
         references += acceptances.map { JournalEntityReference(.evidenceAcceptance, $0.id) }
         references += revisions.map { JournalEntityReference(.proofRevision, $0.id) }
+        references += reviews.map { JournalEntityReference(.review, $0.id) }
         references += decisions.map { JournalEntityReference(.reviewDecision, $0.id) }
         references += trails.map { JournalEntityReference(.trailEvent, $0.id) }
         references += plans.map { JournalEntityReference(.coursePlan, $0.id) }
         references += phases.map { JournalEntityReference(.planPhase, $0.id) }
         references += plannedSessions.map { JournalEntityReference(.plannedSession, $0.id) }
+        references += routines.map { JournalEntityReference(.practiceRoutine, $0.id) }
+        references += practiceSessions.map { JournalEntityReference(.practiceSession, $0.id) }
         return TrashPurgeImpact(
             projectID: projectID,
             sessionCount: sessions.count,
             proofCount: proofs.count,
+            contractCount: contracts.count,
+            acceptanceCount: acceptances.count,
             revisionCount: revisions.count,
+            reviewCount: reviews.count,
+            trailCount: trails.count,
             planCount: plans.count,
-            attachmentPaths: proofs.compactMap(\.localPath).sorted(),
+            phaseCount: phases.count,
+            plannedSessionCount: plannedSessions.count,
+            routineCount: routines.count,
+            practiceSessionCount: practiceSessions.count,
+            attachmentPaths: proofs.compactMap { proof in
+                if let localPath = proof.localPath { return localPath }
+                if case let .attachment(localPath, _, _) = proof.artifact { return localPath }
+                return nil
+            }.sorted(),
             references: references
         )
     }

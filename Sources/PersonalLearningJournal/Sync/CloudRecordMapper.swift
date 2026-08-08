@@ -25,10 +25,10 @@ public struct CloudRecordMapper {
             recordID: CKRecord.ID(recordName: entity.reference.id.uuidString, zoneID: zoneID)
         )
         switch entity {
-        case let .project(value): encode(value, into: record)
+        case let .project(value): try encode(value, into: record)
         case let .session(value): encode(value, into: record)
         case let .proof(value): try encode(value, into: record)
-        case let .review(value): encode(value, into: record)
+        case let .review(value): try encode(value, into: record)
         case let .evidenceContract(value): try encodePayload(value, into: record)
         case let .evidenceAcceptance(value): try encodePayload(value, into: record)
         case let .proofRevision(value): try encodePayload(value, into: record)
@@ -99,11 +99,14 @@ public struct CloudRecordMapper {
         }
     }
 
-    private func encode(_ value: Project, into record: CKRecord) {
+    private func encode(_ value: Project, into record: CKRecord) throws {
         record["name"] = value.name
         record["area"] = value.area
         record["goal"] = value.goal
-        record["status"] = (value.status.canonicalStatusForStorage ?? .idea).rawValue
+        guard let status = value.status.canonicalStatusForStorage else {
+            throw CloudRecordMapperError.invalidField("project status")
+        }
+        record["status"] = status.rawValue
         record["currentNextStep"] = value.currentNextStep
         record["lastActionType"] = value.lastActionType.rawValue
         record["defaultDurationMinutes"] = value.defaultDurationMinutes
@@ -111,9 +114,14 @@ public struct CloudRecordMapper {
         record["commitmentState"] = value.commitmentState.rawValue
         record["activeEvidenceContractId"] = value.activeEvidenceContractId?.uuidString
         record["completedAt"] = value.completedAt
-        record["previousStatusBeforeTrash"] = value.previousStatusBeforeTrash
-            .flatMap(\.canonicalStatusForStorage)
-            .map(\.rawValue)
+        if let previousStatus = value.previousStatusBeforeTrash {
+            guard let canonicalPreviousStatus = previousStatus.canonicalStatusForStorage else {
+                throw CloudRecordMapperError.invalidField("previous status")
+            }
+            record["previousStatusBeforeTrash"] = canonicalPreviousStatus.rawValue
+        } else {
+            record["previousStatusBeforeTrash"] = nil
+        }
         record["statusMigrationSource"] = value.statusMigrationProvenance?.sourceStatus
         record["statusMigrationDecision"] = value.statusMigrationProvenance?.decision.rawValue
         record["statusMigrationDecidedAt"] = value.statusMigrationProvenance?.decidedAt
@@ -156,18 +164,19 @@ public struct CloudRecordMapper {
         encodeDates(value.createdAt, value.updatedAt, nil, value.deletedAt, value.schemaVersion, into: record)
     }
 
-    private func encode(_ value: Review, into record: CKRecord) {
+    private func encode(_ value: Review, into record: CKRecord) throws {
         record["periodStart"] = value.periodStart
         record["periodEnd"] = value.periodEnd
         record["facts"] = value.facts as NSArray
         record["patterns"] = value.patterns as NSArray
         record["decisions"] = value.decisions as NSArray
-        let projectRecommendations: [String] = value.projectRecommendations
-            .compactMap { item in
-                let (key, status) = item
-                guard let canonical = status.canonicalStatusForStorage else { return nil }
-                return encodePair(key.uuidString, canonical.rawValue)
+        let projectRecommendations: [String] = try value.projectRecommendations.map { item in
+            let (key, status) = item
+            guard let canonical = status.canonicalStatusForStorage else {
+                throw CloudRecordMapperError.invalidField("project recommendation status")
             }
+            return encodePair(key.uuidString, canonical.rawValue)
+        }
         record["projectRecommendations"] = projectRecommendations as NSArray
         record["nextSteps"] = value.nextSteps
             .map { encodePair($0.key.uuidString, $0.value) } as NSArray
