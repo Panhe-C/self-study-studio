@@ -643,6 +643,33 @@ public final class SwiftDataJournalRepository: JournalRepository {
         transactionID: UUID,
         revisionExpectation: RevisionGuardExpectation?
     ) throws {
+        let effectiveTransactionID: UUID
+        if entity.kind == .practiceSession,
+           let pendingBase = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+            .first(where: {
+                $0.entityKindRaw == entity.kind.rawValue &&
+                $0.entityID == entity.id &&
+                !$0.isTerminal
+            }) {
+            effectiveTransactionID = pendingBase.transactionID
+        } else {
+            effectiveTransactionID = transactionID
+        }
+        let effectiveRevisionExpectation: RevisionGuardExpectation?
+        if entity.kind == .practiceSession,
+           revisionExpectation == nil,
+           let pendingBase = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+            .first(where: {
+                $0.entityKindRaw == entity.kind.rawValue &&
+                $0.entityID == entity.id &&
+                !$0.isTerminal
+            }) {
+            effectiveRevisionExpectation = pendingBase.revisionExpectationPayload.flatMap {
+                try? JSONDecoder.journal.decode(RevisionGuardExpectation.self, from: $0)
+            }
+        } else {
+            effectiveRevisionExpectation = revisionExpectation
+        }
         if Self.shouldCoalesce(entity.kind) {
             let existing = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
                 .first {
@@ -657,11 +684,11 @@ public final class SwiftDataJournalRepository: JournalRepository {
         context.insert(
             StoredPendingMutationV2(
                 id: UUID(),
-                transactionID: transactionID,
+                transactionID: effectiveTransactionID,
                 entityKindRaw: entity.kind.rawValue,
                 entityID: entity.id,
                 operationRaw: operation.rawValue,
-                revisionExpectation: revisionExpectation,
+                revisionExpectation: effectiveRevisionExpectation,
                 enqueuedAt: now(),
                 retryCount: 0
             )
@@ -675,6 +702,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
     private static func shouldCoalesce(_ kind: JournalEntityKind) -> Bool {
         switch kind {
         case .coursePlan, .planPhase, .plannedSession, .practiceRoutine:
+            return true
+        case .practiceSession:
             return true
         default:
             return false

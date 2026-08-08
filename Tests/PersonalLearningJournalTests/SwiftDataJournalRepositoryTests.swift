@@ -117,6 +117,92 @@ final class SwiftDataJournalRepositoryTests: XCTestCase {
         XCTAssertNotNil(try reopened.entity(for: .init(.practiceRoutine, routine.id)))
     }
 
+    func testPracticeReflectionAfterRestartReusesBaseTransaction() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("practice-reflection.store")
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(
+            name: "Practice Project",
+            area: "Learning",
+            goal: "Improve",
+            currentNextStep: "Keep going",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let routine = PracticeRoutine(
+            projectId: project.id,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let sessionID = UUID()
+        let startedAt = timestamp
+        let endedAt = timestamp.addingTimeInterval(120)
+        var baseTransactionID: UUID?
+
+        try autoreleasepool {
+            let repository = try SwiftDataJournalRepository(url: url)
+            try repository.commit(
+                JournalTransaction(
+                    upserts: [.project(project), .practiceRoutine(routine)],
+                    origin: .remote
+                )
+            )
+            let service = PracticeService(
+                repository: repository,
+                now: { timestamp.addingTimeInterval(1) }
+            )
+            _ = try service.saveSession(
+                sessionId: sessionID,
+                routineId: routine.id,
+                linkedProjectId: routine.projectId,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                activeDurationSeconds: 120,
+                note: nil
+            )
+            baseTransactionID = try repository.pendingMutations(limit: 100)
+                .first(where: {
+                    $0.entity == JournalEntityReference(.practiceSession, sessionID)
+                })?.transactionID
+        }
+
+        let reopened = try SwiftDataJournalRepository(url: url)
+        let service = PracticeService(
+            repository: reopened,
+            now: { timestamp.addingTimeInterval(2) }
+        )
+        _ = try service.updateSessionReflection(
+            sessionId: sessionID,
+            routineId: routine.id,
+            linkedProjectId: routine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 120,
+            note: "Enriched after restart"
+        )
+
+        let pending = try reopened.pendingMutations(limit: 100)
+        XCTAssertNotNil(baseTransactionID)
+        XCTAssertEqual(Set(pending.map(\.transactionID)), Set([baseTransactionID!]))
+        XCTAssertEqual(
+            pending.filter {
+                $0.entity == JournalEntityReference(.practiceSession, sessionID)
+            }.count,
+            1
+        )
+        XCTAssertEqual(
+            Set(pending.map(\.entity.kind)),
+            Set([.practiceSession, .session, .project, .trailEvent])
+        )
+        XCTAssertEqual(try reopened.snapshot().practiceSessions.first?.note, "Enriched after restart")
+    }
+
     func testSwiftDataRepositoryRoundTripsEntityAndOutboxAcrossInstances() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

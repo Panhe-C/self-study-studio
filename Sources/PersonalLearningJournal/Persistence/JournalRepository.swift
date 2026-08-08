@@ -444,12 +444,35 @@ public final class InMemoryJournalRepository: JournalRepository {
         revisionExpectation: RevisionGuardExpectation?
     ) {
         guard case .user = origin else { return }
+        // A reflection update is part of the base practice-session dependency
+        // chain when that base mutation is still pending. Reusing its
+        // transaction ID keeps Project/LearningSession/TrailEvent siblings
+        // ahead of the final PracticeSession payload on CloudKit.
+        let effectiveTransactionID: UUID
+        if entity.kind == .practiceSession,
+           let pendingBase = outbox.last(where: {
+               $0.entity == entity && !$0.isTerminal
+           }) {
+            effectiveTransactionID = pendingBase.transactionID
+        } else {
+            effectiveTransactionID = transactionID
+        }
+        let effectiveRevisionExpectation: RevisionGuardExpectation?
+        if entity.kind == .practiceSession,
+           revisionExpectation == nil,
+           let pendingBase = outbox.last(where: {
+               $0.entity == entity && !$0.isTerminal
+           }) {
+            effectiveRevisionExpectation = pendingBase.revisionExpectation
+        } else {
+            effectiveRevisionExpectation = revisionExpectation
+        }
         // Planning drafts and activation are separate local transactions but
-        // represent one final payload per planning record. Coalescing those
-        // records prevents CloudKit from racing a stale draft against its
-        // activation transaction. Other journal entities retain their
-        // historical append-only outbox semantics. Terminal entries are
-        // retained for manual recovery and are intentionally not coalesced.
+        // represent one final payload per planning record. Practice base and
+        // reflection writes have the same latest-payload requirement. Other
+        // journal entities retain their historical append-only outbox
+        // semantics. Terminal entries are retained for manual recovery and
+        // are intentionally not coalesced.
         if Self.shouldCoalesce(entity.kind),
            let index = outbox.lastIndex(where: {
                $0.entity == entity && !$0.isTerminal
@@ -458,10 +481,10 @@ public final class InMemoryJournalRepository: JournalRepository {
         }
         outbox.append(
             PendingMutation(
-                transactionID: transactionID,
+                transactionID: effectiveTransactionID,
                 entity: entity,
                 operation: operation,
-                revisionExpectation: revisionExpectation,
+                revisionExpectation: effectiveRevisionExpectation,
                 enqueuedAt: now()
             )
         )
@@ -476,6 +499,8 @@ public final class InMemoryJournalRepository: JournalRepository {
     private static func shouldCoalesce(_ kind: JournalEntityKind) -> Bool {
         switch kind {
         case .coursePlan, .planPhase, .plannedSession, .practiceRoutine:
+            return true
+        case .practiceSession:
             return true
         default:
             return false

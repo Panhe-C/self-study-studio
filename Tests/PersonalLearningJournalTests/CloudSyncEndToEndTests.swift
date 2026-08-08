@@ -91,6 +91,100 @@ final class CloudSyncEndToEndTests: XCTestCase {
         XCTAssertEqual(try firstRepository.snapshot().practiceSessions, [session])
         XCTAssertTrue(try firstRepository.pendingMutations(limit: 10).isEmpty)
     }
+
+    func testPracticeBaseAndReflectionShareOneCloudTransaction() async throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let project = Project(
+            name: "Practice Project",
+            area: "Learning",
+            goal: "Improve",
+            currentNextStep: "Keep going",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let routine = PracticeRoutine(
+            projectId: project.id,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository()
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.project(project), .practiceRoutine(routine)],
+                origin: .remote
+            )
+        )
+        let service = PracticeService(
+            repository: repository,
+            now: { timestamp.addingTimeInterval(1) }
+        )
+        let sessionID = UUID()
+        let sessionReference = JournalEntityReference(.practiceSession, sessionID)
+        let startedAt = timestamp
+        let endedAt = timestamp.addingTimeInterval(120)
+        _ = try service.saveSession(
+            sessionId: sessionID,
+            routineId: routine.id,
+            linkedProjectId: routine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 120,
+            note: nil
+        )
+        let basePending = try repository.pendingMutations(limit: 100)
+        let baseTransactionID = try XCTUnwrap(
+            basePending.first(where: { $0.entity == sessionReference })?.transactionID
+        )
+
+        _ = try service.updateSessionReflection(
+            sessionId: sessionID,
+            routineId: routine.id,
+            linkedProjectId: routine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 120,
+            note: "Enriched reflection"
+        )
+
+        let pending = try repository.pendingMutations(limit: 100)
+        XCTAssertEqual(
+            pending.filter { $0.entity == sessionReference }.count,
+            1,
+            "Reflection should replace the base PracticeSession mutation, not create a second transaction payload"
+        )
+        XCTAssertEqual(Set(pending.map(\.transactionID)), Set([baseTransactionID]))
+        XCTAssertEqual(
+            Set(pending.map(\.entity.kind)),
+            Set([.project, .practiceSession, .session, .trailEvent])
+        )
+
+        let cloud = SharedFakeCloudDatabaseClient()
+        let coordinator = CloudSyncCoordinator(repository: repository, client: cloud)
+        try await coordinator.syncNow()
+
+        let sentReferences = await cloud.sentReferences()
+        XCTAssertEqual(sentReferences.count, 4)
+        XCTAssertEqual(sentReferences.filter { $0 == sessionReference }.count, 1)
+        XCTAssertEqual(sentReferences.filter { $0.kind == .project }.count, 1)
+        XCTAssertEqual(sentReferences.filter { $0.kind == .session }.count, 1)
+        XCTAssertEqual(sentReferences.filter { $0.kind == .trailEvent }.count, 1)
+
+        let remoteRepository = InMemoryJournalRepository()
+        let remoteCoordinator = CloudSyncCoordinator(repository: remoteRepository, client: cloud)
+        try await remoteCoordinator.syncNow()
+        let remoteSnapshot = try remoteRepository.snapshot()
+        XCTAssertEqual(remoteSnapshot.practiceSessions.count, 1)
+        XCTAssertEqual(remoteSnapshot.practiceSessions.first?.id, sessionID)
+        XCTAssertEqual(remoteSnapshot.practiceSessions.first?.note, "Enriched reflection")
+        XCTAssertEqual(remoteSnapshot.sessions.count, 1)
+        XCTAssertEqual(remoteSnapshot.projects.count, 1)
+        XCTAssertEqual(remoteSnapshot.trailEvents.count, 1)
+    }
 }
 
 private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
@@ -101,18 +195,27 @@ private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
     )
     private var records: [CKRecord] = []
     private var remoteChanges: [CloudRemoteChange] = []
+    private var sentReferenceLog: [JournalEntityReference] = []
 
     func ensureZone(named: String) async throws {}
 
     func send(_ mutations: [CloudMutation]) async throws -> CloudSendResult {
         var acknowledged = Set<UUID>()
         var metadata: [SyncRecordMetadata] = []
+        sentReferenceLog.append(contentsOf: mutations.map { mutation in
+            switch mutation {
+            case let .save(_, entity): return entity.reference
+            case let .delete(_, reference): return reference
+            }
+        })
 
         for mutation in mutations {
             switch mutation {
             case let .save(mutationID, entity):
                 let record = try mapper.record(for: entity, zoneID: zoneID)
-                records.removeAll { $0.recordID == record.recordID }
+                records.removeAll {
+                    $0.recordID == record.recordID && $0.recordType == record.recordType
+                }
                 records.append(record)
                 acknowledged.insert(mutationID)
                 metadata.append(
@@ -154,5 +257,9 @@ private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
         remoteChanges.append(
             .delete(CKRecord.ID(recordName: recordName, zoneID: zoneID))
         )
+    }
+
+    func sentReferences() -> [JournalEntityReference] {
+        sentReferenceLog
     }
 }

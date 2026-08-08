@@ -383,8 +383,29 @@ public final class PracticeService {
         }
 
         updatedSession.updatedAt = now()
+        let sessionReference = JournalEntityReference(.practiceSession, sessionId)
+        let pendingBaseMutation = try repository
+            .pendingMutations(limit: Int.max)
+            .first(where: { $0.entity == sessionReference })
+        var revisionExpectations: [JournalEntityReference: RevisionGuardExpectation] = [:]
+        if pendingBaseMutation == nil,
+           let metadata = try repository.metadata(for: sessionReference) {
+            // Once the base payload has reached CloudKit, reflection is a
+            // guarded update of the existing target. If the base is still in
+            // the outbox, it will reuse that transaction's dependency chain
+            // instead and must not carry a stale standalone guard.
+            revisionExpectations[sessionReference] = .existingTarget(
+                revisionID: sessionId,
+                recordChangeTag: metadata.recordChangeTag
+            )
+        }
         try repository.commit(
-            JournalTransaction(upserts: [.practiceSession(updatedSession)], origin: .user)
+            JournalTransaction(
+                upserts: [.practiceSession(updatedSession)],
+                origin: .user,
+                transactionID: pendingBaseMutation?.transactionID ?? UUID(),
+                revisionExpectations: revisionExpectations
+            )
         )
         _ = recoverDeletedRoutine
         return PracticeSessionSaveResult(

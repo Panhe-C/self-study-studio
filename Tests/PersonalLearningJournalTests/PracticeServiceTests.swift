@@ -338,6 +338,63 @@ final class PracticeServiceTests: XCTestCase {
         XCTAssertEqual(try repository.snapshot(), before)
     }
 
+    func testReflectionAfterBaseSyncUsesExistingTargetGuard() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = PracticeService(repository: repository, now: { timestamp.addingTimeInterval(1) })
+        let routine = try service.createRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let sessionID = UUID()
+        let startedAt = timestamp
+        let endedAt = timestamp.addingTimeInterval(120)
+        _ = try service.saveSession(
+            sessionId: sessionID,
+            routineId: routine.id,
+            linkedProjectId: routine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 120,
+            note: nil
+        )
+        let sessionReference = JournalEntityReference(.practiceSession, sessionID)
+        let pendingIDs = Set(try repository.pendingMutations(limit: 100).map(\.id))
+        try repository.acknowledge(
+            pendingIDs,
+            metadata: [
+                SyncRecordMetadata(
+                    entity: sessionReference,
+                    zoneName: CloudSyncCoordinator.zoneName,
+                    recordName: sessionID.uuidString,
+                    recordChangeTag: "server-v1",
+                    state: .synced
+                )
+            ]
+        )
+
+        _ = try service.updateSessionReflection(
+            sessionId: sessionID,
+            routineId: routine.id,
+            linkedProjectId: routine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 120,
+            note: "Enriched reflection"
+        )
+
+        let mutation = try XCTUnwrap(
+            repository.pendingMutations(limit: 10).first(where: { $0.entity == sessionReference })
+        )
+        XCTAssertEqual(
+            mutation.revisionExpectation,
+            .existingTarget(revisionID: sessionID, recordChangeTag: "server-v1")
+        )
+    }
+
     func testRoutineProjectWinsOverMissingCompletionOverrideAndCreatesLearningSession() throws {
         let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = PracticeService(repository: repository)
