@@ -2,6 +2,7 @@ import Foundation
 
 public enum PracticeServiceError: Error, Equatable, Sendable {
     case missingRoutine
+    case missingSession
     case duplicateActiveRoutineName
     case activeRoutineAlreadyExists
     case routineHasSessions
@@ -16,6 +17,8 @@ extension PracticeServiceError: LocalizedError {
         switch self {
         case .missingRoutine:
             "The practice routine is no longer available."
+        case .missingSession:
+            "The practice session is no longer available for reflection."
         case .duplicateActiveRoutineName:
             "An active practice routine already uses this name."
         case .activeRoutineAlreadyExists:
@@ -304,6 +307,42 @@ public final class PracticeService {
             session: session,
             learningSession: learningSession,
             didDropMissingProjectLink: requestedDifferentProject
+        )
+    }
+
+    /// Applies post-save reflection to an existing PracticeSession. The
+    /// session identity must already be present so abandoning reflection can
+    /// never create a second session or silently recreate a deleted one.
+    @discardableResult
+    public func updateSessionReflection(
+        sessionId: UUID,
+        routineId: UUID,
+        recoverDeletedRoutine: Bool = false,
+        linkedProjectId: UUID?,
+        startedAt: Date,
+        endedAt: Date,
+        activeDurationSeconds: Int,
+        segments: [PracticeSegment] = [],
+        summary: PracticeSummary? = nil,
+        note: String?
+    ) throws -> PracticeSessionSaveResult {
+        let snapshot = try repository.snapshot()
+        guard snapshot.practiceSessions.contains(where: {
+            $0.id == sessionId && $0.deletedAt == nil
+        }) else {
+            throw PracticeServiceError.missingSession
+        }
+        return try saveSession(
+            sessionId: sessionId,
+            routineId: routineId,
+            recoverDeletedRoutine: recoverDeletedRoutine,
+            linkedProjectId: linkedProjectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: activeDurationSeconds,
+            segments: segments,
+            summary: summary,
+            note: note
         )
     }
 

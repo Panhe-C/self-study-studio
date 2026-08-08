@@ -488,8 +488,20 @@ final class PracticeTimerRuntimeTests: XCTestCase {
 
     func testNextBlockResetsRunningSegmentStartAndDoesNotDoubleCount() throws {
         let clock = TestClock(now: Date(timeIntervalSince1970: 100))
-        let first = PracticeBlock(name: "Theory", targetMinutes: 5, ordinal: 0)
-        let second = PracticeBlock(name: "Technique", targetMinutes: 5, ordinal: 1)
+        let first = PracticeBlock(
+            name: "Theory",
+            targetMinutes: 5,
+            ordinal: 0,
+            focus: "I-IV-V",
+            nextFocusCandidates: ["Cadence"]
+        )
+        let second = PracticeBlock(
+            name: "Technique",
+            targetMinutes: 5,
+            ordinal: 1,
+            focus: "G-C-D",
+            nextFocusCandidates: ["Tempo"]
+        )
         let routine = PracticeRoutine(
             name: "Guitar",
             symbolName: "guitars",
@@ -512,6 +524,12 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         XCTAssertEqual(completion.activeDurationSeconds, 15)
         XCTAssertEqual(completion.segments.map(\.blockID), [first.id, second.id])
         XCTAssertEqual(completion.segments.map(\.activeDurationSeconds), [10, 5])
+        XCTAssertEqual(completion.segments.map(\.observedBlockName), [first.name, second.name])
+        XCTAssertEqual(completion.segments.map(\.observedFocus), [first.focus, second.focus])
+        XCTAssertEqual(
+            completion.segments.map(\.observedNextFocusCandidates),
+            [first.nextFocusCandidates, second.nextFocusCandidates]
+        )
     }
 
     func testLegacyAccumulatedSecondsBecomeRecoveredSegmentAndSummaryTime() throws {
@@ -536,6 +554,7 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         XCTAssertEqual(completion.segments.count, 1)
         XCTAssertEqual(completion.segments.first?.blockID, routineID)
         XCTAssertEqual(completion.segments.first?.activeDurationSeconds, 5)
+        XCTAssertEqual(completion.segments.first?.observedBlockName, "Practice")
         XCTAssertEqual(
             completion.summary?.blockSummaries.first?.activeDurationSeconds,
             5

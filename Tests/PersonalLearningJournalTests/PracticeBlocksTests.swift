@@ -25,6 +25,34 @@ final class PracticeBlocksTests: XCTestCase {
         XCTAssertEqual(migrated.blocks[0].targetMinutes, routine.targetMinutes)
     }
 
+    func testPracticeRoutineValidationRejectsDuplicateAndNonContiguousBlocks() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let first = PracticeBlock(name: "Warm up", targetMinutes: 5, ordinal: 0)
+        let second = PracticeBlock(name: "Scales", targetMinutes: 10, ordinal: 1)
+        let base = PracticeRoutine(
+            projectId: UUID(),
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 15,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+
+        var duplicateID = base
+        duplicateID.blocks = [first, PracticeBlock(id: first.id, name: second.name, targetMinutes: second.targetMinutes, ordinal: 1)]
+        XCTAssertThrowsError(try duplicateID.validated())
+
+        var duplicateOrdinal = base
+        duplicateOrdinal.blocks = [first, PracticeBlock(name: second.name, targetMinutes: second.targetMinutes, ordinal: 0)]
+        XCTAssertThrowsError(try duplicateOrdinal.validated())
+
+        var nonContiguous = base
+        nonContiguous.blocks = [first, PracticeBlock(name: second.name, targetMinutes: second.targetMinutes, ordinal: 2)]
+        XCTAssertThrowsError(try nonContiguous.validated())
+    }
+
     func testPracticeSummaryCombinesRepeatedSegmentsAndExcludesPause() throws {
         let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
         let firstBlock = PracticeBlock(
@@ -89,6 +117,105 @@ final class PracticeBlocksTests: XCTestCase {
         XCTAssertEqual(roundTrip, .practiceSession(session))
         XCTAssertEqual(session.segments.first?.observedBlockName, "Warm up")
         XCTAssertEqual(session.summary?.blockSummaries.first?.observedNextFocusCandidates, ["Add a metronome"])
+    }
+
+    func testPracticeSessionValidationEnforcesCurrentSegmentSummaryRelationships() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let block = PracticeBlock(name: "Warm up", targetMinutes: 5, ordinal: 0)
+        let segment = PracticeSegment(
+            block: block,
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(60),
+            activeDurationSeconds: 60
+        )
+        let summary = PracticeSummary.from(blocks: [block], segments: [segment], attentionMarker: nil)
+        let valid = PracticeSession(
+            routineId: UUID(),
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(60),
+            activeDurationSeconds: 60,
+            segments: [segment],
+            summary: summary,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        XCTAssertNoThrow(try valid.validated())
+
+        var totalMismatch = valid
+        totalMismatch.activeDurationSeconds = 61
+        XCTAssertThrowsError(try totalMismatch.validated())
+
+        var summaryBlockMismatch = summary.blockSummaries[0]
+        summaryBlockMismatch = PracticeBlockSummary(
+            blockID: summaryBlockMismatch.blockID,
+            targetMinutes: summaryBlockMismatch.targetMinutes,
+            activeDurationSeconds: 59,
+            visitCount: summaryBlockMismatch.visitCount,
+            wasSkipped: false,
+            wasExtended: false,
+            observedBlockName: summaryBlockMismatch.observedBlockName,
+            observedFocus: summaryBlockMismatch.observedFocus,
+            observedNextFocusCandidates: summaryBlockMismatch.observedNextFocusCandidates
+        )
+        var blockTotalMismatch = valid
+        blockTotalMismatch.summary = PracticeSummary(
+            totalActiveDurationSeconds: 60,
+            blockSummaries: [summaryBlockMismatch]
+        )
+        XCTAssertThrowsError(try blockTotalMismatch.validated())
+
+        var visitMismatch = valid
+        visitMismatch.summary = PracticeSummary(
+            totalActiveDurationSeconds: 60,
+            blockSummaries: [PracticeBlockSummary(
+                blockID: block.id,
+                targetMinutes: block.targetMinutes,
+                activeDurationSeconds: 60,
+                visitCount: 2,
+                wasSkipped: false,
+                wasExtended: false
+            )]
+        )
+        XCTAssertThrowsError(try visitMismatch.validated())
+
+        var relationshipMismatch = valid
+        relationshipMismatch.segments = [PracticeSegment(
+            blockID: UUID(),
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(60),
+            activeDurationSeconds: 60
+        )]
+        XCTAssertThrowsError(try relationshipMismatch.validated())
+
+        var segmentsWithoutSummary = valid
+        segmentsWithoutSummary.summary = nil
+        XCTAssertThrowsError(try segmentsWithoutSummary.validated())
+
+        var summaryWithoutSegments = valid
+        summaryWithoutSegments.segments = []
+        summaryWithoutSegments.activeDurationSeconds = 0
+        summaryWithoutSegments.summary = PracticeSummary(
+            totalActiveDurationSeconds: 0,
+            blockSummaries: [PracticeBlockSummary(
+                blockID: block.id,
+                targetMinutes: block.targetMinutes,
+                activeDurationSeconds: 0,
+                visitCount: 0,
+                wasSkipped: true,
+                wasExtended: false
+            )]
+        )
+        XCTAssertThrowsError(try summaryWithoutSegments.validated())
+
+        let legacy = PracticeSession(
+            routineId: UUID(),
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(60),
+            activeDurationSeconds: 60,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        XCTAssertNoThrow(try legacy.validated())
     }
 
     func testPlanRevisionDraftRoundTripsRoutineBlockSnapshot() throws {

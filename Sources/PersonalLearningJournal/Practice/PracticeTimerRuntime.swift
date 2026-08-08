@@ -612,7 +612,10 @@ public final class PracticeTimerRuntime: ObservableObject {
 
         var finishedState = state
         closeOpenSegment(&finishedState, at: timestamp)
-        let segments = finishedState.segments
+        let segments = Self.resolvedSegments(
+            finishedState.segments,
+            blocks: finishedState.blocks
+        )
         let completion = PracticeTimerCompletion(
             routineId: state.routineId,
             startedAt: state.startedAt,
@@ -739,10 +742,14 @@ public final class PracticeTimerRuntime: ObservableObject {
         }
         let activeDuration = Self.elapsedSeconds(since: resumedAt, until: timestamp)
         state.accumulatedActiveSeconds += activeDuration
-        guard activeDuration > 0, let blockID = state.currentBlockID else { return }
+        guard activeDuration > 0,
+              let blockID = state.currentBlockID,
+              let block = state.blocks.first(where: { $0.id == blockID }) else {
+            return
+        }
         state.segments.append(
             PracticeSegment(
-                blockID: blockID,
+                block: block,
                 startedAt: resumedAt,
                 endedAt: timestamp,
                 activeDurationSeconds: activeDuration
@@ -841,6 +848,24 @@ public final class PracticeTimerRuntime: ObservableObject {
                 wasSkipped: state.skippedBlockIDs.contains(block.id)
                     && durations[block.id, default: 0] == 0
             )
+        }
+    }
+
+    private static func resolvedSegments(
+        _ segments: [PracticeSegment],
+        blocks: [PracticeBlock]
+    ) -> [PracticeSegment] {
+        segments.map { segment in
+            guard let block = blocks.first(where: { $0.id == segment.blockID }) else {
+                return segment
+            }
+            var resolved = segment
+            resolved.observedBlockName = resolved.observedBlockName ?? block.name
+            resolved.observedFocus = resolved.observedFocus ?? block.focus
+            if resolved.observedNextFocusCandidates.isEmpty {
+                resolved.observedNextFocusCandidates = block.nextFocusCandidates
+            }
+            return resolved
         }
     }
 
@@ -964,7 +989,7 @@ public final class PracticeTimerRuntime: ObservableObject {
             )
             migrated.segments = [
                 PracticeSegment(
-                    blockID: block.id,
+                    block: block,
                     startedAt: state.startedAt,
                     endedAt: endedAt,
                     activeDurationSeconds: state.accumulatedActiveSeconds

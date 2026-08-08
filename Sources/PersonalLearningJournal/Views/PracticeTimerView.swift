@@ -31,7 +31,11 @@ public struct PracticeTimerView: View {
                     unavailableContent
                 }
             }
-            .navigationTitle(pendingDraft == nil ? "Practice" : "Finish Practice")
+            .navigationTitle(
+                pendingDraft == nil
+                    ? "Practice"
+                    : pendingDraftIsPersisted ? "Reflect on Practice" : "Finish Practice"
+            )
             .toolbar {
                 if pendingDraft == nil {
                     ToolbarItem(placement: .cancellationAction) {
@@ -266,19 +270,21 @@ public struct PracticeTimerView: View {
 
             Section {
                 Button(action: saveCompletion) {
-                    Label("Save Practice", systemImage: "checkmark.circle.fill")
+                    Label(
+                        pendingDraftIsPersisted ? "Save Reflection" : "Save Practice",
+                        systemImage: "checkmark.circle.fill"
+                    )
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(StudioTheme.practiceColor(routine.color))
                 .disabled(isSaving)
 
-                Button(role: .destructive) {
-                    showingDiscardConfirmation = true
-                } label: {
-                    Label("Discard Completion", systemImage: "trash")
+                Button(action: leaveReflection) {
+                    Label("Done", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)
                 }
+                .disabled(!pendingDraftIsPersisted)
             }
         }
     }
@@ -302,6 +308,13 @@ public struct PracticeTimerView: View {
     private var pendingDraft: PracticePendingCompletionDraft? {
         guard timer.pendingCompletion?.completion.routineId == routine.id else { return nil }
         return timer.pendingCompletion
+    }
+
+    private var pendingDraftIsPersisted: Bool {
+        guard let draft = pendingDraft else { return false }
+        return viewModel.practiceSessions.contains {
+            $0.id == draft.id && $0.deletedAt == nil
+        }
     }
 
     private var noteBinding: Binding<String> {
@@ -371,9 +384,17 @@ public struct PracticeTimerView: View {
 
     private func finishPractice() {
         refreshTimer()
-        guard timer.finish() != nil else {
+        guard let completion = timer.finish() else {
             timerError = "The timer could not finish. Your active practice is still available to retry."
             return
+        }
+        do {
+            _ = try viewModel.persistPracticeCompletionBase(
+                completion,
+                linkedProjectId: routine.projectId
+            )
+        } catch {
+            saveError = error.localizedDescription
         }
     }
 
@@ -407,6 +428,12 @@ public struct PracticeTimerView: View {
         isSaving = true
         defer { isSaving = false }
         do {
+            if !pendingDraftIsPersisted {
+                _ = try viewModel.persistPracticeCompletionBase(
+                    draft.completion,
+                    linkedProjectId: routine.projectId
+                )
+            }
             let result = try viewModel.savePracticeCompletion(
                 draft.completion,
                 linkedProjectId: routine.projectId,
@@ -426,6 +453,18 @@ public struct PracticeTimerView: View {
         } else {
             dismiss()
         }
+    }
+
+    private func leaveReflection() {
+        guard pendingDraftIsPersisted else {
+            saveError = "Save the practice session before leaving its reflection."
+            return
+        }
+        guard timer.clearPendingCompletion() else {
+            saveError = "The reflection draft could not be cleared on this device."
+            return
+        }
+        dismiss()
     }
 
     private func updatePendingDraft(

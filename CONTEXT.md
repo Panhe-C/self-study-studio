@@ -241,7 +241,7 @@ _Gap_: iPhone authoring, player display, and session-summary snapshots are wired
 **Practice Session** `[partial]`:
 One completed run of a Practice Routine that records both total active time and the actual time spent in each Practice Block.
 _Avoid_: Learning Session, block session, timer run
-_Gap_: iPhone runtime and atomic service save persist per-Block Segments, observed Block snapshots, and a derived Summary; the finish flow supports optional notes and an Attention Marker. Proof attachment remains an explicit follow-up, and physical-device/real CloudKit acceptance is separate.
+_Gap_: iPhone Finish atomically persists the base Session, Segments, observed Block snapshots, and derived Summary before showing reflection. Notes and an Attention Marker are guarded post-save updates to that same session; leaving reflection only clears the local draft. Proof attachment remains an explicit follow-up, and physical-device/real CloudKit acceptance is separate.
 
 **Guided Routine Player** `[partial]`:
 The iPhone execution flow that starts and finishes a Practice Session once, presents one current Block at a time, and attributes active time as the learner advances, skips, or directly switches Blocks.
@@ -256,7 +256,7 @@ _Gap_: Codable/CloudKit mapping, summary aggregation, and runtime pause/skip/dir
 **Practice Summary** `[partial]`:
 The automatically saved outcome of a Practice Session containing total active time, per-Block time, skipped or extended targets, and the Practice Focus used, with optional notes, Proof, and one Attention Marker.
 _Avoid_: Required reflection, block report, stage review
-_Gap_: iPhone atomic save computes and persists per-Block time, skipped/extended targets, observed Focus/Next Focus, notes, and an optional Attention Marker. Proof attachment is not wired and remains an explicit gap; physical-device/real CloudKit acceptance is separate.
+_Gap_: iPhone Finish atomically persists per-Block time, skipped/extended targets, and observed Focus/Next Focus; notes and an optional Attention Marker are later guarded updates to the same session. Proof attachment is not wired and remains an explicit gap; physical-device/real CloudKit acceptance is separate.
 
 **Attention Marker** `[partial]`:
 An optional indication that one Practice Block deserves attention in the next session or Review; it is a learner signal rather than a score or failure state.

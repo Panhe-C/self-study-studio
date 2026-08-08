@@ -410,6 +410,22 @@ final class CloudRecordMapperTests: XCTestCase {
         XCTAssertThrowsError(try CloudRecordMapper().entity(from: record))
     }
 
+    func testPracticeRoutineCloudDecodeRejectsInvalidBlockStructure() throws {
+        let record = try practiceRoutineRecord()
+        let first = PracticeBlock(name: "Warm up", targetMinutes: 5, ordinal: 0)
+        let second = PracticeBlock(name: "Scales", targetMinutes: 10, ordinal: 1)
+        let invalidBlockSets = [
+            [first, PracticeBlock(id: first.id, name: second.name, targetMinutes: second.targetMinutes, ordinal: 1)],
+            [first, PracticeBlock(name: second.name, targetMinutes: second.targetMinutes, ordinal: 0)],
+            [first, PracticeBlock(name: second.name, targetMinutes: second.targetMinutes, ordinal: 2)]
+        ]
+
+        for blocks in invalidBlockSets {
+            record["blocks"] = try JSONEncoder.journal.encode(blocks)
+            XCTAssertThrowsError(try CloudRecordMapper().entity(from: record))
+        }
+    }
+
     func testPracticeSessionRejectsImpossibleTiming() throws {
         let timestamp = Date(timeIntervalSince1970: 10_000)
         let session = PracticeSession(
@@ -425,6 +441,52 @@ final class CloudRecordMapperTests: XCTestCase {
         record["activeDurationSeconds"] = 62
 
         XCTAssertThrowsError(try CloudRecordMapper().entity(from: record))
+    }
+
+    func testPracticeSessionCloudDecodeRejectsInvalidCurrentNestedPayload() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let block = PracticeBlock(name: "Warm up", targetMinutes: 5, ordinal: 0)
+        let segment = PracticeSegment(
+            block: block,
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(60),
+            activeDurationSeconds: 60
+        )
+        let summary = PracticeSummary.from(blocks: [block], segments: [segment], attentionMarker: nil)
+        let session = PracticeSession(
+            id: fixedID,
+            routineId: UUID(),
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(60),
+            activeDurationSeconds: 60,
+            segments: [segment],
+            summary: summary,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let mapper = CloudRecordMapper()
+        let record = try mapper.record(for: .practiceSession(session), zoneID: zoneID)
+
+        record["summary"] = try JSONEncoder.journal.encode(PracticeSummary(
+            totalActiveDurationSeconds: 60,
+            blockSummaries: [PracticeBlockSummary(
+                blockID: block.id,
+                targetMinutes: block.targetMinutes,
+                activeDurationSeconds: 59,
+                visitCount: 1,
+                wasSkipped: false,
+                wasExtended: false
+            )]
+        ))
+        XCTAssertThrowsError(try mapper.entity(from: record))
+
+        let segmentsWithoutSummary = try mapper.record(for: .practiceSession(session), zoneID: zoneID)
+        segmentsWithoutSummary["summary"] = nil
+        XCTAssertThrowsError(try mapper.entity(from: segmentsWithoutSummary))
+
+        let summaryWithoutSegments = try mapper.record(for: .practiceSession(session), zoneID: zoneID)
+        summaryWithoutSegments["segments"] = nil
+        XCTAssertThrowsError(try mapper.entity(from: summaryWithoutSegments))
     }
 
     func testMapperRejectsInvalidDurationAndRecordIdentifier() throws {

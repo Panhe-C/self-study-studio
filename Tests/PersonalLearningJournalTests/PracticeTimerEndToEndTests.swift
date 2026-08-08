@@ -229,30 +229,84 @@ final class PracticeTimerEndToEndTests: XCTestCase {
         XCTAssertNil(PracticeTimerRuntime(store: store, now: clock.now).pendingCompletion)
     }
 
-    func testPendingCompletionDoesNotEnterJournalSnapshotOrSyncOutboxUntilSave() throws {
+    func testFinishPersistsBaseSessionBeforeOptionalReflectionCanBeAbandoned() throws {
         let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 100))
         let routine = try fixture.viewModel.createPracticeRoutine(
             name: "Guitar",
             symbolName: "guitars",
             color: .coral,
             targetMinutes: 30,
-            weekdays: [2]
+            weekdays: [2],
+            blocks: [PracticeBlock(name: "Technique", targetMinutes: 30, ordinal: 0)]
         )
         let outboxBeforeTimer = try fixture.repository.pendingMutations(limit: 10)
 
         try fixture.viewModel.startPractice(routine)
         fixture.clock.advance(by: 120)
-        _ = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
-        XCTAssertTrue(
-            fixture.viewModel.practiceTimer.updatePendingCompletion(
-                note: "Local draft only",
-                linkedProjectId: nil
-            )
+        let completion = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
+
+        let base = try fixture.viewModel.persistPracticeCompletionBase(
+            completion,
+            linkedProjectId: routine.projectId
         )
 
-        XCTAssertTrue(try fixture.repository.snapshot().practiceSessions.isEmpty)
-        XCTAssertEqual(try fixture.repository.pendingMutations(limit: 10), outboxBeforeTimer)
-        XCTAssertEqual(fixture.viewModel.practiceTimer.pendingCompletion?.note, "Local draft only")
+        XCTAssertEqual(base.session.id, fixture.viewModel.practiceTimer.pendingCompletion?.id)
+        XCTAssertEqual(try fixture.repository.snapshot().practiceSessions.map(\.id), [base.session.id])
+        XCTAssertTrue(fixture.viewModel.practiceTimer.clearPendingCompletion())
+        XCTAssertEqual(try fixture.repository.snapshot().practiceSessions.map(\.id), [base.session.id])
+        XCTAssertGreaterThan(try fixture.repository.pendingMutations(limit: 10).count, outboxBeforeTimer.count)
+    }
+
+    func testReflectionEnrichmentUpdatesTheBaseSessionByStableID() throws {
+        let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 100))
+        let routine = try fixture.viewModel.createPracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            blocks: [PracticeBlock(name: "Technique", targetMinutes: 30, ordinal: 0)]
+        )
+        try fixture.viewModel.startPractice(routine)
+        fixture.clock.advance(by: 120)
+        let completion = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
+        let base = try fixture.viewModel.persistPracticeCompletionBase(
+            completion,
+            linkedProjectId: routine.projectId
+        )
+
+        let enriched = try fixture.viewModel.savePracticeCompletion(
+            completion,
+            linkedProjectId: routine.projectId,
+            note: "Keep the cadence relaxed",
+            attentionMarker: "Return to the transition"
+        )
+
+        XCTAssertEqual(enriched.session.id, base.session.id)
+        XCTAssertEqual(fixture.viewModel.practiceSessions.count, 1)
+        XCTAssertEqual(fixture.viewModel.practiceSessions.first?.id, base.session.id)
+        XCTAssertEqual(fixture.viewModel.practiceSessions.first?.note, "Keep the cadence relaxed")
+        XCTAssertEqual(
+            fixture.viewModel.practiceSessions.first?.summary?.attentionMarker,
+            "Return to the transition"
+        )
+        XCTAssertNil(fixture.viewModel.practiceTimer.pendingCompletion)
+    }
+
+    func testRoutineDraftBlockOrdinalsStayContiguousAfterDeleteAndAppend() {
+        let first = PracticeBlock(name: "Warm up", targetMinutes: 5, ordinal: 0)
+        let second = PracticeBlock(name: "Scales", targetMinutes: 10, ordinal: 1)
+        let third = PracticeBlock(name: "Repertoire", targetMinutes: 15, ordinal: 2)
+        var draft = PracticeRoutineDraft()
+        draft.blocks = [first, second, third]
+
+        draft.removeBlock(second.id)
+        XCTAssertEqual(draft.blocks.map(\.ordinal), [0, 1])
+        XCTAssertEqual(draft.blocks.map(\.id), [first.id, third.id])
+
+        draft.appendDefaultBlock()
+        XCTAssertEqual(draft.blocks.map(\.ordinal), [0, 1, 2])
+        XCTAssertEqual(Set(draft.blocks.map(\.id)).count, draft.blocks.count)
     }
 
     func testActiveRoutineCannotPassEditorValidation() {

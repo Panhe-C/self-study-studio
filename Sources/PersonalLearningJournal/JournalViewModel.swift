@@ -1114,6 +1114,30 @@ public final class JournalViewModel: ObservableObject {
     }
 
     @discardableResult
+    public func persistPracticeCompletionBase(
+        _ completion: PracticeTimerCompletion,
+        linkedProjectId: UUID?
+    ) throws -> PracticeSessionSaveResult {
+        let pending = practiceTimer.pendingCompletion
+        let pendingMatchesCompletion = pending?.completion == completion
+        let result = try practiceService.saveSession(
+            sessionId: pendingMatchesCompletion ? pending!.id : UUID(),
+            routineId: completion.routineId,
+            recoverDeletedRoutine: pendingMatchesCompletion
+                && pending?.routinePresentation?.routineId == completion.routineId,
+            linkedProjectId: linkedProjectId,
+            startedAt: completion.startedAt,
+            endedAt: completion.endedAt,
+            activeDurationSeconds: completion.activeDurationSeconds,
+            segments: completion.segments,
+            summary: completion.summary,
+            note: nil
+        )
+        refresh()
+        return result
+    }
+
+    @discardableResult
     public func savePracticeCompletion(
         _ completion: PracticeTimerCompletion,
         linkedProjectId: UUID?,
@@ -1131,19 +1155,38 @@ public final class JournalViewModel: ObservableObject {
         } else {
             completion.summary
         }
-        let result = try practiceService.saveSession(
-            sessionId: pendingMatchesCompletion ? pending!.id : UUID(),
-            routineId: completion.routineId,
-            recoverDeletedRoutine: pendingMatchesCompletion
-                && pending?.routinePresentation?.routineId == completion.routineId,
-            linkedProjectId: linkedProjectId,
-            startedAt: completion.startedAt,
-            endedAt: completion.endedAt,
-            activeDurationSeconds: completion.activeDurationSeconds,
-            segments: completion.segments,
-            summary: summary,
-            note: note
-        )
+        let persistedPending = pendingMatchesCompletion && practiceSessions.contains {
+            $0.id == pending!.id && $0.deletedAt == nil
+        }
+        let result: PracticeSessionSaveResult
+        if persistedPending {
+            result = try practiceService.updateSessionReflection(
+                sessionId: pending!.id,
+                routineId: completion.routineId,
+                recoverDeletedRoutine: pending?.routinePresentation?.routineId == completion.routineId,
+                linkedProjectId: linkedProjectId,
+                startedAt: completion.startedAt,
+                endedAt: completion.endedAt,
+                activeDurationSeconds: completion.activeDurationSeconds,
+                segments: completion.segments,
+                summary: summary,
+                note: note
+            )
+        } else {
+            result = try practiceService.saveSession(
+                sessionId: pendingMatchesCompletion ? pending!.id : UUID(),
+                routineId: completion.routineId,
+                recoverDeletedRoutine: pendingMatchesCompletion
+                    && pending?.routinePresentation?.routineId == completion.routineId,
+                linkedProjectId: linkedProjectId,
+                startedAt: completion.startedAt,
+                endedAt: completion.endedAt,
+                activeDurationSeconds: completion.activeDurationSeconds,
+                segments: completion.segments,
+                summary: summary,
+                note: note
+            )
+        }
         refresh()
         if pendingMatchesCompletion, !practiceTimer.clearPendingCompletion() {
             throw PracticeTimerRuntimeError.pendingCompletionCouldNotClear
@@ -1151,9 +1194,8 @@ public final class JournalViewModel: ObservableObject {
         return result
     }
 
-    /// Finishes and persists a guided practice session in one user action.
-    /// Optional reflection is applied after the session payload is prepared;
-    /// repository failures leave the pending completion recoverable.
+    /// Finishes a guided session by persisting its base outcome first. Optional
+    /// reflection is then applied as a guarded update to that same session.
     @discardableResult
     public func finishAndSavePractice(
         linkedProjectId: UUID? = nil,
@@ -1161,12 +1203,22 @@ public final class JournalViewModel: ObservableObject {
         attentionMarker: String? = nil
     ) throws -> PracticeSessionSaveResult? {
         guard let completion = practiceTimer.finish() else { return nil }
-        return try savePracticeCompletion(
+        let base = try persistPracticeCompletionBase(
             completion,
-            linkedProjectId: linkedProjectId,
-            note: note,
-            attentionMarker: attentionMarker
+            linkedProjectId: linkedProjectId
         )
+        if note != nil || attentionMarker != nil {
+            return try savePracticeCompletion(
+                completion,
+                linkedProjectId: linkedProjectId,
+                note: note,
+                attentionMarker: attentionMarker
+            )
+        }
+        guard practiceTimer.clearPendingCompletion() else {
+            throw PracticeTimerRuntimeError.pendingCompletionCouldNotClear
+        }
+        return base
     }
 
     public func discardPractice() {

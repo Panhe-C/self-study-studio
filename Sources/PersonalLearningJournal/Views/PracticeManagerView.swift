@@ -571,18 +571,11 @@ private struct PracticeRoutineEditorView: View {
             }
             .onMove { source, destination in
                 draft.blocks.move(fromOffsets: source, toOffset: destination)
-                normalizeBlockOrdinals()
+                draft.normalizeBlockOrdinals()
             }
 
             Button {
-                let nextOrdinal = draft.blocks.count
-                draft.blocks.append(
-                    PracticeBlock(
-                        name: "Practice Block \(nextOrdinal + 1)",
-                        targetMinutes: max(1, draft.targetMinutes / max(1, nextOrdinal + 1)),
-                        ordinal: nextOrdinal
-                    )
-                )
+                draft.appendDefaultBlock()
             } label: {
                 Label("Add Block", systemImage: "plus.circle")
             }
@@ -600,7 +593,7 @@ private struct PracticeRoutineEditorView: View {
                     #endif
                 if draft.blocks.count > 1 {
                     Button(role: .destructive) {
-                        draft.blocks.removeAll { $0.id == block.wrappedValue.id }
+                        draft.removeBlock(block.wrappedValue.id)
                     } label: {
                         Image(systemName: "minus.circle")
                     }
@@ -841,11 +834,6 @@ private struct PracticeRoutineEditorView: View {
         )
     }
 
-    private func normalizeBlockOrdinals() {
-        for index in draft.blocks.indices {
-            draft.blocks[index].ordinal = index
-        }
-    }
 }
 
 private struct PracticeWeekdayOption {
@@ -854,7 +842,31 @@ private struct PracticeWeekdayOption {
     let fullName: String
 }
 
-private extension PracticeRoutineDraft {
+extension PracticeRoutineDraft {
+    mutating func normalizeBlockOrdinals() {
+        for index in blocks.indices {
+            blocks[index].ordinal = index
+        }
+    }
+
+    mutating func removeBlock(_ blockID: UUID) {
+        blocks.removeAll { $0.id == blockID }
+        normalizeBlockOrdinals()
+    }
+
+    mutating func appendDefaultBlock() {
+        normalizeBlockOrdinals()
+        let nextOrdinal = blocks.count
+        blocks.append(
+            PracticeBlock(
+                name: "Practice Block \(nextOrdinal + 1)",
+                targetMinutes: max(1, targetMinutes / max(1, nextOrdinal + 1)),
+                ordinal: nextOrdinal
+            )
+        )
+        normalizeBlockOrdinals()
+    }
+
     func normalizedBlocks() -> [PracticeBlock] {
         blocks.enumerated().map { index, block in
             var normalized = block

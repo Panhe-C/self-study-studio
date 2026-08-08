@@ -8,6 +8,7 @@ public enum PracticeValidationError: Error, Equatable, Sendable {
     case missingProject
     case blankName
     case invalidTargetMinutes
+    case invalidRoutineBlocks
     case invalidWeekdays
     case invalidReminderTime
     case invalidSessionTiming
@@ -425,6 +426,13 @@ public struct PracticeRoutine: Codable, Equatable, Identifiable, Sendable {
         normalized.name = name.trimmedForJournal
         normalized.symbolName = symbolName.trimmedForJournal
         normalized.blocks = try blocks.map { try $0.validated() }
+        let blockIDs = Set(normalized.blocks.map(\.id))
+        let ordinals = Set(normalized.blocks.map(\.ordinal))
+        guard blockIDs.count == normalized.blocks.count,
+              ordinals.count == normalized.blocks.count,
+              ordinals.sorted() == Array(0..<normalized.blocks.count) else {
+            throw PracticeValidationError.invalidRoutineBlocks
+        }
         return normalized
     }
 
@@ -559,12 +567,66 @@ public struct PracticeSession: Codable, Equatable, Identifiable, Sendable {
         var normalized = self
         normalized.note = note?.trimmedForJournal
         normalized.segments = try segments.map { try $0.validated() }
-        if let summary {
-            guard summary.totalActiveDurationSeconds >= 0 else {
+        let hasSegments = !normalized.segments.isEmpty
+        let hasSummary = summary != nil
+        // A record with neither nested field is the explicitly supported
+        // legacy shape. Once either current-v2 field is present, both sides
+        // must be present so their cross-field invariants can be checked.
+        guard hasSegments == hasSummary else {
+            throw PracticeValidationError.invalidSessionTiming
+        }
+        guard let summary else {
+            normalized.summary = nil
+            return normalized
+        }
+
+        guard summary.totalActiveDurationSeconds >= 0 else {
+            throw PracticeValidationError.invalidSessionTiming
+        }
+
+        var segmentDurations: [UUID: Int] = [:]
+        var segmentVisits: [UUID: Int] = [:]
+        var segmentActiveTotal = 0
+        for segment in normalized.segments where !segment.isPause && segment.activeDurationSeconds > 0 {
+            guard !segmentActiveTotal.addingReportingOverflow(segment.activeDurationSeconds).overflow else {
                 throw PracticeValidationError.invalidSessionTiming
             }
-            normalized.summary = summary
+            segmentActiveTotal += segment.activeDurationSeconds
+            guard !(segmentDurations[segment.blockID, default: 0]
+                .addingReportingOverflow(segment.activeDurationSeconds).overflow) else {
+                throw PracticeValidationError.invalidSessionTiming
+            }
+            segmentDurations[segment.blockID, default: 0] += segment.activeDurationSeconds
+            segmentVisits[segment.blockID, default: 0] += 1
         }
+        guard segmentActiveTotal == activeDurationSeconds,
+              summary.totalActiveDurationSeconds == activeDurationSeconds else {
+            throw PracticeValidationError.invalidSessionTiming
+        }
+
+        var summaryIDs = Set<UUID>()
+        var summaryTotal = 0
+        for blockSummary in summary.blockSummaries {
+            guard summaryIDs.insert(blockSummary.blockID).inserted,
+                  (1...1_440).contains(blockSummary.targetMinutes),
+                  blockSummary.activeDurationSeconds >= 0,
+                  blockSummary.visitCount >= 0,
+                  blockSummary.wasSkipped == (blockSummary.activeDurationSeconds == 0),
+                  blockSummary.wasExtended == (blockSummary.activeDurationSeconds > blockSummary.targetMinutes * 60),
+                  blockSummary.activeDurationSeconds == segmentDurations[blockSummary.blockID, default: 0],
+                  blockSummary.visitCount == segmentVisits[blockSummary.blockID, default: 0] else {
+                throw PracticeValidationError.invalidSessionTiming
+            }
+            guard !summaryTotal.addingReportingOverflow(blockSummary.activeDurationSeconds).overflow else {
+                throw PracticeValidationError.invalidSessionTiming
+            }
+            summaryTotal += blockSummary.activeDurationSeconds
+        }
+        guard summaryTotal == summary.totalActiveDurationSeconds,
+              segmentDurations.keys.allSatisfy({ summaryIDs.contains($0) }) else {
+            throw PracticeValidationError.invalidSessionTiming
+        }
+        normalized.summary = summary
         return normalized
     }
 

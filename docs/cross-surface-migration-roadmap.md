@@ -231,10 +231,11 @@ startup gate are wired.
 
 **Current.** PracticeTimerRuntime persists the ordered blocks, current Block, active segments,
 skip state, and a recoverable pending completion. Pause time is excluded; direct selection, skip,
-extension, and revisits remain attributable to one session. Save Practice writes the Practice
-Session, segments, observed Block/Focus snapshot, summary, optional note, and optional Attention
-Marker in one repository transaction, then clears the pending local draft. Existing flat timers
-recover as one stable Block with recovered active time; corrupt or impossible state fails closed.
+extension, and revisits remain attributable to one session. Finish writes the base Practice Session,
+segments, observed Block/Focus snapshot, and summary in one repository transaction before optional
+reflection. Note and Attention Marker are guarded updates to that same session; leaving reflection
+only clears the local draft. Existing flat timers recover as one stable Block with recovered active
+time; corrupt or impossible state fails closed.
 Published plan revisions keep their routine structure locked and require a new revision. Web
 remains history/configuration only for practice timing.
 

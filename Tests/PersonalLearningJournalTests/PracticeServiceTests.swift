@@ -261,6 +261,34 @@ final class PracticeServiceTests: XCTestCase {
         )
     }
 
+    func testReflectionUpdateRequiresAnExistingBaseSession() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = PracticeService(repository: repository)
+        let routine = try service.createRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let before = try repository.snapshot()
+
+        XCTAssertThrowsError(
+            try service.updateSessionReflection(
+                sessionId: UUID(),
+                routineId: routine.id,
+                linkedProjectId: nil,
+                startedAt: Date(timeIntervalSince1970: 100),
+                endedAt: Date(timeIntervalSince1970: 160),
+                activeDurationSeconds: 60,
+                note: "Should not create a session"
+            )
+        ) { error in
+            XCTAssertEqual(error as? PracticeServiceError, .missingSession)
+        }
+        XCTAssertEqual(try repository.snapshot(), before)
+    }
+
     func testRoutineProjectWinsOverMissingCompletionOverrideAndCreatesLearningSession() throws {
         let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = PracticeService(repository: repository)
