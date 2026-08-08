@@ -89,6 +89,9 @@
 		100000000000000000000156 /* AppLockController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000257 /* AppLockController.swift */; };
 		100000000000000000000157 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025A /* Localizable.strings */; };
 		100000000000000000000158 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025B /* Assets.xcassets */; };
+		100000000000000000000159 /* JournalRecordContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025C /* JournalRecordContract.swift */; };
+		10000000000000000000015A /* contract-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025D /* contract-v1.json */; };
+		10000000000000000000015B /* fixtures-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025E /* fixtures-v1.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -174,6 +177,9 @@
 		100000000000000000000256 /* TrashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/TrashView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000257 /* AppLockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Security/AppLockController.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000025B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = App/Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		10000000000000000000025C /* JournalRecordContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Contracts/JournalRecordContract.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000025D /* contract-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Sources/PersonalLearningJournal/Resources/JournalContract/contract-v1.json; sourceTree = SOURCE_ROOT; };
+		10000000000000000000025E /* fixtures-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Sources/PersonalLearningJournal/Resources/JournalContract/fixtures-v1.json; sourceTree = SOURCE_ROOT; };
 		100000000000000000000258 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		100000000000000000000259 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -274,6 +280,9 @@
 				100000000000000000000255 /* JournalArchiveService.swift */,
 				100000000000000000000256 /* TrashView.swift */,
 				100000000000000000000257 /* AppLockController.swift */,
+				10000000000000000000025C /* JournalRecordContract.swift */,
+				10000000000000000000025D /* contract-v1.json */,
+				10000000000000000000025E /* fixtures-v1.json */,
 				10000000000000000000025B /* Assets.xcassets */,
 				10000000000000000000025A /* Localizable.strings */,
 				10000000000000000000020B /* ProjectsView.swift */,
@@ -357,6 +366,8 @@
 			files = (
 				100000000000000000000157 /* Localizable.strings in Resources */,
 				100000000000000000000158 /* Assets.xcassets in Resources */,
+				10000000000000000000015A /* contract-v1.json in Resources */,
+				10000000000000000000015B /* fixtures-v1.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -447,6 +458,7 @@
 				100000000000000000000154 /* JournalArchiveService.swift in Sources */,
 				100000000000000000000155 /* TrashView.swift in Sources */,
 				100000000000000000000156 /* AppLockController.swift in Sources */,
+				100000000000000000000159 /* JournalRecordContract.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

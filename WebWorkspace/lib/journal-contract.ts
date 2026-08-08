@@ -31,6 +31,20 @@ export type JournalRecordFieldDefinition = {
   variants?: string[];
   minimum?: number;
   maximum?: number;
+  sort?: string;
+  objectFields?: Record<string, JournalRecordNestedFieldDefinition>;
+  variantFields?: Record<string, Record<string, JournalRecordNestedFieldDefinition>>;
+};
+
+export type JournalRecordNestedFieldDefinition = {
+  type: string;
+  required: boolean;
+  trim?: boolean;
+  nonEmpty?: boolean;
+  values?: string[];
+  minimum?: number;
+  maximum?: number;
+  format?: string;
 };
 
 export type JournalRecordDefinition = {
@@ -40,6 +54,7 @@ export type JournalRecordDefinition = {
 
 export type JournalRecordContractDocument = {
   version: number;
+  formats: Record<string, string>;
   records: Record<JournalRecordKind, JournalRecordDefinition>;
 };
 
@@ -108,7 +123,7 @@ export function decodeJournalRecord(
       );
     }
     if (Object.hasOwn(payload, field)) {
-      validateField(payload[field], field, fieldDefinition, kind);
+      validateField(payload[field], field, fieldDefinition, kind, contract);
     }
   }
   for (const field of keys) {
@@ -122,7 +137,7 @@ export function decodeJournalRecord(
   }
 
   const normalized = normalizePayload(payload, definition.fields);
-  validateCrossFieldRules(normalized, kind);
+  validateCrossFieldRules(normalized, kind, contract);
   return { kind, payload: normalized };
 }
 
@@ -135,17 +150,28 @@ function validateField(
   field: string,
   definition: JournalRecordFieldDefinition,
   kind: JournalRecordKind,
+  contract: JournalRecordContractDocument,
 ) {
   if (value === null) {
     if (definition.required) invalid(kind, field);
     return;
   }
+  validateValue(value, field, definition, kind, contract);
+}
+
+function validateValue(
+  value: unknown,
+  field: string,
+  definition: JournalRecordFieldDefinition | JournalRecordNestedFieldDefinition,
+  kind: JournalRecordKind,
+  contract: JournalRecordContractDocument,
+) {
   switch (definition.type) {
     case "uuid":
       if (typeof value !== "string" || !isUUID(value)) invalid(kind, field);
       break;
     case "date":
-      if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) {
+      if (typeof value !== "string" || !isISO8601(value, contract, definition.format)) {
         invalid(kind, field);
       }
       break;
@@ -194,16 +220,86 @@ function validateField(
         invalid(kind, field);
       }
       break;
-    case "json":
+    case "object":
+      if (!isObject(value) || !definition.objectFields) invalid(kind, field);
+      else validateObject(value, field, definition.objectFields, kind, contract);
       break;
     case "taggedUnion":
       if (!isObject(value) || Object.keys(value).length !== 1 ||
           !definition.variants?.includes(Object.keys(value)[0])) {
         invalid(kind, field);
       }
+      if (isObject(value)) {
+        const tag = Object.keys(value)[0];
+        const inner = value[tag];
+        const fields = definition.variantFields?.[tag];
+        if (!isObject(inner) || !fields) invalid(kind, field);
+        else validateObject(inner, `${field}.${tag}`, fields, kind, contract);
+      }
+      break;
+    case "uuidEnumMap":
+      validatePairs(value, field, kind, "enum", definition.values);
+      break;
+    case "uuidStringMap":
+      validatePairs(value, field, kind, "string");
+      break;
+    case "stringArrayMap":
+      validatePairs(value, field, kind, "stringArray");
+      break;
+    case "stringArrayDictionary":
+      if (!isObject(value) || !Object.values(value).every((item) => Array.isArray(item) && item.every((entry) => typeof entry === "string"))) {
+        invalid(kind, field);
+      }
       break;
     default:
       invalid(kind, field);
+  }
+}
+
+function validateObject(
+  value: Record<string, unknown>,
+  field: string,
+  fields: Record<string, JournalRecordNestedFieldDefinition>,
+  kind: JournalRecordKind,
+  contract: JournalRecordContractDocument,
+) {
+  for (const [name, definition] of Object.entries(fields)) {
+    if (!Object.hasOwn(value, name)) {
+      if (definition.required) invalid(kind, `${field}.${name}`);
+      continue;
+    }
+    const nested = value[name];
+    if (nested === null) {
+      if (definition.required) invalid(kind, `${field}.${name}`);
+      continue;
+    }
+    validateValue(nested, `${field}.${name}`, definition, kind, contract);
+  }
+  for (const name of Object.keys(value)) {
+    if (!fields[name]) invalid(kind, `${field}.${name}`);
+  }
+}
+
+function validatePairs(
+  value: unknown,
+  field: string,
+  kind: JournalRecordKind,
+  valueType: "enum" | "string" | "stringArray",
+  values?: string[],
+) {
+  if (!Array.isArray(value) || value.length % 2 !== 0) invalid(kind, field);
+  const keys = new Set<string>();
+  for (let index = 0; index < value.length; index += 2) {
+    const key = value[index];
+    if (typeof key !== "string" || keys.has(key)) invalid(kind, field);
+    keys.add(key);
+    if (valueType !== "stringArray" && !isUUID(key)) invalid(kind, field);
+    const item = value[index + 1];
+    if (valueType === "stringArray") {
+      if (!Array.isArray(item) || !item.every((entry) => typeof entry === "string")) invalid(kind, field);
+    } else if (typeof item !== "string" || (valueType === "enum" && !values?.includes(item))) {
+      invalid(kind, field);
+    }
   }
 }
 
@@ -220,19 +316,42 @@ function normalizePayload(
       normalized[field] = value.map((item) =>
         typeof item === "string" ? item.trim() : item,
       );
+      if (definition.sort === "ascending" && normalized[field].every((item) => typeof item === "number")) {
+        normalized[field].sort((a, b) => a - b);
+      }
     }
-  }
-  const trigger = normalized.trigger;
-  if (isObject(trigger) && isObject(trigger.milestone) && typeof trigger.milestone._0 === "string") {
-    trigger.milestone._0 = trigger.milestone._0.trim();
+    if (definition.type === "object" && isObject(value) && definition.objectFields) {
+      normalizeObject(value, definition.objectFields);
+    } else if (definition.type === "taggedUnion" && isObject(value) && definition.variantFields) {
+      const tag = Object.keys(value)[0];
+      const inner = value[tag];
+      const innerFields = definition.variantFields[tag];
+      if (isObject(inner) && innerFields) normalizeObject(inner, innerFields);
+    }
   }
   return normalized;
 }
 
-function validateCrossFieldRules(payload: JournalRecordPayload, kind: JournalRecordKind) {
+function normalizeObject(
+  object: Record<string, unknown>,
+  fields: Record<string, JournalRecordNestedFieldDefinition>,
+) {
+  for (const [field, definition] of Object.entries(fields)) {
+    const value = object[field];
+    if (!definition.trim || value === undefined || value === null) continue;
+    if (typeof value === "string") object[field] = value.trim();
+    else if (Array.isArray(value)) object[field] = value.map((item) => typeof item === "string" ? item.trim() : item);
+  }
+}
+
+function validateCrossFieldRules(
+  payload: JournalRecordPayload,
+  kind: JournalRecordKind,
+  contract: JournalRecordContractDocument,
+) {
   const date = (field: string) => {
     const value = payload[field];
-    return typeof value === "string" ? Date.parse(value) : Number.NaN;
+    return typeof value === "string" && isISO8601(value, contract) ? Date.parse(value) : Number.NaN;
   };
   const integer = (field: string) =>
     typeof payload[field] === "number" ? payload[field] : Number.NaN;
@@ -312,6 +431,17 @@ function invalid(kind: JournalRecordKind, field: string): never {
 
 function isUUID(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isISO8601(
+  value: string,
+  contract: JournalRecordContractDocument,
+  format = "iso8601",
+): boolean {
+  const pattern = contract.formats?.[format];
+  if (!pattern) return false;
+  const expression = new RegExp(pattern);
+  return expression.test(value) && Number.isFinite(Date.parse(value));
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

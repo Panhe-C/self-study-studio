@@ -15,6 +15,9 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
     public let variants: [String]?
     public let minimum: Int?
     public let maximum: Int?
+    public let sort: String?
+    public let objectFields: [String: JournalRecordNestedFieldDefinition]?
+    public let variantFields: [String: [String: JournalRecordNestedFieldDefinition]]?
 
     private enum CodingKeys: String, CodingKey {
         case type
@@ -25,6 +28,9 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
         case variants
         case minimum
         case maximum
+        case sort
+        case objectFields
+        case variantFields
     }
 
     public init(
@@ -35,7 +41,10 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
         values: [String]? = nil,
         variants: [String]? = nil,
         minimum: Int? = nil,
-        maximum: Int? = nil
+        maximum: Int? = nil,
+        sort: String? = nil,
+        objectFields: [String: JournalRecordNestedFieldDefinition]? = nil,
+        variantFields: [String: [String: JournalRecordNestedFieldDefinition]]? = nil
     ) {
         self.type = type
         self.isRequired = isRequired
@@ -45,6 +54,9 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
         self.variants = variants
         self.minimum = minimum
         self.maximum = maximum
+        self.sort = sort
+        self.objectFields = objectFields
+        self.variantFields = variantFields
     }
 
     public init(from decoder: Decoder) throws {
@@ -57,7 +69,10 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
             values: try container.decodeIfPresent([String].self, forKey: .values),
             variants: try container.decodeIfPresent([String].self, forKey: .variants),
             minimum: try container.decodeIfPresent(Int.self, forKey: .minimum),
-            maximum: try container.decodeIfPresent(Int.self, forKey: .maximum)
+            maximum: try container.decodeIfPresent(Int.self, forKey: .maximum),
+            sort: try container.decodeIfPresent(String.self, forKey: .sort),
+            objectFields: try container.decodeIfPresent([String: JournalRecordNestedFieldDefinition].self, forKey: .objectFields),
+            variantFields: try container.decodeIfPresent([String: [String: JournalRecordNestedFieldDefinition]].self, forKey: .variantFields)
         )
     }
 
@@ -71,6 +86,79 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
         try container.encodeIfPresent(variants, forKey: .variants)
         try container.encodeIfPresent(minimum, forKey: .minimum)
         try container.encodeIfPresent(maximum, forKey: .maximum)
+        try container.encodeIfPresent(sort, forKey: .sort)
+        try container.encodeIfPresent(objectFields, forKey: .objectFields)
+        try container.encodeIfPresent(variantFields, forKey: .variantFields)
+    }
+}
+
+/// A deliberately non-recursive schema node for the finite nested values in
+/// the shared contract (tagged-union payloads and reminder times).
+public struct JournalRecordNestedFieldDefinition: Codable, Equatable, Sendable {
+    public let type: String
+    public let isRequired: Bool
+    public let trim: Bool
+    public let nonEmpty: Bool
+    public let values: [String]?
+    public let minimum: Int?
+    public let maximum: Int?
+    public let format: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case isRequired = "required"
+        case trim
+        case nonEmpty
+        case values
+        case minimum
+        case maximum
+        case format
+    }
+
+    public init(
+        type: String,
+        isRequired: Bool,
+        trim: Bool = false,
+        nonEmpty: Bool = false,
+        values: [String]? = nil,
+        minimum: Int? = nil,
+        maximum: Int? = nil,
+        format: String? = nil
+    ) {
+        self.type = type
+        self.isRequired = isRequired
+        self.trim = trim
+        self.nonEmpty = nonEmpty
+        self.values = values
+        self.minimum = minimum
+        self.maximum = maximum
+        self.format = format
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            type: try container.decode(String.self, forKey: .type),
+            isRequired: try container.decode(Bool.self, forKey: .isRequired),
+            trim: try container.decodeIfPresent(Bool.self, forKey: .trim) ?? false,
+            nonEmpty: try container.decodeIfPresent(Bool.self, forKey: .nonEmpty) ?? false,
+            values: try container.decodeIfPresent([String].self, forKey: .values),
+            minimum: try container.decodeIfPresent(Int.self, forKey: .minimum),
+            maximum: try container.decodeIfPresent(Int.self, forKey: .maximum),
+            format: try container.decodeIfPresent(String.self, forKey: .format)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(isRequired, forKey: .isRequired)
+        try container.encode(trim, forKey: .trim)
+        try container.encode(nonEmpty, forKey: .nonEmpty)
+        try container.encodeIfPresent(values, forKey: .values)
+        try container.encodeIfPresent(minimum, forKey: .minimum)
+        try container.encodeIfPresent(maximum, forKey: .maximum)
+        try container.encodeIfPresent(format, forKey: .format)
     }
 }
 
@@ -86,10 +174,12 @@ public struct JournalRecordDefinition: Codable, Equatable, Sendable {
 
 public struct JournalRecordContractDocument: Codable, Equatable, Sendable {
     public let version: Int
+    public let formats: [String: String]
     public let records: [String: JournalRecordDefinition]
 
-    public init(version: Int, records: [String: JournalRecordDefinition]) {
+    public init(version: Int, formats: [String: String] = [:], records: [String: JournalRecordDefinition]) {
         self.version = version
+        self.formats = formats
         self.records = records
     }
 }
@@ -128,10 +218,12 @@ public enum JournalRecordContract {
     }
 
     static func resource(named name: String) throws -> Data {
-        guard let url = Bundle.module.url(
-            forResource: name,
-            withExtension: "json"
-        ) else {
+        #if SWIFT_PACKAGE
+        let bundle = Bundle.module
+        #else
+        let bundle = Bundle.main
+        #endif
+        guard let url = bundle.url(forResource: name, withExtension: "json") else {
             throw JournalRecordContractError.malformedResource("missing JournalContract/\(name).json")
         }
         return try Data(contentsOf: url)
@@ -142,11 +234,13 @@ public struct JournalContractFixture {
     public let id: String
     public let kind: JournalRecordKind
     public let payload: Data
+    public let expectedNormalized: Data
 
-    public init(id: String, kind: JournalRecordKind, payload: Data) {
+    public init(id: String, kind: JournalRecordKind, payload: Data, expectedNormalized: Data) {
         self.id = id
         self.kind = kind
         self.payload = payload
+        self.expectedNormalized = expectedNormalized
     }
 }
 
@@ -182,10 +276,18 @@ public enum JournalContractFixtures {
                       JSONSerialization.isValidJSONObject(payloadObject) else {
                     throw JournalRecordContractError.malformedResource("invalid \(key) fixture")
                 }
+                guard key != "valid" || value["expectedNormalized"] != nil else {
+                    throw JournalRecordContractError.malformedResource("missing normalization for \(id)")
+                }
+                let expectedObject = (value["expectedNormalized"] as? [String: Any]) ?? payloadObject
+                guard JSONSerialization.isValidJSONObject(expectedObject) else {
+                    throw JournalRecordContractError.malformedResource("invalid \(key) fixture normalization")
+                }
                 return JournalContractFixture(
                     id: id,
                     kind: kind,
-                    payload: try JSONSerialization.data(withJSONObject: payloadObject, options: [.sortedKeys])
+                    payload: try JSONSerialization.data(withJSONObject: payloadObject, options: [.sortedKeys]),
+                    expectedNormalized: try JSONSerialization.data(withJSONObject: expectedObject, options: [.sortedKeys])
                 )
             }
         }
@@ -222,7 +324,8 @@ public enum JournalRecordContractDecoder {
                 value,
                 field: name,
                 definition: definition,
-                kind: kind
+                kind: kind,
+                document: document
             )
         }
         for name in fields where definition.fields[name] == nil {
@@ -231,7 +334,7 @@ public enum JournalRecordContractDecoder {
 
         var normalized = object
         normalize(&normalized, fields: definition.fields)
-        try validateCrossFieldRules(normalized, kind: kind)
+        try validateCrossFieldRules(normalized, kind: kind, document: document)
         let normalizedData = try JSONSerialization.data(withJSONObject: normalized, options: [.sortedKeys])
         do {
             return try decodeEntity(normalizedData, kind: kind)
@@ -246,92 +349,176 @@ public enum JournalRecordContractDecoder {
         _ value: Any,
         field: String,
         definition: JournalRecordFieldDefinition,
-        kind: JournalRecordKind
+        kind: JournalRecordKind,
+        document: JournalRecordContractDocument
     ) throws {
         if value is NSNull {
-            if definition.isRequired {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+            if definition.isRequired { throw invalid(kind, field) }
             return
         }
+        try validateValue(
+            value,
+            field: field,
+            type: definition.type,
+            required: definition.isRequired,
+            nonEmpty: definition.nonEmpty,
+            values: definition.values,
+            minimum: definition.minimum,
+            maximum: definition.maximum,
+            format: nil,
+            objectFields: definition.objectFields,
+            variants: definition.variants,
+            variantFields: definition.variantFields,
+            kind: kind,
+            document: document
+        )
+    }
 
-        switch definition.type {
+    private static func validateValue(
+        _ value: Any,
+        field: String,
+        type: String,
+        required: Bool,
+        nonEmpty: Bool,
+        values: [String]?,
+        minimum: Int?,
+        maximum: Int?,
+        format: String?,
+        objectFields: [String: JournalRecordNestedFieldDefinition]?,
+        variants: [String]?,
+        variantFields: [String: [String: JournalRecordNestedFieldDefinition]]?,
+        kind: JournalRecordKind,
+        document: JournalRecordContractDocument
+    ) throws {
+        if value is NSNull {
+            if required { throw invalid(kind, field) }
+            return
+        }
+        switch type {
         case "uuid":
-            guard value is String, UUID(uuidString: value as? String ?? "") != nil else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+            guard value is String, UUID(uuidString: value as? String ?? "") != nil else { throw invalid(kind, field) }
         case "date":
-            guard value is String, parseDate(value as? String ?? "") != nil else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+            guard let string = value as? String, parseDate(string, document: document, format: format) != nil else { throw invalid(kind, field) }
         case "url":
             guard let string = value as? String,
                   let url = URL(string: string),
                   let scheme = url.scheme?.lowercased(),
                   ["http", "https"].contains(scheme),
-                  url.host?.isEmpty == false else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+                  url.host?.isEmpty == false else { throw invalid(kind, field) }
         case "string":
-            guard let string = value as? String else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
-            if definition.nonEmpty && string.trimmedForJournal.isEmpty {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+            guard let string = value as? String else { throw invalid(kind, field) }
+            if nonEmpty && string.trimmedForJournal.isEmpty { throw invalid(kind, field) }
         case "enum":
-            guard let string = value as? String,
-                  definition.values?.contains(string) == true else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+            guard let string = value as? String, values?.contains(string) == true else { throw invalid(kind, field) }
         case "integer":
             guard let number = value as? NSNumber,
                   !isJSONBoolean(number),
-                  number.doubleValue.rounded() == number.doubleValue else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
-            if let minimum = definition.minimum, number.intValue < minimum {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
-            if let maximum = definition.maximum, number.intValue > maximum {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+                  number.doubleValue.rounded() == number.doubleValue else { throw invalid(kind, field) }
+            if let minimum, number.intValue < minimum { throw invalid(kind, field) }
+            if let maximum, number.intValue > maximum { throw invalid(kind, field) }
         case "boolean":
-            guard let number = value as? NSNumber, isJSONBoolean(number) else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+            guard let number = value as? NSNumber, isJSONBoolean(number) else { throw invalid(kind, field) }
         case "stringArray":
-            guard let values = value as? [Any], values.allSatisfy({ $0 is String }) else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+            guard let items = value as? [Any], items.allSatisfy({ $0 is String }) else { throw invalid(kind, field) }
         case "uuidArray":
-            guard let values = value as? [Any],
-                  values.allSatisfy({ value in
-                      guard let string = value as? String else { return false }
-                      return UUID(uuidString: string) != nil
-                  }) else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
+            guard let items = value as? [Any], items.allSatisfy({ item in
+                guard let string = item as? String else { return false }
+                return UUID(uuidString: string) != nil
+            }) else { throw invalid(kind, field) }
         case "integerArray":
-            guard let values = value as? [Any],
-                  values.allSatisfy({
-                      guard let number = $0 as? NSNumber else { return false }
-                      return !isJSONBoolean(number)
-                  }) else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
-            }
-        case "json":
-            break
+            guard let items = value as? [Any], items.allSatisfy({ item in
+                guard let number = item as? NSNumber else { return false }
+                return !isJSONBoolean(number) && number.doubleValue.rounded() == number.doubleValue
+            }) else { throw invalid(kind, field) }
+        case "object":
+            guard let object = value as? [String: Any], let objectFields else { throw invalid(kind, field) }
+            try validateObject(object, field: field, fields: objectFields, kind: kind, document: document)
         case "taggedUnion":
             guard let object = value as? [String: Any],
                   object.count == 1,
                   let tag = object.keys.first,
-                  definition.variants?.contains(tag) == true else {
-                throw JournalRecordContractError.invalidField(kind: kind, field: field)
+                  variants?.contains(tag) == true,
+                  let inner = object[tag] as? [String: Any] else { throw invalid(kind, field) }
+            if let fields = variantFields?[tag] {
+                try validateObject(inner, field: "\(field).\(tag)", fields: fields, kind: kind, document: document)
             }
+        case "uuidEnumMap":
+            try validatePairs(value, field: field, valueType: "enum", values: values, kind: kind)
+        case "uuidStringMap":
+            try validatePairs(value, field: field, valueType: "string", values: nil, kind: kind)
+        case "stringArrayMap":
+            try validatePairs(value, field: field, valueType: "stringArray", values: nil, kind: kind)
+        case "stringArrayDictionary":
+            guard let dictionary = value as? [String: Any], dictionary.values.allSatisfy({ item in
+                guard let values = item as? [Any] else { return false }
+                return values.allSatisfy { $0 is String }
+            }) else { throw invalid(kind, field) }
         default:
-            throw JournalRecordContractError.invalidField(kind: kind, field: field)
+            throw invalid(kind, field)
         }
+    }
+
+    private static func validateObject(
+        _ object: [String: Any],
+        field: String,
+        fields: [String: JournalRecordNestedFieldDefinition],
+        kind: JournalRecordKind,
+        document: JournalRecordContractDocument
+    ) throws {
+        for (name, definition) in fields {
+            guard let value = object[name] else {
+                if definition.isRequired { throw invalid(kind, "\(field).\(name)") }
+                continue
+            }
+            try validateValue(
+                value,
+                field: "\(field).\(name)",
+                type: definition.type,
+                required: definition.isRequired,
+                nonEmpty: definition.nonEmpty,
+                values: definition.values,
+                minimum: definition.minimum,
+                maximum: definition.maximum,
+                format: definition.format,
+                objectFields: nil,
+                variants: nil,
+                variantFields: nil,
+                kind: kind,
+                document: document
+            )
+        }
+        for name in object.keys where fields[name] == nil { throw unknown(kind, "\(field).\(name)") }
+    }
+
+    private static func validatePairs(
+        _ value: Any,
+        field: String,
+        valueType: String,
+        values: [String]?,
+        kind: JournalRecordKind
+    ) throws {
+        guard let items = value as? [Any], items.count.isMultiple(of: 2) else { throw invalid(kind, field) }
+        var keys = Set<String>()
+        for index in stride(from: 0, to: items.count, by: 2) {
+            guard let key = items[index] as? String, !keys.contains(key) else { throw invalid(kind, field) }
+            keys.insert(key)
+            if valueType == "stringArray" {
+                guard let values = items[index + 1] as? [Any], values.allSatisfy({ $0 is String }) else { throw invalid(kind, field) }
+            } else {
+                guard let string = items[index + 1] as? String else { throw invalid(kind, field) }
+                if valueType == "enum" && values?.contains(string) != true { throw invalid(kind, field) }
+            }
+            if !valueType.isEmpty && UUID(uuidString: key) == nil && valueType != "stringArray" { throw invalid(kind, field) }
+            if valueType == "stringArray" && key.isEmpty { throw invalid(kind, field) }
+        }
+    }
+
+    private static func invalid(_ kind: JournalRecordKind, _ field: String) -> JournalRecordContractError {
+        .invalidField(kind: kind, field: field)
+    }
+
+    private static func unknown(_ kind: JournalRecordKind, _ field: String) -> JournalRecordContractError {
+        .unknownField(kind: kind, field: field)
     }
 
     private static func normalize(
@@ -345,22 +532,50 @@ public enum JournalRecordContractDecoder {
             } else if definition.trim, let values = value as? [Any] {
                 object[name] = values.map { ($0 as? String)?.trimmedForJournal ?? $0 }
             }
-        }
-        if var trigger = object["trigger"] as? [String: Any] {
-            if let milestone = trigger["milestone"] as? [String: Any],
-               let value = milestone["_0"] as? String {
-                trigger["milestone"] = ["_0": value.trimmedForJournal]
+            if definition.sort == "ascending", let values = object[name] as? [Any] {
+                object[name] = values.sorted {
+                    (($0 as? NSNumber)?.intValue ?? 0) < (($1 as? NSNumber)?.intValue ?? 0)
+                }
             }
-            object["trigger"] = trigger
+            if definition.type == "object",
+               let nested = definition.objectFields,
+               var nestedObject = value as? [String: Any] {
+                normalizeObject(&nestedObject, fields: nested)
+                object[name] = nestedObject
+            } else if definition.type == "taggedUnion",
+                      let variants = definition.variantFields,
+                      var union = value as? [String: Any],
+                      let tag = union.keys.first,
+                      var inner = union[tag] as? [String: Any],
+                      let nested = variants[tag] {
+                normalizeObject(&inner, fields: nested)
+                union[tag] = inner
+                object[name] = union
+            }
+        }
+    }
+
+    private static func normalizeObject(
+        _ object: inout [String: Any],
+        fields: [String: JournalRecordNestedFieldDefinition]
+    ) {
+        for (name, definition) in fields {
+            guard let value = object[name] else { continue }
+            if definition.trim, let string = value as? String {
+                object[name] = string.trimmedForJournal
+            } else if definition.trim, let values = value as? [Any] {
+                object[name] = values.map { ($0 as? String)?.trimmedForJournal ?? $0 }
+            }
         }
     }
 
     private static func validateCrossFieldRules(
         _ object: [String: Any],
-        kind: JournalRecordKind
+        kind: JournalRecordKind,
+        document: JournalRecordContractDocument
     ) throws {
         func date(_ name: String) -> Date? {
-            parseDate(object[name] as? String ?? "")
+            parseDate(object[name] as? String ?? "", document: document, format: nil)
         }
         func integer(_ name: String) -> Int? {
             (object[name] as? NSNumber)?.intValue
@@ -474,8 +689,17 @@ public enum JournalRecordContractDecoder {
         }
     }
 
-    private static func parseDate(_ value: String) -> Date? {
-        ISO8601DateFormatter().date(from: value)
+    private static func parseDate(
+        _ value: String,
+        document: JournalRecordContractDocument,
+        format: String?
+    ) -> Date? {
+        let formatName = format ?? "iso8601"
+        guard let pattern = document.formats[formatName],
+              value.range(of: pattern, options: .regularExpression) != nil else {
+            return nil
+        }
+        return ISO8601DateFormatter().date(from: value)
     }
 
     private static func isJSONBoolean(_ number: NSNumber) -> Bool {
@@ -490,11 +714,21 @@ public enum JournalRecordContractEncoder {
         let wrapperData = try JSONEncoder.journal.encode(entity)
         guard let wrapper = try JSONSerialization.jsonObject(with: wrapperData) as? [String: Any],
               let wrappedPayload = wrapper[entity.reference.kind.rawValue] as? [String: Any],
-              let payload = wrappedPayload["_0"] as? [String: Any] else {
+              var payload = wrappedPayload["_0"] as? [String: Any] else {
             throw JournalRecordContractError.invalidField(
                 kind: entity.reference.kind,
                 field: "payload"
             )
+        }
+        if let fields = try? JournalRecordContract.load().records[entity.reference.kind.rawValue]?.fields {
+            for (name, definition) in fields
+                where definition.sort == "ascending" {
+                if let values = payload[name] as? [Any] {
+                    payload[name] = values.sorted {
+                        (($0 as? NSNumber)?.intValue ?? 0) < (($1 as? NSNumber)?.intValue ?? 0)
+                    }
+                }
+            }
         }
         return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     }

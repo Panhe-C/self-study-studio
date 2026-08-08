@@ -41,20 +41,8 @@ test("decodes every shared valid fixture with the same normalization", () => {
   for (const fixture of fixtureSuite.valid) {
     const decoded = decodeJournalRecord(fixture.payload, fixture.kind);
     assert.equal(decoded.kind, fixture.kind);
-    assert.equal(typeof decoded.payload.id, "string", fixture.id);
+    assert.deepEqual(decoded.payload, fixture.expectedNormalized, fixture.id);
   }
-
-  const session = fixtureSuite.valid.find((fixture) => fixture.id === "session-trimmed");
-  assert.equal(decodeJournalRecord(session.payload, session.kind).payload.note, "Read chapter one");
-  assert.equal(
-    decodeJournalRecord(session.payload, session.kind).payload.nextStepBefore,
-    "Start",
-  );
-
-  const routine = fixtureSuite.valid.find((fixture) => fixture.id === "practice-routine");
-  const normalizedRoutine = decodeJournalRecord(routine.payload, routine.kind).payload;
-  assert.equal(normalizedRoutine.name, "Focused build");
-  assert.equal(normalizedRoutine.symbolName, "hammer");
 });
 
 test("rejects every shared invalid fixture, including one-sided field drift", () => {
@@ -83,11 +71,43 @@ test("keeps the existing CloudKit record-type names stable", async () => {
     ),
     "utf8",
   );
-  for (const [kind, definition] of Object.entries(contractFixture.records)) {
-    assert.match(
-      mapper,
-      new RegExp(`\\"${definition.recordType}\\"`),
-      `${kind} must remain mapped to ${definition.recordType}`,
-    );
-  }
+  const encodeEntries = [...mapper.matchAll(/case \.([A-Za-z0-9_]+): "([^"]+)"/g)].map(([, kind, recordType]) => [kind, recordType]);
+  const decodeEntries = [...mapper.matchAll(/case "([^"]+)": return \.([A-Za-z0-9_]+)\(/g)].map(([, recordType, kind]) => [recordType, kind]);
+  const encode = Object.fromEntries(encodeEntries);
+  const decode = Object.fromEntries(decodeEntries);
+  const expected = Object.fromEntries(
+    Object.entries(contractFixture.records).map(([kind, definition]) => [kind, definition.recordType]),
+  );
+  assert.equal(encodeEntries.length, Object.keys(expected).length, "CloudKit encoder must map every kind exactly once");
+  assert.equal(new Set(encodeEntries.map(([, recordType]) => recordType)).size, encodeEntries.length, "CloudKit record types must be unique");
+  assert.equal(decodeEntries.length, Object.keys(expected).length, "CloudKit decoder must map every record type exactly once");
+  assert.equal(new Set(decodeEntries.map(([recordType]) => recordType)).size, decodeEntries.length, "CloudKit decoder record types must be unique");
+  assert.deepEqual(encode, expected, "CloudKit kind-to-recordType mapping must be exact");
+  assert.deepEqual(
+    decode,
+    Object.fromEntries(Object.entries(expected).map(([kind, recordType]) => [recordType, kind])),
+    "CloudKit recordType-to-kind mapping must be exact",
+  );
+});
+
+test("wires the shared contract source and resources into the unsigned app target", async () => {
+  const project = await readFile(new URL("SelfStudyStudio.xcodeproj/project.pbxproj", repositoryRoot), "utf8");
+  assert.match(project, /JournalRecordContract\.swift in Sources/);
+  assert.match(project, /contract-v1\.json in Resources/);
+  assert.match(project, /fixtures-v1\.json in Resources/);
+  assert.match(project, /path = Sources\/PersonalLearningJournal\/Contracts\/JournalRecordContract\.swift/);
+  assert.match(project, /path = Sources\/PersonalLearningJournal\/Resources\/JournalContract\/contract-v1\.json/);
+  assert.match(project, /path = Sources\/PersonalLearningJournal\/Resources\/JournalContract\/fixtures-v1\.json/);
+});
+
+test("includes explicit nested/date invalid fixtures", () => {
+  const expected = new Set([
+    "session-invalid-date",
+    "proof-invalid-artifact",
+    "evidence-contract-invalid-trigger",
+    "practice-routine-invalid-reminder",
+    "review-invalid-map",
+  ]);
+  const actual = new Set(fixtureSuite.invalid.map((fixture) => fixture.id));
+  assert.deepEqual(new Set([...expected].filter((id) => actual.has(id))), expected);
 });

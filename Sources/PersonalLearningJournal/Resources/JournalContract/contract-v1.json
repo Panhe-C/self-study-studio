@@ -1,5 +1,8 @@
 {
   "version": 1,
+  "formats": {
+    "iso8601": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$"
+  },
   "records": {
     "project": {
       "recordType": "Project",
@@ -60,7 +63,29 @@
         "updatedAt": { "type": "date", "required": true },
         "deletedAt": { "type": "date", "required": false },
         "schemaVersion": { "type": "integer", "required": true, "minimum": 1 },
-        "artifact": { "type": "taggedUnion", "required": false, "variants": ["attachment", "link", "text"] },
+        "artifact": {
+          "type": "taggedUnion",
+          "required": false,
+          "variants": ["attachment", "link", "text"],
+          "variantFields": {
+            "attachment": {
+              "localPath": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+              "mimeType": { "type": "string", "required": false, "trim": true },
+              "fileSize": { "type": "integer", "required": false, "minimum": 0 }
+            },
+            "link": {
+              "url": { "type": "url", "required": true },
+              "title": { "type": "string", "required": false, "trim": true },
+              "site": { "type": "string", "required": false, "trim": true },
+              "retrievedAt": { "type": "date", "required": false, "format": "iso8601" },
+              "fingerprint": { "type": "string", "required": false, "trim": true },
+              "snapshotPath": { "type": "string", "required": false, "trim": true }
+            },
+            "text": {
+              "markdown": { "type": "string", "required": true, "trim": true, "nonEmpty": true }
+            }
+          }
+        },
         "integrity": { "type": "enum", "required": true, "values": ["qualifying", "needsEvidence", "changedLink", "brokenLink"] },
         "revision": { "type": "integer", "required": true, "minimum": 1 }
       }
@@ -74,10 +99,10 @@
         "facts": { "type": "stringArray", "required": true },
         "patterns": { "type": "stringArray", "required": true },
         "decisions": { "type": "stringArray", "required": true },
-        "projectRecommendations": { "type": "json", "required": true },
-        "nextSteps": { "type": "json", "required": true },
+        "projectRecommendations": { "type": "uuidEnumMap", "required": true, "values": ["idea", "active", "low-frequency", "paused", "archived", "completed", "trash"] },
+        "nextSteps": { "type": "uuidStringMap", "required": true },
         "aiSourceSummary": { "type": "stringArray", "required": true },
-        "sourceReferences": { "type": "json", "required": true },
+        "sourceReferences": { "type": "stringArrayDictionary", "required": true },
         "createdAt": { "type": "date", "required": true },
         "updatedAt": { "type": "date", "required": true },
         "deletedAt": { "type": "date", "required": false },
@@ -91,7 +116,19 @@
       "fields": {
         "id": { "type": "uuid", "required": true },
         "projectId": { "type": "uuid", "required": true },
-        "trigger": { "type": "taggedUnion", "required": true, "variants": ["interval", "milestone"] },
+        "trigger": {
+          "type": "taggedUnion",
+          "required": true,
+          "variants": ["interval", "milestone"],
+          "variantFields": {
+            "interval": {
+              "days": { "type": "integer", "required": true, "minimum": 1 }
+            },
+            "milestone": {
+              "_0": { "type": "string", "required": true, "trim": true, "nonEmpty": true }
+            }
+          }
+        },
         "expectedArtifact": { "type": "enum", "required": true, "values": ["image", "audio", "file", "link", "text"] },
         "acceptanceCriteria": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
         "startsAt": { "type": "date", "required": true },
@@ -255,8 +292,15 @@
         "symbolName": { "type": "string", "required": true, "trim": true },
         "color": { "type": "enum", "required": true, "values": ["coral", "teal", "yellow", "blue", "green", "pink"] },
         "targetMinutes": { "type": "integer", "required": true, "minimum": 1, "maximum": 1440 },
-        "weekdays": { "type": "integerArray", "required": true },
-        "reminderTime": { "type": "json", "required": false },
+        "weekdays": { "type": "integerArray", "required": true, "sort": "ascending" },
+        "reminderTime": {
+          "type": "object",
+          "required": false,
+          "objectFields": {
+            "hour": { "type": "integer", "required": true, "minimum": 0, "maximum": 23 },
+            "minute": { "type": "integer", "required": true, "minimum": 0, "maximum": 59 }
+          }
+        },
         "isArchived": { "type": "boolean", "required": true },
         "createdAt": { "type": "date", "required": true },
         "updatedAt": { "type": "date", "required": true },
