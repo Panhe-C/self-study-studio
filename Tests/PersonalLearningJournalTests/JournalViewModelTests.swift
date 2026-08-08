@@ -111,6 +111,25 @@ final class JournalViewModelTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: attachmentURL.path))
     }
 
+    func testCorruptAttachmentCleanupQueueIsVisibleAfterRestart() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queueURL = root
+            .appendingPathComponent("LearningJournal/Private/attachment-cleanup-queue.json")
+        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{\"paths\": [".utf8).write(to: queueURL, options: [.atomic])
+
+        let viewModel = makeViewModel(attachmentRoot: root)
+
+        XCTAssertEqual(viewModel.attachmentCleanupQueueError, .invalidQueue)
+        XCTAssertTrue(viewModel.pendingAttachmentCleanupPaths.isEmpty)
+        XCTAssertThrowsError(try viewModel.retryPendingAttachmentCleanup()) { error in
+            XCTAssertEqual(error as? AttachmentCleanupQueueError, .invalidQueue)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: queueURL.path))
+    }
+
     @MainActor
     func testSyncSummaryShowsQueuedChangesAndConflictCount() async throws {
         let repository = InMemoryJournalRepository()

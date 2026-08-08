@@ -146,6 +146,63 @@ final class AttachmentCleanupQueueTests: XCTestCase {
         XCTAssertTrue(secondViewModel.pendingAttachmentCleanupPaths.isEmpty)
         XCTAssertTrue(try queue.load().isEmpty)
     }
+
+    func testLegacyStringQueueMigratesProjectScopedEntries() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let projectID = UUID()
+        let legacyPath = root
+            .appendingPathComponent("LearningJournal/Attachments/\(projectID.uuidString)/project/proof.txt")
+        let queueURL = root.appendingPathComponent("cleanup-queue.json")
+        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode([legacyPath.path]).write(to: queueURL, options: [.atomic])
+        let queue = AttachmentCleanupQueue(fileURL: queueURL)
+
+        XCTAssertEqual(
+            try queue.load(),
+            [AttachmentCleanupEntry(projectID: projectID, paths: [legacyPath.path])]
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode([AttachmentCleanupEntry].self, from: Data(contentsOf: queueURL)),
+            [AttachmentCleanupEntry(projectID: projectID, paths: [legacyPath.path])]
+        )
+    }
+
+    func testUnrecoverableLegacyQueueRemainsAndReportsExplicitError() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queueURL = root.appendingPathComponent("cleanup-queue.json")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let legacyPaths = [root.appendingPathComponent("unknown/proof.txt").path]
+        let legacyData = try JSONEncoder().encode(legacyPaths)
+        try legacyData.write(to: queueURL, options: [.atomic])
+        let queue = AttachmentCleanupQueue(fileURL: queueURL)
+
+        XCTAssertThrowsError(try queue.load()) { error in
+            XCTAssertEqual(
+                error as? AttachmentCleanupQueueError,
+                .legacyQueueNeedsReview(legacyPaths)
+            )
+        }
+        XCTAssertEqual(try Data(contentsOf: queueURL), legacyData)
+    }
+
+    func testCorruptQueueRemainsAndReportsInvalidQueue() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queueURL = root.appendingPathComponent("cleanup-queue.json")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let corruptData = Data("{\"paths\": [".utf8)
+        try corruptData.write(to: queueURL, options: [.atomic])
+
+        XCTAssertThrowsError(try AttachmentCleanupQueue(fileURL: queueURL).load()) { error in
+            XCTAssertEqual(error as? AttachmentCleanupQueueError, .invalidQueue)
+        }
+        XCTAssertEqual(try Data(contentsOf: queueURL), corruptData)
+    }
 }
 
 private struct InjectedQueueDeletionFailure: Error {}

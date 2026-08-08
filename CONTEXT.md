@@ -49,7 +49,7 @@ _Gap_: Physical-device and production-data acceptance remains a later release ga
 **Permanent Deletion** `[shipped]`:
 A separate destructive operation that removes a Project and its dependent records and attachments after impact disclosure and explicit confirmation, optionally preceded by export.
 _Avoid_: Archive, abandon, complete
-_Gap_: Repository purge commits first and project-scoped attachment cleanup is retryable through a local private queue only after a canonical purge tombstone is present; physical-device acceptance remains unverified.
+_Gap_: Repository purge commits first and project-scoped attachment cleanup is retryable through a local private queue only after a canonical purge tombstone is present; legacy queues migrate only when their project IDs are unambiguous, otherwise the queue remains visible for repair. Trash exports are unencrypted and require trusted-location confirmation; physical-device acceptance remains unverified.
 
 **Review Inbox** `[partial]`:
 The global list of Stage Reviews that are ready or in draft plus the entry point for Weekly Review, without moving project-specific review content out of its Project Workspace.

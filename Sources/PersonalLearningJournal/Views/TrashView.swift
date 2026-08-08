@@ -10,6 +10,7 @@ public struct TrashView: View {
     @State private var errorMessage: String?
     @State private var noticeMessage: String?
     @State private var exportDocument: TrashExportDocument?
+    @State private var pendingUnencryptedExportProject: Project?
 
     public init(
         viewModel: JournalViewModel,
@@ -32,17 +33,35 @@ public struct TrashView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            if !viewModel.pendingAttachmentCleanupPaths.isEmpty {
+            if !viewModel.pendingAttachmentCleanupPaths.isEmpty
+                || viewModel.attachmentCleanupQueueError != nil {
                 Section("Pending attachment cleanup") {
+                    if let queueError = viewModel.attachmentCleanupQueueError {
+                        Text(queueError.localizedDescription)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
                     Text("Some attachment files still need cleanup. This local retry queue survives leaving and reopening Trash.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    Button("Retry attachment cleanup") {
-                        do {
-                            try viewModel.retryPendingAttachmentCleanup()
-                            errorMessage = nil
-                        } catch {
-                            errorMessage = error.localizedDescription
+                    if viewModel.attachmentCleanupQueueError != nil {
+                        Button("Recover attachment cleanup queue") {
+                            do {
+                                try viewModel.recoverAttachmentCleanupQueue()
+                                errorMessage = nil
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                    }
+                    if !viewModel.pendingAttachmentCleanupPaths.isEmpty {
+                        Button("Retry attachment cleanup") {
+                            do {
+                                try viewModel.retryPendingAttachmentCleanup()
+                                errorMessage = nil
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
                         }
                     }
                 }
@@ -69,7 +88,7 @@ public struct TrashView: View {
                     HStack {
                         Button("trash.restore") { restore(project) }
                         Spacer()
-                        Button("Export Before Delete") { export(project) }
+                        Button("Export Before Delete") { pendingUnencryptedExportProject = project }
                         Button("trash.delete_permanently", role: .destructive) { pendingImpact = impact }
                     }
                 }
@@ -105,6 +124,20 @@ public struct TrashView: View {
             if let impact = pendingImpact {
                 Text("This cannot be undone. It affects \(impact.planCount) plans, \(impact.phaseCount) phases, \(impact.plannedSessionCount) planned sessions, \(impact.contractCount) contracts, \(impact.acceptanceCount) acceptances, \(impact.sessionCount) sessions, \(impact.proofCount) proofs, \(impact.revisionCount) revisions, \(impact.decisionCount) decisions, \(impact.routineCount) routines, \(impact.practiceSessionCount) practice sessions, \(impact.reviewCount) reviews deleted, \(impact.reviewUpdateCount) shared reviews updated, \(impact.trailCount) trail events, and \(impact.attachmentPaths.count) attachments.")
             }
+        }
+        .alert("Unencrypted export", isPresented: Binding(
+            get: { pendingUnencryptedExportProject != nil },
+            set: { if !$0 { pendingUnencryptedExportProject = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { pendingUnencryptedExportProject = nil }
+            Button("Continue", role: .destructive) {
+                if let project = pendingUnencryptedExportProject {
+                    export(project, confirmedUnencrypted: true)
+                }
+                pendingUnencryptedExportProject = nil
+            }
+        } message: {
+            Text("This archive is unencrypted and may contain private learning history and attachments. Continue only if you will save or share it in a trusted location.")
         }
         .alert("Could not complete action", isPresented: Binding(
             get: { errorMessage != nil },
@@ -163,7 +196,7 @@ public struct TrashView: View {
         catch { errorMessage = error.localizedDescription }
     }
 
-    private func export(_ project: Project) {
+    private func export(_ project: Project, confirmedUnencrypted: Bool) {
         do {
             let documents = FileManager.default.urls(
                 for: .documentDirectory,
@@ -175,7 +208,8 @@ public struct TrashView: View {
             let document = try trashExportService.prepare(
                 snapshot: viewModel.snapshot,
                 project: project,
-                to: exportDirectory
+                to: exportDirectory,
+                confirmedUnencrypted: confirmedUnencrypted
             )
             if let onExport {
                 onExport(project, try Data(contentsOf: document.url))

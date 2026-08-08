@@ -15,6 +15,7 @@ public final class JournalViewModel: ObservableObject {
     @Published public private(set) var coursePlanValidationErrors: [CoursePlanningValidationError]
     @Published public private(set) var pendingCanonicalNextStepProposal: CanonicalNextStepProposal?
     @Published public private(set) var pendingAttachmentCleanupEntries: [AttachmentCleanupEntry]
+    @Published public private(set) var attachmentCleanupQueueError: AttachmentCleanupQueueError?
     public var pendingAttachmentCleanupPaths: [String] {
         pendingAttachmentCleanupEntries.flatMap(\.paths)
     }
@@ -71,8 +72,10 @@ public final class JournalViewModel: ObservableObject {
         self.coursePlanGenerationState = .idle
         self.coursePlanValidationErrors = []
         self.pendingCanonicalNextStepProposal = nil
-        self.pendingAttachmentCleanupEntries = (try? self.cleanupQueue.load()) ?? []
+        self.pendingAttachmentCleanupEntries = []
+        self.attachmentCleanupQueueError = nil
         self.rememberedCoursePlanningInputs = [:]
+        loadAttachmentCleanupQueue()
     }
 
     public func refreshSyncSummary() async {
@@ -334,6 +337,7 @@ public final class JournalViewModel: ObservableObject {
             throw JournalArchiveError.invalidArchive
         }
         defer { refresh() }
+        try reloadAttachmentCleanupQueue()
         let impact = archiveService.purgeImpact(projectID: projectId, snapshot: snapshot)
         try cleanupQueue.enqueue(projectID: projectId, paths: impact.attachmentPaths)
         let result = try archiveService.purge(
@@ -350,6 +354,7 @@ public final class JournalViewModel: ObservableObject {
             throw JournalArchiveError.invalidArchive
         }
         defer { refresh() }
+        try reloadAttachmentCleanupQueue()
         do {
             try archiveService.retryAttachmentCleanup(
                 projectID: projectID,
@@ -367,6 +372,7 @@ public final class JournalViewModel: ObservableObject {
     }
 
     public func retryAttachmentCleanup(paths: [String]) throws {
+        try reloadAttachmentCleanupQueue()
         guard let entry = pendingAttachmentCleanupEntries.first(where: {
             !Set(paths).isDisjoint(with: $0.paths)
         }) else { return }
@@ -374,6 +380,7 @@ public final class JournalViewModel: ObservableObject {
     }
 
     public func retryPendingAttachmentCleanup() throws {
+        try reloadAttachmentCleanupQueue()
         var firstError: Error?
         for entry in pendingAttachmentCleanupEntries {
             do {
@@ -383,6 +390,10 @@ public final class JournalViewModel: ObservableObject {
             }
         }
         if let firstError { throw firstError }
+    }
+
+    public func recoverAttachmentCleanupQueue() throws {
+        try reloadAttachmentCleanupQueue()
     }
 
     @discardableResult
@@ -1073,9 +1084,33 @@ public final class JournalViewModel: ObservableObject {
     public func refresh() {
         journalService.refreshFromRepository()
         snapshot = journalService.snapshot()
-        pendingAttachmentCleanupEntries = (try? cleanupQueue.load()) ?? []
+        loadAttachmentCleanupQueue()
         refreshSyncRepositoryDetails()
         scheduleAutomaticSyncIfNeeded()
+    }
+
+    private func reloadAttachmentCleanupQueue() throws {
+        do {
+            pendingAttachmentCleanupEntries = try cleanupQueue.load()
+            attachmentCleanupQueueError = nil
+        } catch let error as AttachmentCleanupQueueError {
+            pendingAttachmentCleanupEntries = []
+            attachmentCleanupQueueError = error
+            throw error
+        } catch {
+            pendingAttachmentCleanupEntries = []
+            attachmentCleanupQueueError = .invalidQueue
+            throw AttachmentCleanupQueueError.invalidQueue
+        }
+    }
+
+    private func loadAttachmentCleanupQueue() {
+        do {
+            try reloadAttachmentCleanupQueue()
+        } catch {
+            // The published error is the recovery surface; never hide a queue
+            // that may still contain paths requiring an explicit repair.
+        }
     }
 
     private func refreshSyncRepositoryDetails() {

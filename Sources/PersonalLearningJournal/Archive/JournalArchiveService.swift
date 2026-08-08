@@ -68,9 +68,10 @@ enum JournalReviewScopeMode: Equatable {
     case exportingProject
 }
 
-private enum JournalReviewAttribution {
-    case target
-    case other
+enum JournalReviewAttribution: Equatable {
+    case targetOnly
+    case otherOnly
+    case mixed
     case unknown
 }
 
@@ -136,17 +137,34 @@ private struct JournalReviewScopeContext {
             let owners = Set(sourceOwners.compactMap { token, owner in
                 source.contains(token) ? owner : nil
             })
-            if owners.contains(targetProjectID) {
+            let hasTarget = owners.contains(targetProjectID)
+            let hasOther = owners.contains { $0 != targetProjectID }
+            if hasTarget && hasOther {
+                return .mixed
+            }
+            if hasTarget {
                 sawTarget = true
-            } else if !owners.isEmpty {
+            } else if hasOther {
                 sawOther = true
             } else {
                 sawUnknown = true
             }
         }
-        if sawTarget && !sawOther && !sawUnknown { return .target }
-        if sawOther && !sawTarget && !sawUnknown { return .other }
+        if sawTarget && sawOther { return .mixed }
+        if sawTarget && !sawUnknown { return .targetOnly }
+        if sawOther && !sawUnknown { return .otherOnly }
         return .unknown
+    }
+
+    func attribution(
+        for value: String,
+        references: [String: [String]]?
+    ) -> JournalReviewAttribution {
+        let direct = attribution(for: [value])
+        let referenced = references?[value] ?? []
+        guard !referenced.isEmpty else { return direct }
+        guard direct != .unknown else { return attribution(for: referenced) }
+        return attribution(for: [value] + referenced)
     }
 }
 
@@ -352,11 +370,11 @@ public struct JournalArchiveService {
         )
         scoped.aiSourceSummary = scopedInsights(
             review.aiSourceSummary,
-            references: nil,
+            references: review.sourceReferences,
             context: context,
             mode: mode
         )
-        let keepAttribution: JournalReviewAttribution = mode == .removingProject ? .other : .target
+        let keepAttribution: JournalReviewAttribution = mode == .removingProject ? .otherOnly : .targetOnly
         scoped.sourceReferences = review.sourceReferences.reduce(into: [:]) { result, entry in
             let attribution = context.attribution(for: entry.value)
             guard attribution == keepAttribution else { return }
@@ -407,15 +425,15 @@ public struct JournalArchiveService {
         var result: [String] = []
         var needsRedaction = false
         for value in values {
-            let attribution = context.attribution(for: references?[value])
+            let attribution = context.attribution(for: value, references: references)
             let keep: Bool
             switch mode {
-            case .removingProject: keep = attribution == .other
-            case .exportingProject: keep = attribution == .target
+            case .removingProject: keep = attribution == .otherOnly
+            case .exportingProject: keep = attribution == .targetOnly
             }
             if keep {
                 result.append(value)
-            } else if attribution == .unknown {
+            } else if attribution == .unknown || attribution == .mixed {
                 needsRedaction = true
             }
         }
@@ -436,7 +454,8 @@ public struct JournalArchiveService {
         let targetDecisionIDs = Set(snapshot.reviewDecisions.compactMap { decision in
             decision.reviewId == review.id && decision.projectId == projectID ? decision.id : nil
         })
-        if !targetDecisionIDs.isDisjoint(with: review.confirmedDecisionIds) {
+        if !targetDecisionIDs.isEmpty
+            || !targetDecisionIDs.isDisjoint(with: review.confirmedDecisionIds) {
             return true
         }
         let targetProofIDs = Set(snapshot.proofs.filter { $0.projectId == projectID }.map(\.id))
@@ -449,9 +468,11 @@ public struct JournalArchiveService {
         let context = JournalReviewScopeContext(snapshot: snapshot, targetProjectID: projectID)
         let allInsights = review.facts + review.patterns + review.decisions + review.aiSourceSummary
         return allInsights.contains {
-            context.attribution(for: review.sourceReferences[$0]) == .target
+            let attribution = context.attribution(for: $0, references: review.sourceReferences)
+            return attribution == .targetOnly || attribution == .mixed
         } || review.sourceReferences.values.contains {
-            context.attribution(for: $0) == .target
+            let attribution = context.attribution(for: $0)
+            return attribution == .targetOnly || attribution == .mixed
         }
     }
 
@@ -676,7 +697,9 @@ public struct JournalArchiveService {
                       && review.nextSteps.keys.allSatisfy(projects.contains)
                       && review.confirmedDecisionIds.allSatisfy(decisions.contains)
                       && review.referencedProofRevisionIds.allSatisfy(proofRevisions.contains)
-                      && Set(review.sourceReferences.keys).isSubset(of: Set(review.facts + review.patterns + review.decisions))
+                      && Set(review.sourceReferences.keys).isSubset(
+                          of: Set(review.facts + review.patterns + review.decisions + review.aiSourceSummary)
+                      )
                       && review.confirmedDecisionIds.allSatisfy { decisionID in
                           snapshot.reviewDecisions.contains {
                               $0.id == decisionID && $0.reviewId == review.id

@@ -14,6 +14,18 @@ public struct StoredAttachment: Equatable, Sendable {
 
 public enum AttachmentCleanupQueueError: Error, Equatable, Sendable {
     case invalidQueue
+    case legacyQueueNeedsReview([String])
+}
+
+extension AttachmentCleanupQueueError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .invalidQueue:
+            return "The attachment cleanup queue is unreadable. Repair or remove the queue file before retrying."
+        case let .legacyQueueNeedsReview(paths):
+            return "The legacy attachment cleanup queue contains paths without a safely identifiable project: \(paths.joined(separator: ", "))."
+        }
+    }
 }
 
 public struct AttachmentCleanupEntry: Codable, Equatable, Sendable {
@@ -51,11 +63,44 @@ public struct AttachmentCleanupQueue: Sendable {
 
     public func load() throws -> [AttachmentCleanupEntry] {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+        let data: Data
         do {
-            return try JSONDecoder().decode([AttachmentCleanupEntry].self, from: Data(contentsOf: fileURL))
+            data = try Data(contentsOf: fileURL)
         } catch {
             throw AttachmentCleanupQueueError.invalidQueue
         }
+        if let entries = try? JSONDecoder().decode([AttachmentCleanupEntry].self, from: data) {
+            return entries
+        }
+        guard let legacyPaths = try? JSONDecoder().decode([String].self, from: data) else {
+            throw AttachmentCleanupQueueError.invalidQueue
+        }
+        guard legacyPaths.allSatisfy({ legacyProjectID(in: $0) != nil }) else {
+            throw AttachmentCleanupQueueError.legacyQueueNeedsReview(legacyPaths)
+        }
+        let grouped = Dictionary(grouping: legacyPaths) { legacyProjectID(in: $0)! }
+        let migrated = grouped
+            .map { projectID, paths in
+                AttachmentCleanupEntry(projectID: projectID, paths: Array(Set(paths)).sorted())
+            }
+            .sorted { $0.projectID.uuidString < $1.projectID.uuidString }
+        try write(migrated)
+        return migrated
+    }
+
+    private func legacyProjectID(in path: String) -> UUID? {
+        let rawComponents = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        let componentsAfterRoot = path.hasPrefix("/") ? rawComponents.dropFirst() : rawComponents[...]
+        guard !componentsAfterRoot.contains(".."), !componentsAfterRoot.contains("") else { return nil }
+        let components = URL(fileURLWithPath: path).pathComponents
+        guard let attachmentsIndex = components.lastIndex(of: "Attachments"),
+              attachmentsIndex + 2 < components.count,
+              let projectID = UUID(uuidString: components[attachmentsIndex + 1]),
+              components[attachmentsIndex + 2] != ".",
+              components[attachmentsIndex + 2] != ".." else {
+            return nil
+        }
+        return projectID
     }
 
     public func enqueue(projectID: UUID, paths: [String]) throws {

@@ -32,7 +32,8 @@ final class TrashExportServiceTests: XCTestCase {
         ).prepare(
             snapshot: snapshot,
             project: project,
-            to: root.appendingPathComponent("Exports", isDirectory: true)
+            to: root.appendingPathComponent("Exports", isDirectory: true),
+            confirmedUnencrypted: true
         )
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: document.url.path))
@@ -66,7 +67,12 @@ final class TrashExportServiceTests: XCTestCase {
         XCTAssertThrowsError(
             try TrashExportService(
                 archiveService: JournalArchiveService(derivationRounds: 20)
-            ).prepare(snapshot: JournalSnapshot(projects: [project]), project: project, to: blockedDirectory)
+            ).prepare(
+                snapshot: JournalSnapshot(projects: [project]),
+                project: project,
+                to: blockedDirectory,
+                confirmedUnencrypted: true
+            )
         )
     }
 
@@ -130,7 +136,8 @@ final class TrashExportServiceTests: XCTestCase {
         ).prepare(
             snapshot: snapshot,
             project: selected,
-            to: root.appendingPathComponent("Exports", isDirectory: true)
+            to: root.appendingPathComponent("Exports", isDirectory: true),
+            confirmedUnencrypted: true
         )
         let envelope = try JSONDecoder.journal.decode(
             JournalArchiveEnvelope.self,
@@ -175,7 +182,8 @@ final class TrashExportServiceTests: XCTestCase {
             ).prepare(
                 snapshot: JournalSnapshot(projects: [project], proofs: [proof]),
                 project: project,
-                to: root.appendingPathComponent("Exports", isDirectory: true)
+                to: root.appendingPathComponent("Exports", isDirectory: true),
+                confirmedUnencrypted: true
             )
         ) { error in
             XCTAssertEqual(error as? JournalArchiveError, .missingAttachment(missingPath))
@@ -245,7 +253,8 @@ final class TrashExportServiceTests: XCTestCase {
         ).prepare(
             snapshot: snapshot,
             project: target,
-            to: root.appendingPathComponent("Exports", isDirectory: true)
+            to: root.appendingPathComponent("Exports", isDirectory: true),
+            confirmedUnencrypted: true
         )
         let envelope = try JSONDecoder.journal.decode(
             JournalArchiveEnvelope.self,
@@ -308,5 +317,184 @@ final class TrashExportServiceTests: XCTestCase {
         ) { error in
             XCTAssertEqual(error as? JournalArchiveError, .invalidArchive)
         }
+    }
+
+    func testPrepareRefusesUnencryptedExportWithoutConfirmationAndDoesNotWrite() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let project = Project(
+            name: "Unencrypted export",
+            area: "Test",
+            goal: "Keep",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let exportDirectory = root.appendingPathComponent("Exports", isDirectory: true)
+
+        XCTAssertThrowsError(
+            try TrashExportService(
+                archiveService: JournalArchiveService(derivationRounds: 20)
+            ).prepare(
+                snapshot: JournalSnapshot(projects: [project]),
+                project: project,
+                to: exportDirectory
+            )
+        ) { error in
+            XCTAssertEqual(error as? JournalArchiveError, .unencryptedExportRequiresConfirmation)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: exportDirectory.path))
+    }
+
+    func testPrepareIncludesParentReviewForSelectedDecisionWithoutLegacyConfirmationMarker() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = Project(
+            name: "Target",
+            area: "Test",
+            goal: "Keep",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let other = Project(
+            name: "Other",
+            area: "Test",
+            goal: "Keep",
+            status: .active,
+            currentNextStep: "Review"
+        )
+        let reviewID = UUID()
+        let targetDecision = ReviewDecision(
+            reviewId: reviewID,
+            projectId: target.id,
+            kind: .continueUnchanged
+        )
+        let review = Review(
+            id: reviewID,
+            periodStart: Date(timeIntervalSince1970: 500),
+            periodEnd: Date(timeIntervalSince1970: 900),
+            facts: [],
+            patterns: [],
+            decisions: [],
+            projectRecommendations: [:],
+            nextSteps: [:],
+            aiSourceSummary: [],
+            confirmedDecisionIds: []
+        )
+        let snapshot = JournalSnapshot(
+            projects: [target, other],
+            reviews: [review],
+            reviewDecisions: [targetDecision]
+        )
+
+        let document = try TrashExportService(
+            archiveService: JournalArchiveService(derivationRounds: 20)
+        ).prepare(
+            snapshot: snapshot,
+            project: target,
+            to: root.appendingPathComponent("Exports", isDirectory: true),
+            confirmedUnencrypted: true
+        )
+        let envelope = try JSONDecoder.journal.decode(
+            JournalArchiveEnvelope.self,
+            from: Data(contentsOf: document.url)
+        )
+        let preview = try JournalArchiveService(derivationRounds: 20).preview(envelope, password: nil)
+
+        XCTAssertEqual(preview.snapshot.reviewDecisions.map(\.id), [targetDecision.id])
+        XCTAssertEqual(preview.snapshot.reviews.map(\.id), [review.id])
+        XCTAssertTrue(preview.snapshot.reviews[0].confirmedDecisionIds.isEmpty)
+    }
+
+    func testMixedAndAIReviewSourcesAreRedactedWithoutCrossProjectLeakage() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = Project(
+            name: "Target",
+            area: "Test",
+            goal: "Keep",
+            status: .trash,
+            currentNextStep: "Review",
+            deletedAt: Date(timeIntervalSince1970: 1_000),
+            previousStatusBeforeTrash: .active
+        )
+        let other = Project(
+            name: "Other",
+            area: "Test",
+            goal: "Keep",
+            status: .active,
+            currentNextStep: "Review"
+        )
+        let mixedSource = "project \(target.id.uuidString.prefix(8)): target and project \(other.id.uuidString.prefix(8)): other"
+        let targetSource = "project \(target.id.uuidString.prefix(8)): target-only summary"
+        let otherSource = "project \(other.id.uuidString.prefix(8)): other-only summary"
+        let review = Review(
+            periodStart: Date(timeIntervalSince1970: 500),
+            periodEnd: Date(timeIntervalSince1970: 900),
+            facts: ["Mixed fact"],
+            patterns: [],
+            decisions: [],
+            projectRecommendations: [:],
+            nextSteps: [:],
+            aiSourceSummary: ["Target summary", "Other summary", "Mixed summary"],
+            sourceReferences: [
+                "Mixed fact": [mixedSource],
+                "Target summary": [targetSource],
+                "Other summary": [otherSource],
+                "Mixed summary": [mixedSource]
+            ]
+        )
+        let snapshot = JournalSnapshot(projects: [target, other], reviews: [review])
+
+        let document = try TrashExportService(
+            archiveService: JournalArchiveService(derivationRounds: 20)
+        ).prepare(
+            snapshot: snapshot,
+            project: target,
+            to: root.appendingPathComponent("Exports", isDirectory: true),
+            confirmedUnencrypted: true
+        )
+        let envelope = try JSONDecoder.journal.decode(
+            JournalArchiveEnvelope.self,
+            from: Data(contentsOf: document.url)
+        )
+        let preview = try JournalArchiveService(derivationRounds: 20).preview(envelope, password: nil)
+        let exportedReview = try XCTUnwrap(preview.snapshot.reviews.first)
+        XCTAssertEqual(exportedReview.facts, ["[redacted project insight]"])
+        XCTAssertEqual(
+            exportedReview.aiSourceSummary,
+            ["Target summary", "[redacted project insight]"]
+        )
+        XCTAssertEqual(
+            exportedReview.sourceReferences,
+            ["Target summary": [targetSource]]
+        )
+        XCTAssertFalse(exportedReview.aiSourceSummary.contains(otherSource))
+        XCTAssertFalse(exportedReview.aiSourceSummary.contains(mixedSource))
+
+        let repository = InMemoryJournalRepository(snapshot: snapshot)
+        let impact = try JournalArchiveService(derivationRounds: 20).purge(
+            projectID: target.id,
+            snapshot: snapshot,
+            from: repository
+        )
+        XCTAssertEqual(impact.reviewUpdateCount, 1)
+        let remaining = try repository.snapshot()
+        let purgedReview = try XCTUnwrap(remaining.reviews.first)
+        XCTAssertEqual(
+            purgedReview.aiSourceSummary,
+            ["Other summary", "[redacted project insight]"]
+        )
+        XCTAssertEqual(purgedReview.facts, ["[redacted project insight]"])
+        XCTAssertEqual(
+            purgedReview.sourceReferences,
+            ["Other summary": [otherSource]]
+        )
     }
 }

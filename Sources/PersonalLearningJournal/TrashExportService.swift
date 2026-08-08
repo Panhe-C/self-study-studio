@@ -25,8 +25,12 @@ public struct TrashExportService {
     public func prepare(
         snapshot: JournalSnapshot,
         project: Project,
-        to directory: URL
+        to directory: URL,
+        confirmedUnencrypted: Bool = false
     ) throws -> TrashExportDocument {
+        guard confirmedUnencrypted else {
+            throw JournalArchiveError.unencryptedExportRequiresConfirmation
+        }
         try FileManager.default.createDirectory(
             at: directory,
             withIntermediateDirectories: true
@@ -90,9 +94,11 @@ public struct TrashExportService {
         let revisions = snapshot.proofRevisions.filter { proofIDs.contains($0.proofId) }
         let revisionIDs = Set(revisions.map(\.id))
         let decisions = snapshot.reviewDecisions.filter { $0.projectId == projectID }
+        let selectedReviewIDs = Set(decisions.map(\.reviewId))
         let decisionIDs = Set(decisions.map(\.id))
         let reviews = snapshot.reviews.compactMap { review -> Review? in
-            guard JournalArchiveService.reviewTouchesProject(
+            guard selectedReviewIDs.contains(review.id)
+                || JournalArchiveService.reviewTouchesProject(
                 review,
                 projectID: projectID,
                 snapshot: snapshot
