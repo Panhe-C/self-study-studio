@@ -137,6 +137,65 @@ final class JournalApplicationSessionMigrationTests: XCTestCase {
         )
     }
 
+    func testStartupRunsZeroWorkB1ThenB2AndB3ForFlatRoutine() throws {
+        let project = Project(
+            name: "Guitar",
+            area: "Music",
+            goal: "Play",
+            status: .idea,
+            currentNextStep: "Practice"
+        )
+        let routine = PracticeRoutine(
+            projectId: project.id,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 20,
+            weekdays: [2]
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(
+                projects: [project],
+                practiceRoutines: [routine]
+            )
+        )
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let session = JournalApplicationSession(
+            documentsDirectory: root,
+            accountProvider: LocalOnlyAccountProvider(),
+            repositoryOverride: repository
+        )
+
+        XCTAssertTrue(
+            try repository.hasCompletedMigration(
+                identifier: ProductConvergenceMigration.identifier
+            )
+        )
+        XCTAssertTrue(
+            try repository.hasCompletedMigration(
+                identifier: ProductConvergenceMigration.statusMigrationIdentifier
+            )
+        )
+        XCTAssertTrue(
+            try repository.hasCompletedMigration(
+                identifier: PlanRevisionMigration.identifier
+            )
+        )
+        XCTAssertTrue(
+            try repository.hasCompletedMigration(
+                identifier: PracticeBlocksMigration.identifier
+            )
+        )
+        XCTAssertNil(session.pendingMigration)
+        XCTAssertNil(session.pendingPlanRevisionMigration)
+        XCTAssertNil(session.pendingPracticeBlocksMigration)
+        XCTAssertFalse(session.isMigrationBlockingSync)
+        XCTAssertEqual(try repository.snapshot().practiceRoutines.first?.orderedBlocks.count, 1)
+    }
+
 }
 
 private actor LocalOnlyAccountProvider: CloudAccountProviding {

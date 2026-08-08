@@ -62,6 +62,136 @@ final class PracticeServiceTests: XCTestCase {
         )
     }
 
+    func testServiceRejectsDifferentNameWhenProjectAlreadyHasOperationalRoutine() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = PracticeService(repository: repository)
+        _ = try service.createRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+
+        XCTAssertThrowsError(
+            try service.createRoutine(
+                name: "Technique",
+                symbolName: "music.note",
+                color: .blue,
+                targetMinutes: 20,
+                weekdays: [3]
+            )
+        )
+    }
+
+    func testServiceTreatsActiveRevisionRoutineAsOperational() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let activePlan = try LearningPlan(
+            projectId: project.id,
+            revision: 1,
+            status: .active,
+            courseURL: nil,
+            courseTitle: "Current",
+            courseOutline: "",
+            goal: "Improve",
+            expectedOutcome: "Practice",
+            startsOn: timestamp,
+            deadline: nil,
+            weeklyBudgetMinutes: 60,
+            summary: "Current",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        var linkedProject = project
+        linkedProject.activeCoursePlanId = activePlan.id
+        let revisionRoutine = PracticeRoutine(
+            projectId: project.id,
+            planRevisionID: activePlan.revisionID,
+            planSeriesID: activePlan.planSeriesID,
+            isStructuralLocked: true,
+            name: "Published routine",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(
+                projects: [linkedProject],
+                coursePlans: [activePlan],
+                practiceRoutines: [revisionRoutine]
+            )
+        )
+        let service = PracticeService(repository: repository)
+
+        XCTAssertThrowsError(
+            try service.createRoutine(
+                projectId: project.id,
+                name: "New routine",
+                symbolName: "music.note",
+                color: .teal,
+                targetMinutes: 20,
+                weekdays: [3]
+            )
+        )
+    }
+
+    func testServiceAllowsRoutineWhenOnlySupersededRevisionIsOperationallyHidden() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let activePlan = try LearningPlan(
+            projectId: project.id,
+            revision: 1,
+            status: .active,
+            courseURL: nil,
+            courseTitle: "Current",
+            courseOutline: "",
+            goal: "Improve",
+            expectedOutcome: "Practice",
+            startsOn: timestamp,
+            deadline: nil,
+            weeklyBudgetMinutes: 60,
+            summary: "Current",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        var linkedProject = project
+        linkedProject.activeCoursePlanId = activePlan.id
+        let supersededRoutine = PracticeRoutine(
+            projectId: project.id,
+            planRevisionID: UUID(),
+            planSeriesID: activePlan.planSeriesID,
+            isStructuralLocked: true,
+            name: "Old routine",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(
+                projects: [linkedProject],
+                coursePlans: [activePlan],
+                practiceRoutines: [supersededRoutine]
+            )
+        )
+        let service = PracticeService(repository: repository)
+
+        let created = try service.createRoutine(
+            projectId: project.id,
+            name: "New routine",
+            symbolName: "music.note",
+            color: .teal,
+            targetMinutes: 20,
+            weekdays: [3]
+        )
+
+        XCTAssertEqual(created.projectId, project.id)
+    }
+
     func testArchivedRoutineDoesNotBlockDuplicateName() throws {
         let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = PracticeService(repository: repository)

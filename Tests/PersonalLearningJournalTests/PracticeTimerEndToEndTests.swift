@@ -142,6 +142,26 @@ final class PracticeTimerEndToEndTests: XCTestCase {
         XCTAssertFalse(draft.canSave(comparedWith: [existing]))
     }
 
+    func testRoutineDraftValidationBlocksOperationalProjectUntilArchiveTransition() {
+        let projectID = UUID()
+        var draft = PracticeRoutineDraft()
+        draft.projectId = projectID
+        draft.name = "Technique"
+
+        XCTAssertFalse(
+            draft.canSave(
+                comparedWith: [],
+                operationalRoutineProjectIDs: [projectID]
+            )
+        )
+        XCTAssertTrue(
+            draft.canSave(
+                comparedWith: [],
+                operationalRoutineProjectIDs: []
+            )
+        )
+    }
+
     func testLifecycleRefreshUpdatesElapsedDayAndConsumesTargetFeedbackOnce() throws {
         let clock = EndToEndClock(now: isoDate("2026-07-13T23:59:50Z"))
         let runtime = PracticeTimerRuntime(

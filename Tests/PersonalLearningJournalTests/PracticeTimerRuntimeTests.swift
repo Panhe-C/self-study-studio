@@ -125,6 +125,31 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         XCTAssertNil(store.data)
     }
 
+    func testPendingCompletionPreservesOptionalNoteAndAttentionMarker() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+
+        try runtime.start(routineId: UUID(), targetSeconds: 30)
+        clock.advance(by: 12)
+        XCTAssertNotNil(runtime.finish())
+
+        XCTAssertTrue(
+            runtime.updatePendingCompletion(
+                note: "Intervals felt steady",
+                linkedProjectId: nil,
+                attentionMarker: "Keep the final cadence relaxed"
+            )
+        )
+
+        let recovered = PracticeTimerRuntime(store: store, now: clock.now)
+        XCTAssertEqual(recovered.pendingCompletion?.note, "Intervals felt steady")
+        XCTAssertEqual(
+            recovered.pendingCompletion?.attentionMarker,
+            "Keep the final cadence relaxed"
+        )
+    }
+
     func testDiscardClearsActiveStateWithoutCompletion() throws {
         let store = InMemoryPracticeTimerStateStore()
         let runtime = PracticeTimerRuntime(store: store, now: { Date(timeIntervalSince1970: 100) })
@@ -459,6 +484,63 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         XCTAssertEqual(runtime.snapshot.blocks.count, 1)
         XCTAssertEqual(runtime.snapshot.activeBlockID, routineID)
         XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 10)
+    }
+
+    func testNextBlockResetsRunningSegmentStartAndDoesNotDoubleCount() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let first = PracticeBlock(name: "Theory", targetMinutes: 5, ordinal: 0)
+        let second = PracticeBlock(name: "Technique", targetMinutes: 5, ordinal: 1)
+        let routine = PracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 10,
+            weekdays: [2],
+            blocks: [first, second]
+        )
+        let runtime = PracticeTimerRuntime(
+            store: InMemoryPracticeTimerStateStore(),
+            now: clock.now
+        )
+
+        try runtime.start(routine: routine)
+        clock.advance(by: 10)
+        XCTAssertTrue(runtime.nextBlock())
+        clock.advance(by: 5)
+
+        let completion = try XCTUnwrap(runtime.finish())
+        XCTAssertEqual(completion.activeDurationSeconds, 15)
+        XCTAssertEqual(completion.segments.map(\.blockID), [first.id, second.id])
+        XCTAssertEqual(completion.segments.map(\.activeDurationSeconds), [10, 5])
+    }
+
+    func testLegacyAccumulatedSecondsBecomeRecoveredSegmentAndSummaryTime() throws {
+        let now = Date(timeIntervalSince1970: 100)
+        let store = InMemoryPracticeTimerStateStore()
+        let routineID = UUID()
+        store.data = try JSONEncoder().encode(
+            PersistedPracticeTimerState(
+                routineId: routineID,
+                startedAt: Date(timeIntervalSince1970: 90),
+                accumulatedActiveSeconds: 5,
+                resumedAt: nil,
+                targetSeconds: 60,
+                targetFeedbackConsumed: false
+            )
+        )
+
+        let runtime = PracticeTimerRuntime(store: store, now: { now })
+        let completion = try XCTUnwrap(runtime.finish())
+
+        XCTAssertEqual(completion.activeDurationSeconds, 5)
+        XCTAssertEqual(completion.segments.count, 1)
+        XCTAssertEqual(completion.segments.first?.blockID, routineID)
+        XCTAssertEqual(completion.segments.first?.activeDurationSeconds, 5)
+        XCTAssertEqual(
+            completion.summary?.blockSummaries.first?.activeDurationSeconds,
+            5
+        )
+        XCTAssertFalse(completion.summary?.blockSummaries.first?.wasSkipped == true)
     }
 }
 

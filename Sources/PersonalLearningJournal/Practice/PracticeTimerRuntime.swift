@@ -208,6 +208,7 @@ public struct PracticePendingCompletionDraft: Codable, Equatable, Identifiable, 
     public let completion: PracticeTimerCompletion
     public let routinePresentation: PracticeRoutinePresentationSnapshot?
     public var note: String
+    public var attentionMarker: String?
     public var linkedProjectId: UUID?
 
     public init(
@@ -215,12 +216,14 @@ public struct PracticePendingCompletionDraft: Codable, Equatable, Identifiable, 
         completion: PracticeTimerCompletion,
         routinePresentation: PracticeRoutinePresentationSnapshot? = nil,
         note: String = "",
+        attentionMarker: String? = nil,
         linkedProjectId: UUID? = nil
     ) {
         self.id = id
         self.completion = completion
         self.routinePresentation = routinePresentation
         self.note = note
+        self.attentionMarker = attentionMarker
         self.linkedProjectId = linkedProjectId
     }
 }
@@ -551,6 +554,7 @@ public final class PracticeTimerRuntime: ObservableObject {
         }
         if state.resumedAt != nil {
             closeOpenSegment(&state, at: timestamp)
+            state.resumedAt = timestamp
         }
         state.currentBlockID = state.blocks[currentIndex + 1].id
         return persistTransition(state, at: timestamp)
@@ -663,10 +667,24 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     @discardableResult
     public func updatePendingCompletion(note: String, linkedProjectId: UUID?) -> Bool {
+        updatePendingCompletion(
+            note: note,
+            linkedProjectId: linkedProjectId,
+            attentionMarker: pendingCompletion?.attentionMarker
+        )
+    }
+
+    @discardableResult
+    public func updatePendingCompletion(
+        note: String,
+        linkedProjectId: UUID?,
+        attentionMarker: String?
+    ) -> Bool {
         let timestamp = now()
         lastRefreshDate = timestamp
         guard var pendingCompletion else { return false }
         pendingCompletion.note = note
+        pendingCompletion.attentionMarker = attentionMarker
         pendingCompletion.linkedProjectId = linkedProjectId
         do {
             try saveLocalState(active: activeState, pending: pendingCompletion)
@@ -854,7 +872,7 @@ public final class PracticeTimerRuntime: ObservableObject {
            isValid(localState, at: now) {
             var migrated = localState
             if let active = migrated.active {
-                migrated.active = normalized(active)
+                migrated.active = normalized(active, at: now)
             }
             return migrated
         }
@@ -862,7 +880,7 @@ public final class PracticeTimerRuntime: ObservableObject {
         if let legacyActive = try? JSONDecoder().decode(PersistedPracticeTimerState.self, from: data),
            isValid(legacyActive, at: now) {
             return PersistedPracticeTimerLocalState(
-                active: normalized(legacyActive),
+                active: normalized(legacyActive, at: now),
                 pending: nil
             )
         }
@@ -927,7 +945,8 @@ public final class PracticeTimerRuntime: ObservableObject {
     }
 
     private static func normalized(
-        _ state: PersistedPracticeTimerState
+        _ state: PersistedPracticeTimerState,
+        at _: Date
     ) -> PersistedPracticeTimerState {
         guard state.blocks.isEmpty else { return state }
         var migrated = state
@@ -939,6 +958,19 @@ public final class PracticeTimerRuntime: ObservableObject {
         )
         migrated.blocks = [block]
         migrated.currentBlockID = state.currentBlockID ?? block.id
+        if state.accumulatedActiveSeconds > 0 {
+            let endedAt = state.startedAt.addingTimeInterval(
+                TimeInterval(state.accumulatedActiveSeconds)
+            )
+            migrated.segments = [
+                PracticeSegment(
+                    blockID: block.id,
+                    startedAt: state.startedAt,
+                    endedAt: endedAt,
+                    activeDurationSeconds: state.accumulatedActiveSeconds
+                )
+            ]
+        }
         return migrated
     }
 }

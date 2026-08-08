@@ -16,6 +16,7 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
     public let minimum: Int?
     public let maximum: Int?
     public let sort: String?
+    public let items: JournalRecordNestedFieldDefinition?
     public let objectFields: [String: JournalRecordNestedFieldDefinition]?
     public let variantFields: [String: [String: JournalRecordNestedFieldDefinition]]?
 
@@ -29,6 +30,7 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
         case minimum
         case maximum
         case sort
+        case items
         case objectFields
         case variantFields
     }
@@ -43,6 +45,7 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
         minimum: Int? = nil,
         maximum: Int? = nil,
         sort: String? = nil,
+        items: JournalRecordNestedFieldDefinition? = nil,
         objectFields: [String: JournalRecordNestedFieldDefinition]? = nil,
         variantFields: [String: [String: JournalRecordNestedFieldDefinition]]? = nil
     ) {
@@ -55,6 +58,7 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
         self.minimum = minimum
         self.maximum = maximum
         self.sort = sort
+        self.items = items
         self.objectFields = objectFields
         self.variantFields = variantFields
     }
@@ -71,6 +75,7 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
             minimum: try container.decodeIfPresent(Int.self, forKey: .minimum),
             maximum: try container.decodeIfPresent(Int.self, forKey: .maximum),
             sort: try container.decodeIfPresent(String.self, forKey: .sort),
+            items: try container.decodeIfPresent(JournalRecordNestedFieldDefinition.self, forKey: .items),
             objectFields: try container.decodeIfPresent([String: JournalRecordNestedFieldDefinition].self, forKey: .objectFields),
             variantFields: try container.decodeIfPresent([String: [String: JournalRecordNestedFieldDefinition]].self, forKey: .variantFields)
         )
@@ -87,14 +92,16 @@ public struct JournalRecordFieldDefinition: Codable, Equatable, Sendable {
         try container.encodeIfPresent(minimum, forKey: .minimum)
         try container.encodeIfPresent(maximum, forKey: .maximum)
         try container.encodeIfPresent(sort, forKey: .sort)
+        try container.encodeIfPresent(items, forKey: .items)
         try container.encodeIfPresent(objectFields, forKey: .objectFields)
         try container.encodeIfPresent(variantFields, forKey: .variantFields)
     }
 }
 
-/// A deliberately non-recursive schema node for the finite nested values in
-/// the shared contract (tagged-union payloads and reminder times).
-public struct JournalRecordNestedFieldDefinition: Codable, Equatable, Sendable {
+/// A recursive schema node for finite nested values in the shared contract.
+/// `items` describes array members and `objectFields` describes object
+/// members, keeping Swift and Web on one strict schema.
+public final class JournalRecordNestedFieldDefinition: Codable, Equatable, @unchecked Sendable {
     public let type: String
     public let isRequired: Bool
     public let trim: Bool
@@ -103,6 +110,8 @@ public struct JournalRecordNestedFieldDefinition: Codable, Equatable, Sendable {
     public let minimum: Int?
     public let maximum: Int?
     public let format: String?
+    public let items: JournalRecordNestedFieldDefinition?
+    public let objectFields: [String: JournalRecordNestedFieldDefinition]?
 
     private enum CodingKeys: String, CodingKey {
         case type
@@ -113,6 +122,8 @@ public struct JournalRecordNestedFieldDefinition: Codable, Equatable, Sendable {
         case minimum
         case maximum
         case format
+        case items
+        case objectFields
     }
 
     public init(
@@ -123,7 +134,9 @@ public struct JournalRecordNestedFieldDefinition: Codable, Equatable, Sendable {
         values: [String]? = nil,
         minimum: Int? = nil,
         maximum: Int? = nil,
-        format: String? = nil
+        format: String? = nil,
+        items: JournalRecordNestedFieldDefinition? = nil,
+        objectFields: [String: JournalRecordNestedFieldDefinition]? = nil
     ) {
         self.type = type
         self.isRequired = isRequired
@@ -133,9 +146,27 @@ public struct JournalRecordNestedFieldDefinition: Codable, Equatable, Sendable {
         self.minimum = minimum
         self.maximum = maximum
         self.format = format
+        self.items = items
+        self.objectFields = objectFields
     }
 
-    public init(from decoder: Decoder) throws {
+    public static func == (
+        lhs: JournalRecordNestedFieldDefinition,
+        rhs: JournalRecordNestedFieldDefinition
+    ) -> Bool {
+        lhs.type == rhs.type
+            && lhs.isRequired == rhs.isRequired
+            && lhs.trim == rhs.trim
+            && lhs.nonEmpty == rhs.nonEmpty
+            && lhs.values == rhs.values
+            && lhs.minimum == rhs.minimum
+            && lhs.maximum == rhs.maximum
+            && lhs.format == rhs.format
+            && lhs.items == rhs.items
+            && lhs.objectFields == rhs.objectFields
+    }
+
+    public convenience init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             type: try container.decode(String.self, forKey: .type),
@@ -145,7 +176,9 @@ public struct JournalRecordNestedFieldDefinition: Codable, Equatable, Sendable {
             values: try container.decodeIfPresent([String].self, forKey: .values),
             minimum: try container.decodeIfPresent(Int.self, forKey: .minimum),
             maximum: try container.decodeIfPresent(Int.self, forKey: .maximum),
-            format: try container.decodeIfPresent(String.self, forKey: .format)
+            format: try container.decodeIfPresent(String.self, forKey: .format),
+            items: try container.decodeIfPresent(JournalRecordNestedFieldDefinition.self, forKey: .items),
+            objectFields: try container.decodeIfPresent([String: JournalRecordNestedFieldDefinition].self, forKey: .objectFields)
         )
     }
 
@@ -159,6 +192,8 @@ public struct JournalRecordNestedFieldDefinition: Codable, Equatable, Sendable {
         try container.encodeIfPresent(minimum, forKey: .minimum)
         try container.encodeIfPresent(maximum, forKey: .maximum)
         try container.encodeIfPresent(format, forKey: .format)
+        try container.encodeIfPresent(items, forKey: .items)
+        try container.encodeIfPresent(objectFields, forKey: .objectFields)
     }
 }
 
@@ -423,6 +458,7 @@ public enum JournalRecordContractDecoder {
             minimum: definition.minimum,
             maximum: definition.maximum,
             format: nil,
+            items: definition.items,
             objectFields: definition.objectFields,
             variants: definition.variants,
             variantFields: definition.variantFields,
@@ -441,6 +477,7 @@ public enum JournalRecordContractDecoder {
         minimum: Int?,
         maximum: Int?,
         format: String?,
+        items: JournalRecordNestedFieldDefinition?,
         objectFields: [String: JournalRecordNestedFieldDefinition]?,
         variants: [String]?,
         variantFields: [String: [String: JournalRecordNestedFieldDefinition]]?,
@@ -486,6 +523,11 @@ public enum JournalRecordContractDecoder {
                 guard let number = item as? NSNumber else { return false }
                 return exactJSONInteger(number, range: document.integerRange) != nil
             }) else { throw invalid(kind, field) }
+        case "array":
+            guard let values = value as? [Any], let items else { throw invalid(kind, field) }
+            for (index, item) in values.enumerated() {
+                try validateNestedValue(item, field: "\(field)[\(index)]", definition: items, kind: kind, document: document)
+            }
         case "object":
             guard let object = value as? [String: Any], let objectFields else { throw invalid(kind, field) }
             try validateObject(object, field: field, fields: objectFields, kind: kind, document: document)
@@ -536,7 +578,8 @@ public enum JournalRecordContractDecoder {
                 minimum: definition.minimum,
                 maximum: definition.maximum,
                 format: definition.format,
-                objectFields: nil,
+                items: definition.items,
+                objectFields: definition.objectFields,
                 variants: nil,
                 variantFields: nil,
                 kind: kind,
@@ -544,6 +587,32 @@ public enum JournalRecordContractDecoder {
             )
         }
         for name in object.keys where fields[name] == nil { throw unknown(kind, "\(field).\(name)") }
+    }
+
+    private static func validateNestedValue(
+        _ value: Any,
+        field: String,
+        definition: JournalRecordNestedFieldDefinition,
+        kind: JournalRecordKind,
+        document: JournalRecordContractDocument
+    ) throws {
+        try validateValue(
+            value,
+            field: field,
+            type: definition.type,
+            required: definition.isRequired,
+            nonEmpty: definition.nonEmpty,
+            values: definition.values,
+            minimum: definition.minimum,
+            maximum: definition.maximum,
+            format: definition.format,
+            items: definition.items,
+            objectFields: definition.objectFields,
+            variants: nil,
+            variantFields: nil,
+            kind: kind,
+            document: document
+        )
     }
 
     private static func validatePairs(
@@ -684,6 +753,20 @@ public enum JournalRecordContractDecoder {
                   weekdays.allSatisfy({ (1...7).contains(($0 as? NSNumber)?.intValue ?? 0) }) else {
                 throw invalid("weekdays")
             }
+            if let blocks = object["blocks"] as? [Any] {
+                var blockIDs = Set<String>()
+                var ordinals = Set<Int>()
+                for value in blocks {
+                    guard let block = value as? [String: Any],
+                          let blockID = block["id"] as? String,
+                          let ordinal = (block["ordinal"] as? NSNumber)?.intValue,
+                          blockIDs.insert(blockID).inserted,
+                          ordinals.insert(ordinal).inserted else {
+                        throw invalid("blocks")
+                    }
+                }
+                guard ordinals.sorted() == Array(0..<blocks.count) else { throw invalid("blocks") }
+            }
             if let reminder = object["reminderTime"] as? [String: Any] {
                 guard (0...23).contains((reminder["hour"] as? NSNumber)?.intValue ?? -1),
                       (0...59).contains((reminder["minute"] as? NSNumber)?.intValue ?? -1) else {
@@ -695,6 +778,69 @@ public enum JournalRecordContractDecoder {
                   let active = integer("activeDurationSeconds"),
                   Double(active) <= end.timeIntervalSince(start) + 1 else {
                 throw invalid("activeDurationSeconds")
+            }
+            var segmentVisits: [String: Int] = [:]
+            var segmentActiveTotal = 0
+            if let segments = object["segments"] as? [Any] {
+                for value in segments {
+                    guard let segment = value as? [String: Any],
+                          let blockID = segment["blockID"] as? String,
+                          let segmentStart = parseDate(segment["startedAt"] as? String ?? "", document: document, format: nil),
+                          let segmentEnd = parseDate(segment["endedAt"] as? String ?? "", document: document, format: nil),
+                          let segmentActive = (segment["activeDurationSeconds"] as? NSNumber)?.intValue,
+                          let isPause = segment["isPause"] as? Bool,
+                          segmentEnd >= segmentStart,
+                          segmentActive >= 0,
+                          Double(segmentActive) <= segmentEnd.timeIntervalSince(segmentStart) + 1,
+                          !isPause || segmentActive == 0 else {
+                        throw invalid("segments")
+                    }
+                    guard !isPause, segmentActive > 0 else { continue }
+                    segmentVisits[blockID, default: 0] += 1
+                    segmentActiveTotal += segmentActive
+                }
+                guard segmentActiveTotal == active else { throw invalid("segments") }
+            }
+            if let summary = object["summary"] as? [String: Any] {
+                guard let total = (summary["totalActiveDurationSeconds"] as? NSNumber)?.intValue,
+                      total >= 0,
+                      total == active,
+                      let summaries = summary["blockSummaries"] as? [Any] else {
+                    throw invalid("summary")
+                }
+                var summaryIDs = Set<String>()
+                var summaryTotal = 0
+                for value in summaries {
+                    guard let block = value as? [String: Any],
+                          let blockID = block["blockID"] as? String,
+                          summaryIDs.insert(blockID).inserted,
+                          let target = (block["targetMinutes"] as? NSNumber)?.intValue,
+                          let blockActive = (block["activeDurationSeconds"] as? NSNumber)?.intValue,
+                          let visits = (block["visitCount"] as? NSNumber)?.intValue,
+                          let wasSkipped = block["wasSkipped"] as? Bool,
+                          let wasExtended = block["wasExtended"] as? Bool,
+                          target > 0,
+                          blockActive >= 0,
+                          visits >= 0,
+                          wasSkipped == (blockActive == 0),
+                          wasExtended == (blockActive > target * 60) else {
+                        throw invalid("summary.blockSummaries")
+                    }
+                    summaryTotal += blockActive
+                    if let expectedVisits = segmentVisits[blockID] {
+                        guard visits == expectedVisits, blockActive > 0 else {
+                            throw invalid("summary.blockSummaries")
+                        }
+                    } else {
+                        guard blockActive == 0, visits == 0 else {
+                            throw invalid("summary.blockSummaries")
+                        }
+                    }
+                }
+                guard summaryTotal == total,
+                      Set(segmentVisits.keys).isSubset(of: summaryIDs) else {
+                    throw invalid("summary")
+                }
             }
         case .reviewDecision:
             guard let decision = object["kind"] as? String else { throw invalid("kind") }

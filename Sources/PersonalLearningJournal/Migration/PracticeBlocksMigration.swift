@@ -67,9 +67,7 @@ public struct PracticeBlocksMigration {
     }
 
     public func dryRun(snapshot: JournalSnapshot) -> PracticeBlocksMigrationDryRun {
-        let activeGroups = Dictionary(grouping: snapshot.practiceRoutines.filter {
-            $0.deletedAt == nil && !$0.isArchived
-        }, by: { $0.projectId ?? $0.id })
+        let activeGroups = Dictionary(grouping: operationalRoutines(in: snapshot), by: { $0.projectId ?? $0.id })
         let issues = activeGroups.compactMap { projectID, routines -> PracticeBlocksMigrationIssue? in
             guard routines.count > 1 else { return nil }
             return .multipleActiveRoutines(
@@ -125,8 +123,8 @@ public struct PracticeBlocksMigration {
         do {
             try repository.commit(
                 JournalTransaction(
-                    upserts: entities(in: migrated),
-                    origin: .migration,
+                    upserts: changedRoutineEntities(from: snapshot, to: migrated),
+                    origin: .user,
                     stateMetadata: JournalStateMetadata(snapshot: migrated),
                     completedMigrationIdentifier: Self.identifier
                 )
@@ -148,7 +146,7 @@ public struct PracticeBlocksMigration {
         } catch {
             try? repository.commit(
                 JournalTransaction(
-                    upserts: entities(in: snapshot),
+                    upserts: changedRoutineEntities(from: migrated, to: snapshot),
                     origin: .migration,
                     stateMetadata: JournalStateMetadata(snapshot: snapshot),
                     removedMigrationIdentifier: Self.identifier
@@ -163,9 +161,7 @@ public struct PracticeBlocksMigration {
         resolutions: [PracticeBlocksMigrationResolution]
     ) throws -> [UUID: PracticeBlocksMigrationResolution] {
         var result: [UUID: PracticeBlocksMigrationResolution] = [:]
-        let activeByProject = Dictionary(grouping: snapshot.practiceRoutines.filter {
-            $0.deletedAt == nil && !$0.isArchived
-        }, by: { $0.projectId ?? $0.id })
+        let activeByProject = Dictionary(grouping: operationalRoutines(in: snapshot), by: { $0.projectId ?? $0.id })
         for resolution in resolutions {
             let survivorID: UUID
             switch resolution {
@@ -197,9 +193,9 @@ public struct PracticeBlocksMigration {
             )
         }
 
+        let operationalIDs = Set(operationalRoutines(in: migrated).map(\.id))
         let activeGroups = Dictionary(grouping: migrated.practiceRoutines.indices.filter {
-            let routine = migrated.practiceRoutines[$0]
-            return routine.deletedAt == nil && !routine.isArchived
+            operationalIDs.contains(migrated.practiceRoutines[$0].id)
         }, by: { migrated.practiceRoutines[$0].projectId ?? migrated.practiceRoutines[$0].id })
         for (projectID, indexes) in activeGroups where indexes.count > 1 {
             guard let resolution = resolutions[projectID] else {
@@ -266,9 +262,7 @@ public struct PracticeBlocksMigration {
                 throw PracticeBlocksMigrationError.duplicateBlockIdentifier(routine.id)
             }
         }
-        let activeByProject = Dictionary(grouping: snapshot.practiceRoutines.filter {
-            $0.deletedAt == nil && !$0.isArchived
-        }, by: { $0.projectId ?? $0.id })
+        let activeByProject = Dictionary(grouping: operationalRoutines(in: snapshot), by: { $0.projectId ?? $0.id })
         guard activeByProject.values.allSatisfy({ $0.count <= 1 }) else {
             throw PracticeBlocksMigrationError.repositoryValidationFailed
         }
@@ -280,23 +274,21 @@ public struct PracticeBlocksMigration {
         try JSONEncoder.journal.encode(snapshot).write(to: url, options: [.atomic])
     }
 
-    private func entities(in snapshot: JournalSnapshot) -> [JournalEntity] {
-        snapshot.projects.map(JournalEntity.project)
-            + snapshot.sessions.map(JournalEntity.session)
-            + snapshot.proofs.map(JournalEntity.proof)
-            + snapshot.reviews.map(JournalEntity.review)
-            + snapshot.evidenceContracts.map(JournalEntity.evidenceContract)
-            + snapshot.evidenceAcceptances.map(JournalEntity.evidenceAcceptance)
-            + snapshot.proofRevisions.map(JournalEntity.proofRevision)
-            + snapshot.reviewDecisions.map(JournalEntity.reviewDecision)
-            + snapshot.trailEvents.map(JournalEntity.trailEvent)
-            + snapshot.coursePlans.map(JournalEntity.coursePlan)
-            + snapshot.planPhases.map(JournalEntity.planPhase)
-            + snapshot.plannedSessions.map(JournalEntity.plannedSession)
-            + snapshot.availabilityRules.map(JournalEntity.availabilityRule)
-            + snapshot.schedulingPreferences.map(JournalEntity.schedulingPreferences)
-            + snapshot.practiceRoutines.map(JournalEntity.practiceRoutine)
-            + snapshot.practiceSessions.map(JournalEntity.practiceSession)
+    private func operationalRoutines(in snapshot: JournalSnapshot) -> [PracticeRoutine] {
+        snapshot.operationalPracticeRoutines.filter { !$0.isArchived }
+    }
+
+    private func changedRoutineEntities(
+        from original: JournalSnapshot,
+        to migrated: JournalSnapshot
+    ) -> [JournalEntity] {
+        migrated.practiceRoutines.indices.compactMap { index in
+            guard original.practiceRoutines.indices.contains(index),
+                  original.practiceRoutines[index] != migrated.practiceRoutines[index] else {
+                return nil
+            }
+            return .practiceRoutine(migrated.practiceRoutines[index])
+        }
     }
 }
 

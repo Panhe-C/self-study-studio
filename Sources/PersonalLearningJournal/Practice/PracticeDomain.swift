@@ -56,6 +56,34 @@ public struct PracticeBlock: Codable, Equatable, Identifiable, Sendable {
         set { focus = newValue.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 } }
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id, name, targetMinutes, ordinal, focus, nextFocusCandidates
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(UUID.self, forKey: .id),
+            name: try container.decode(String.self, forKey: .name),
+            targetMinutes: try container.decode(Int.self, forKey: .targetMinutes),
+            ordinal: try container.decode(Int.self, forKey: .ordinal),
+            focus: try container.decodeIfPresent(String.self, forKey: .focus),
+            nextFocusCandidates: try container.decodeIfPresent([String].self, forKey: .nextFocusCandidates) ?? []
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(targetMinutes, forKey: .targetMinutes)
+        try container.encode(ordinal, forKey: .ordinal)
+        try container.encodeIfPresent(focus, forKey: .focus)
+        if !nextFocusCandidates.isEmpty {
+            try container.encode(nextFocusCandidates, forKey: .nextFocusCandidates)
+        }
+    }
+
     public func validated() throws -> PracticeBlock {
         guard !name.trimmedForJournal.isEmpty else {
             throw PracticeValidationError.blankName
@@ -85,6 +113,12 @@ public struct PracticeSegment: Codable, Equatable, Identifiable, Sendable {
     public var endedAt: Date
     public var activeDurationSeconds: Int
     public var isPause: Bool
+    /// Immutable context captured when the segment was observed. Keeping
+    /// this beside the relationship ID means later routine-draft edits cannot
+    /// rewrite the learner's historical session.
+    public var observedBlockName: String?
+    public var observedFocus: String?
+    public var observedNextFocusCandidates: [String]
 
     public init(
         id: UUID = UUID(),
@@ -92,7 +126,10 @@ public struct PracticeSegment: Codable, Equatable, Identifiable, Sendable {
         startedAt: Date,
         endedAt: Date,
         activeDurationSeconds: Int,
-        isPause: Bool = false
+        isPause: Bool = false,
+        observedBlockName: String? = nil,
+        observedFocus: String? = nil,
+        observedNextFocusCandidates: [String] = []
     ) {
         self.id = id
         self.blockID = blockID
@@ -100,6 +137,30 @@ public struct PracticeSegment: Codable, Equatable, Identifiable, Sendable {
         self.endedAt = endedAt
         self.activeDurationSeconds = activeDurationSeconds
         self.isPause = isPause
+        self.observedBlockName = observedBlockName.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 }
+        self.observedFocus = observedFocus.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 }
+        self.observedNextFocusCandidates = observedNextFocusCandidates
+            .map { $0.trimmedForJournal }
+            .filter { !$0.isEmpty }
+    }
+
+    public init(
+        block: PracticeBlock,
+        startedAt: Date,
+        endedAt: Date,
+        activeDurationSeconds: Int,
+        isPause: Bool = false
+    ) {
+        self.init(
+            blockID: block.id,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: activeDurationSeconds,
+            isPause: isPause,
+            observedBlockName: block.name,
+            observedFocus: block.focus,
+            observedNextFocusCandidates: block.nextFocusCandidates
+        )
     }
 
     public func validated() throws -> PracticeSegment {
@@ -109,7 +170,48 @@ public struct PracticeSegment: Codable, Equatable, Identifiable, Sendable {
               !isPause || activeDurationSeconds == 0 else {
             throw PracticeValidationError.invalidSessionTiming
         }
-        return self
+        var normalized = self
+        normalized.observedBlockName = observedBlockName.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 }
+        normalized.observedFocus = observedFocus.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 }
+        normalized.observedNextFocusCandidates = observedNextFocusCandidates
+            .map { $0.trimmedForJournal }
+            .filter { !$0.isEmpty }
+        return normalized
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, blockID, startedAt, endedAt, activeDurationSeconds, isPause
+        case observedBlockName, observedFocus, observedNextFocusCandidates
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(UUID.self, forKey: .id),
+            blockID: try container.decode(UUID.self, forKey: .blockID),
+            startedAt: try container.decode(Date.self, forKey: .startedAt),
+            endedAt: try container.decode(Date.self, forKey: .endedAt),
+            activeDurationSeconds: try container.decode(Int.self, forKey: .activeDurationSeconds),
+            isPause: try container.decodeIfPresent(Bool.self, forKey: .isPause) ?? false,
+            observedBlockName: try container.decodeIfPresent(String.self, forKey: .observedBlockName),
+            observedFocus: try container.decodeIfPresent(String.self, forKey: .observedFocus),
+            observedNextFocusCandidates: try container.decodeIfPresent([String].self, forKey: .observedNextFocusCandidates) ?? []
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(blockID, forKey: .blockID)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encode(endedAt, forKey: .endedAt)
+        try container.encode(activeDurationSeconds, forKey: .activeDurationSeconds)
+        try container.encode(isPause, forKey: .isPause)
+        try container.encodeIfPresent(observedBlockName, forKey: .observedBlockName)
+        try container.encodeIfPresent(observedFocus, forKey: .observedFocus)
+        if !observedNextFocusCandidates.isEmpty {
+            try container.encode(observedNextFocusCandidates, forKey: .observedNextFocusCandidates)
+        }
     }
 }
 
@@ -120,6 +222,9 @@ public struct PracticeBlockSummary: Codable, Equatable, Sendable {
     public let visitCount: Int
     public let wasSkipped: Bool
     public let wasExtended: Bool
+    public let observedBlockName: String?
+    public let observedFocus: String?
+    public let observedNextFocusCandidates: [String]
 
     public init(
         blockID: UUID,
@@ -127,7 +232,10 @@ public struct PracticeBlockSummary: Codable, Equatable, Sendable {
         activeDurationSeconds: Int,
         visitCount: Int,
         wasSkipped: Bool,
-        wasExtended: Bool
+        wasExtended: Bool,
+        observedBlockName: String? = nil,
+        observedFocus: String? = nil,
+        observedNextFocusCandidates: [String] = []
     ) {
         self.blockID = blockID
         self.targetMinutes = targetMinutes
@@ -135,6 +243,46 @@ public struct PracticeBlockSummary: Codable, Equatable, Sendable {
         self.visitCount = visitCount
         self.wasSkipped = wasSkipped
         self.wasExtended = wasExtended
+        self.observedBlockName = observedBlockName.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 }
+        self.observedFocus = observedFocus.map { $0.trimmedForJournal }.flatMap { $0.isEmpty ? nil : $0 }
+        self.observedNextFocusCandidates = observedNextFocusCandidates
+            .map { $0.trimmedForJournal }
+            .filter { !$0.isEmpty }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case blockID, targetMinutes, activeDurationSeconds, visitCount, wasSkipped, wasExtended
+        case observedBlockName, observedFocus, observedNextFocusCandidates
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            blockID: try container.decode(UUID.self, forKey: .blockID),
+            targetMinutes: try container.decode(Int.self, forKey: .targetMinutes),
+            activeDurationSeconds: try container.decode(Int.self, forKey: .activeDurationSeconds),
+            visitCount: try container.decode(Int.self, forKey: .visitCount),
+            wasSkipped: try container.decode(Bool.self, forKey: .wasSkipped),
+            wasExtended: try container.decode(Bool.self, forKey: .wasExtended),
+            observedBlockName: try container.decodeIfPresent(String.self, forKey: .observedBlockName),
+            observedFocus: try container.decodeIfPresent(String.self, forKey: .observedFocus),
+            observedNextFocusCandidates: try container.decodeIfPresent([String].self, forKey: .observedNextFocusCandidates) ?? []
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(blockID, forKey: .blockID)
+        try container.encode(targetMinutes, forKey: .targetMinutes)
+        try container.encode(activeDurationSeconds, forKey: .activeDurationSeconds)
+        try container.encode(visitCount, forKey: .visitCount)
+        try container.encode(wasSkipped, forKey: .wasSkipped)
+        try container.encode(wasExtended, forKey: .wasExtended)
+        try container.encodeIfPresent(observedBlockName, forKey: .observedBlockName)
+        try container.encodeIfPresent(observedFocus, forKey: .observedFocus)
+        if !observedNextFocusCandidates.isEmpty {
+            try container.encode(observedNextFocusCandidates, forKey: .observedNextFocusCandidates)
+        }
     }
 }
 
@@ -178,7 +326,10 @@ public struct PracticeSummary: Codable, Equatable, Sendable {
                 activeDurationSeconds: active,
                 visitCount: visits[block.id, default: 0],
                 wasSkipped: active == 0,
-                wasExtended: active > targetSeconds
+                wasExtended: active > targetSeconds,
+                observedBlockName: block.name,
+                observedFocus: block.focus,
+                observedNextFocusCandidates: block.nextFocusCandidates
             )
         }
         return PracticeSummary(

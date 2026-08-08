@@ -3,6 +3,7 @@ import Foundation
 public enum PracticeServiceError: Error, Equatable, Sendable {
     case missingRoutine
     case duplicateActiveRoutineName
+    case activeRoutineAlreadyExists
     case routineHasSessions
     case activeRoutineCannotBeModified
     /// Published plan revisions own an immutable routine structure. Learners
@@ -17,6 +18,8 @@ extension PracticeServiceError: LocalizedError {
             "The practice routine is no longer available."
         case .duplicateActiveRoutineName:
             "An active practice routine already uses this name."
+        case .activeRoutineAlreadyExists:
+            "This project already has an active practice routine. Archive or merge it before adding another."
         case .routineHasSessions:
             "This routine has practice history and can only be archived."
         case .activeRoutineCannotBeModified:
@@ -111,6 +114,13 @@ public final class PracticeService {
         guard !hasDuplicateActiveName(routine.name, in: snapshot) else {
             throw PracticeServiceError.duplicateActiveRoutineName
         }
+        guard !hasOperationalRoutine(
+            for: routine.projectId,
+            excluding: nil,
+            in: snapshot
+        ) else {
+            throw PracticeServiceError.activeRoutineAlreadyExists
+        }
 
         try repository.commit(
             JournalTransaction(upserts: [.practiceRoutine(routine)], origin: .user)
@@ -162,6 +172,14 @@ public final class PracticeService {
             in: snapshot
         ) else {
             throw PracticeServiceError.duplicateActiveRoutineName
+        }
+        if !updated.isArchived,
+           hasOperationalRoutine(
+               for: updated.projectId,
+               excluding: updated.id,
+               in: snapshot
+           ) {
+            throw PracticeServiceError.activeRoutineAlreadyExists
         }
 
         try repository.commit(
@@ -326,6 +344,19 @@ public final class PracticeService {
                 && !routine.isArchived
                 && routine.deletedAt == nil
                 && normalizedRoutineName(routine.name) == normalizedName
+        }
+    }
+
+    private func hasOperationalRoutine(
+        for projectID: UUID?,
+        excluding routineID: UUID?,
+        in snapshot: JournalSnapshot
+    ) -> Bool {
+        guard let projectID else { return false }
+        return snapshot.operationalPracticeRoutines.contains {
+            $0.projectId == projectID
+                && $0.id != routineID
+                && !$0.isArchived
         }
     }
 

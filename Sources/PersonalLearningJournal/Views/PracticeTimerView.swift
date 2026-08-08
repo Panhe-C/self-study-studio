@@ -257,6 +257,7 @@ public struct PracticeTimerView: View {
             Section("Optional Details") {
                 TextField("Note", text: noteBinding, axis: .vertical)
                     .lineLimit(3...6)
+                TextField("Attention marker (optional)", text: attentionMarkerBinding)
                 LabeledContent(
                     "Project",
                     value: availableProjects.first(where: { $0.id == routine.projectId })?.name ?? "Unavailable"
@@ -307,7 +308,23 @@ public struct PracticeTimerView: View {
         Binding {
             pendingDraft?.note ?? ""
         } set: { newValue in
-            updatePendingDraft(note: newValue, linkedProjectId: pendingDraft?.linkedProjectId)
+            updatePendingDraft(
+                note: newValue,
+                linkedProjectId: pendingDraft?.linkedProjectId,
+                attentionMarker: pendingDraft?.attentionMarker
+            )
+        }
+    }
+
+    private var attentionMarkerBinding: Binding<String> {
+        Binding {
+            pendingDraft?.attentionMarker ?? ""
+        } set: { newValue in
+            updatePendingDraft(
+                note: pendingDraft?.note ?? "",
+                linkedProjectId: pendingDraft?.linkedProjectId,
+                attentionMarker: newValue
+            )
         }
     }
 
@@ -354,19 +371,9 @@ public struct PracticeTimerView: View {
 
     private func finishPractice() {
         refreshTimer()
-        guard let completion = timer.finish() else {
+        guard timer.finish() != nil else {
             timerError = "The timer could not finish. Your active practice is still available to retry."
             return
-        }
-        do {
-            _ = try viewModel.savePracticeCompletion(
-                completion,
-                linkedProjectId: routine.projectId,
-                note: nil
-            )
-            dismiss()
-        } catch {
-            saveError = error.localizedDescription
         }
     }
 
@@ -403,7 +410,8 @@ public struct PracticeTimerView: View {
             let result = try viewModel.savePracticeCompletion(
                 draft.completion,
                 linkedProjectId: routine.projectId,
-                note: draft.note.trimmedForJournal.nilIfEmpty
+                note: draft.note.trimmedForJournal.nilIfEmpty,
+                attentionMarker: draft.attentionMarker?.trimmedForJournal.nilIfEmpty
             )
             if result.didDropMissingProjectLink {
                 fallbackExplanation = "The linked project is no longer available. The practice session was saved without a project link."
@@ -420,8 +428,16 @@ public struct PracticeTimerView: View {
         }
     }
 
-    private func updatePendingDraft(note: String, linkedProjectId: UUID?) {
-        guard timer.updatePendingCompletion(note: note, linkedProjectId: linkedProjectId) else {
+    private func updatePendingDraft(
+        note: String,
+        linkedProjectId: UUID?,
+        attentionMarker: String?
+    ) {
+        guard timer.updatePendingCompletion(
+            note: note,
+            linkedProjectId: linkedProjectId,
+            attentionMarker: attentionMarker
+        ) else {
             saveError = "The completion details could not be preserved on this device. Your previous draft is still available."
             return
         }

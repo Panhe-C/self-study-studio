@@ -201,6 +201,7 @@ public final class JournalApplicationSession: ObservableObject {
                         repository: repository,
                         backupDirectory: backupDirectory
                     )
+                    rebuildViewModels(using: repository)
                 }
 
                 if try !repository.hasCompletedMigration(identifier: PracticeBlocksMigration.identifier) {
@@ -224,6 +225,7 @@ public final class JournalApplicationSession: ObservableObject {
                         repository: repository,
                         backupDirectory: backupDirectory
                     )
+                    rebuildViewModels(using: repository)
                 }
                 pendingMigration = nil
                 pendingPlanRevisionMigration = nil
@@ -253,14 +255,38 @@ public final class JournalApplicationSession: ObservableObject {
             return
         }
         let dryRun = ProductConvergenceMigration().dryRun(snapshot: snapshot)
-        let hasLegacyStatus = snapshot.projects.contains {
-            $0.status.isLegacy || $0.isTrashed
+        guard dryRun.issues.isEmpty else {
+            pendingMigration = dryRun
+            pendingPlanRevisionMigration = nil
+            pendingPracticeBlocksMigration = nil
+            migrationGateBlocked = false
+            if pendingMigration == nil { migrationError = nil }
+            return
         }
-        pendingMigration = dryRun.issues.isEmpty && !hasLegacyStatus ? nil : dryRun
-        pendingPlanRevisionMigration = nil
-        pendingPracticeBlocksMigration = nil
-        migrationGateBlocked = false
-        if pendingMigration == nil { migrationError = nil }
+
+        do {
+            let backupDirectory = documentsDirectory
+                .appendingPathComponent("LearningJournal", isDirectory: true)
+                .appendingPathComponent("Migrations", isDirectory: true)
+                .appendingPathComponent("B1", isDirectory: true)
+            _ = try ProductConvergenceMigration().execute(
+                snapshot: snapshot,
+                resolutions: [],
+                repository: repository,
+                backupDirectory: backupDirectory
+            )
+            rebuildViewModels(using: repository)
+            // A clean B1 still needs to establish its marker before B2/B3
+            // can run. Re-enter the gate so each stage is checked and marked
+            // before sync is considered safe.
+            prepareMigrationGate(for: repository)
+        } catch {
+            migrationGateBlocked = true
+            migrationError = "Could not complete the initial migration: \(error.localizedDescription)"
+            pendingMigration = nil
+            pendingPlanRevisionMigration = nil
+            pendingPracticeBlocksMigration = nil
+        }
     }
 
     public func continuePlanRevisionMigration(with survivors: [UUID: UUID]) {

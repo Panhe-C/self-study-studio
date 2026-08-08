@@ -653,7 +653,10 @@
             "startedAt": "2026-01-02T19:00:00Z",
             "endedAt": "2026-01-02T19:02:00Z",
             "activeDurationSeconds": 120,
-            "isPause": false
+            "isPause": false,
+            "observedBlockName": "Warm up",
+            "observedFocus": "Relaxed eighth notes",
+            "observedNextFocusCandidates": ["Add a metronome"]
           },
           {
             "id": "00000000-0000-0000-0000-000000000020",
@@ -661,7 +664,10 @@
             "startedAt": "2026-01-02T19:03:00Z",
             "endedAt": "2026-01-02T19:05:00Z",
             "activeDurationSeconds": 120,
-            "isPause": false
+            "isPause": false,
+            "observedBlockName": "Warm up",
+            "observedFocus": "Relaxed eighth notes",
+            "observedNextFocusCandidates": ["Add a metronome"]
           }
         ],
         "summary": {
@@ -673,7 +679,10 @@
               "activeDurationSeconds": 240,
               "visitCount": 2,
               "wasSkipped": false,
-              "wasExtended": false
+              "wasExtended": false,
+              "observedBlockName": "Warm up",
+              "observedFocus": "Relaxed eighth notes",
+              "observedNextFocusCandidates": ["Add a metronome"]
             }
           ],
           "attentionMarker": "Keep the loop small"
@@ -697,7 +706,10 @@
             "startedAt": "2026-01-02T19:00:00Z",
             "endedAt": "2026-01-02T19:02:00Z",
             "activeDurationSeconds": 120,
-            "isPause": false
+            "isPause": false,
+            "observedBlockName": "Warm up",
+            "observedFocus": "Relaxed eighth notes",
+            "observedNextFocusCandidates": ["Add a metronome"]
           },
           {
             "id": "00000000-0000-0000-0000-000000000020",
@@ -705,7 +717,10 @@
             "startedAt": "2026-01-02T19:03:00Z",
             "endedAt": "2026-01-02T19:05:00Z",
             "activeDurationSeconds": 120,
-            "isPause": false
+            "isPause": false,
+            "observedBlockName": "Warm up",
+            "observedFocus": "Relaxed eighth notes",
+            "observedNextFocusCandidates": ["Add a metronome"]
           }
         ],
         "summary": {
@@ -717,7 +732,10 @@
               "activeDurationSeconds": 240,
               "visitCount": 2,
               "wasSkipped": false,
-              "wasExtended": false
+              "wasExtended": false,
+              "observedBlockName": "Warm up",
+              "observedFocus": "Relaxed eighth notes",
+              "observedNextFocusCandidates": ["Add a metronome"]
             }
           ],
           "attentionMarker": "Keep the loop small"
@@ -1032,6 +1050,146 @@
         "schemaVersion": 3,
         "integrity": "qualifying",
         "revision": 1
+      }
+    },
+    {
+      "id": "practice-routine-blocks-scalar",
+      "kind": "practiceRoutine",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000015",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "name": "Focused build",
+        "symbolName": "hammer",
+        "color": "blue",
+        "targetMinutes": 30,
+        "weekdays": [1],
+        "blocks": "not-an-array",
+        "isArchived": false,
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "schemaVersion": 1
+      }
+    },
+    {
+      "id": "practice-routine-blocks-duplicate-id",
+      "kind": "practiceRoutine",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000015",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "name": "Focused build",
+        "symbolName": "hammer",
+        "color": "blue",
+        "targetMinutes": 30,
+        "weekdays": [1],
+        "blocks": [
+          { "id": "00000000-0000-0000-0000-000000000018", "name": "A", "targetMinutes": 10, "ordinal": 0 },
+          { "id": "00000000-0000-0000-0000-000000000018", "name": "B", "targetMinutes": 20, "ordinal": 1 }
+        ],
+        "isArchived": false,
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "schemaVersion": 1
+      }
+    },
+    {
+      "id": "practice-session-segments-scalar",
+      "kind": "practiceSession",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000017",
+        "routineId": "00000000-0000-0000-0000-000000000015",
+        "startedAt": "2026-01-02T19:00:00Z",
+        "endedAt": "2026-01-02T19:01:00Z",
+        "activeDurationSeconds": 60,
+        "segments": 60,
+        "createdAt": "2026-01-02T19:01:00Z",
+        "updatedAt": "2026-01-02T19:01:00Z",
+        "schemaVersion": 1
+      }
+    },
+    {
+      "id": "practice-session-segment-pause-with-active-time",
+      "kind": "practiceSession",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000017",
+        "routineId": "00000000-0000-0000-0000-000000000015",
+        "startedAt": "2026-01-02T19:00:00Z",
+        "endedAt": "2026-01-02T19:01:00Z",
+        "activeDurationSeconds": 30,
+        "segments": [
+          {
+            "id": "00000000-0000-0000-0000-000000000018",
+            "blockID": "00000000-0000-0000-0000-000000000019",
+            "startedAt": "2026-01-02T19:00:00Z",
+            "endedAt": "2026-01-02T19:01:00Z",
+            "activeDurationSeconds": 30,
+            "isPause": true
+          }
+        ],
+        "createdAt": "2026-01-02T19:01:00Z",
+        "updatedAt": "2026-01-02T19:01:00Z",
+        "schemaVersion": 1
+      }
+    },
+    {
+      "id": "practice-session-summary-missing-block",
+      "kind": "practiceSession",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000017",
+        "routineId": "00000000-0000-0000-0000-000000000015",
+        "startedAt": "2026-01-02T19:00:00Z",
+        "endedAt": "2026-01-02T19:01:00Z",
+        "activeDurationSeconds": 60,
+        "segments": [
+          {
+            "id": "00000000-0000-0000-0000-000000000018",
+            "blockID": "00000000-0000-0000-0000-000000000019",
+            "startedAt": "2026-01-02T19:00:00Z",
+            "endedAt": "2026-01-02T19:01:00Z",
+            "activeDurationSeconds": 60,
+            "isPause": false
+          }
+        ],
+        "summary": { "totalActiveDurationSeconds": 60, "blockSummaries": [] },
+        "createdAt": "2026-01-02T19:01:00Z",
+        "updatedAt": "2026-01-02T19:01:00Z",
+        "schemaVersion": 1
+      }
+    },
+    {
+      "id": "practice-session-summary-total-mismatch",
+      "kind": "practiceSession",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000017",
+        "routineId": "00000000-0000-0000-0000-000000000015",
+        "startedAt": "2026-01-02T19:00:00Z",
+        "endedAt": "2026-01-02T19:01:00Z",
+        "activeDurationSeconds": 60,
+        "segments": [
+          {
+            "id": "00000000-0000-0000-0000-000000000018",
+            "blockID": "00000000-0000-0000-0000-000000000019",
+            "startedAt": "2026-01-02T19:00:00Z",
+            "endedAt": "2026-01-02T19:01:00Z",
+            "activeDurationSeconds": 60,
+            "isPause": false
+          }
+        ],
+        "summary": {
+          "totalActiveDurationSeconds": 30,
+          "blockSummaries": [
+            {
+              "blockID": "00000000-0000-0000-0000-000000000019",
+              "targetMinutes": 5,
+              "activeDurationSeconds": 30,
+              "visitCount": 1,
+              "wasSkipped": false,
+              "wasExtended": false
+            }
+          ]
+        },
+        "createdAt": "2026-01-02T19:01:00Z",
+        "updatedAt": "2026-01-02T19:01:00Z",
+        "schemaVersion": 1
       }
     }
   ]

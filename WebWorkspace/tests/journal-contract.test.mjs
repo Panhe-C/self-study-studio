@@ -128,6 +128,12 @@ test("includes explicit nested/date invalid fixtures", () => {
     "evidence-contract-invalid-trigger",
     "practice-routine-invalid-reminder",
     "review-invalid-map",
+    "practice-routine-blocks-scalar",
+    "practice-routine-blocks-duplicate-id",
+    "practice-session-segments-scalar",
+    "practice-session-segment-pause-with-active-time",
+    "practice-session-summary-missing-block",
+    "practice-session-summary-total-mismatch",
   ]);
   const actual = new Set(fixtureSuite.invalid.map((fixture) => fixture.id));
   assert.deepEqual(new Set([...expected].filter((id) => actual.has(id))), expected);

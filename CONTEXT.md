@@ -221,49 +221,52 @@ _Avoid_: Completed session, deleted session, missed practice occurrence
 **Practice Routine** `[partial]`:
 A repeatable, Project-owned practice format with one schedule, one overall target, and an ordered set of Practice Blocks; a Project has at most one active Routine.
 _Avoid_: Learning Plan, daily task list, collection of unrelated drills
-_Gap_: the domain now carries optional ordered Blocks and an explicit dry-run/backup/merge-or-archive migration, while the Guided Routine Player, active-Routine service guard, and end-to-end Block authoring remain pending; B2 Plan Revision identity/structural locking remains compatible.
+_Gap_: the iPhone editor, Guided Routine Player, one-operational-Routine service guard, and B1/B2/B3 startup gate are wired for local use; physical-device and real CloudKit release acceptance, plus later Web parity, remain separate checks. B2 Plan Revision identity/structural locking remains compatible.
 
 **Practice Block** `[partial]`:
 A named part of a Practice Routine that preserves a distinct training purpose and target duration while participating in one continuous practice experience.
 _Avoid_: Separate Practice Routine, Planned Session, checklist item
-_Gap_: ordered Block targets, current Focus, and Next Focus candidates exist in the domain and shared contract, but iPhone authoring and guided execution are not wired yet.
+_Gap_: ordered targets, Focus, and Next Focus candidates are authored and executed by the iPhone player, with observed values retained for session history; cross-surface Web parity and physical-device/real CloudKit acceptance remain pending.
 
-**Practice Focus** `[planned]`:
+**Practice Focus** `[partial]`:
 The single current emphasis within a Practice Block, usually derived from the active Plan Phase and optionally carrying guidance, resources, and a success cue without changing the Routine's stable structure.
 _Avoid_: Plan Phase, permanent block name, Next Step
+_Gap_: iPhone authoring, player display, and session-summary snapshots are wired; Review-wide and Web consumption remain pending.
 
-**Next Focus** `[planned]`:
+**Next Focus** `[partial]`:
 An optional lightweight candidate for what a Practice Block may emphasize after its current Practice Focus; it has no completion state, timer, or reporting identity of its own.
 _Avoid_: Exercise task, checklist item, planned session
+_Gap_: iPhone authoring, player display, and session-summary snapshots are wired; Review-wide and Web consumption remain pending.
 
 **Practice Session** `[partial]`:
 One completed run of a Practice Routine that records both total active time and the actual time spent in each Practice Block.
 _Avoid_: Learning Session, block session, timer run
-_Gap_: `PracticeSession` can now persist optional per-Block Segments and a derived Summary compatibly, but the timer still records only the legacy total until Guided Routine Player work lands.
+_Gap_: iPhone runtime and atomic service save persist per-Block Segments, observed Block snapshots, and a derived Summary; the finish flow supports optional notes and an Attention Marker. Proof attachment remains an explicit follow-up, and physical-device/real CloudKit acceptance is separate.
 
 **Guided Routine Player** `[partial]`:
 The iPhone execution flow that starts and finishes a Practice Session once, presents one current Block at a time, and attributes active time as the learner advances, skips, or directly switches Blocks.
 _Avoid_: Block checklist, separate timers, forced sequence
-_Gap_: the timer starts, pauses, resumes, and recovers from a crash, but presents no Blocks and attributes no per-Block time.
+_Gap_: the iPhone player starts, pauses, resumes, skips, switches, recovers, and finishes one guided session with per-Block attribution; Web timing and physical-device/real CloudKit acceptance remain out of this local slice.
 
 **Practice Segment** `[partial]`:
 A contiguous interval of active time attributed to one Practice Block inside a Practice Session; pauses are excluded and repeated visits to the same Block are combined in the session summary.
 _Avoid_: Practice Session, exercise timer, planned session
-_Gap_: Codable/CloudKit mapping and summary aggregation exist; runtime pause/skip/direct-selection attribution remains pending.
+_Gap_: Codable/CloudKit mapping, summary aggregation, and runtime pause/skip/direct-selection attribution are wired on iPhone; real CloudKit and physical-device acceptance remain release checks.
 
 **Practice Summary** `[partial]`:
 The automatically saved outcome of a Practice Session containing total active time, per-Block time, skipped or extended targets, and the Practice Focus used, with optional notes, Proof, and one Attention Marker.
 _Avoid_: Required reflection, block report, stage review
-_Gap_: the domain computes and persists per-Block time, skipped/extended targets, and an optional Attention Marker; automatic save ordering, Focus capture, notes/Proof attachment, and runtime production use remain pending.
+_Gap_: iPhone atomic save computes and persists per-Block time, skipped/extended targets, observed Focus/Next Focus, notes, and an optional Attention Marker. Proof attachment is not wired and remains an explicit gap; physical-device/real CloudKit acceptance is separate.
 
-**Attention Marker** `[planned]`:
+**Attention Marker** `[partial]`:
 An optional indication that one Practice Block deserves attention in the next session or Review; it is a learner signal rather than a score or failure state.
 _Avoid_: Rating, failed block, automatic recommendation
+_Gap_: the iPhone finish flow can save one optional marker and history displays it; Review-wide and Web consumption remain pending.
 
 **Practice Target** `[partial]`:
 A soft time goal for a Practice Routine or Block; the Routine's total target determines whether the day met its goal, while Block targets guide balance without blocking completion.
 _Avoid_: Required checklist, completion gate, quota
-_Gap_: Routine and Block targets now exist and remain soft; target feedback and guided UI wiring are still pending.
+_Gap_: Routine and Block targets remain soft; runtime target feedback and guided UI wiring are present on iPhone, with physical-device/real CloudKit acceptance still required.
 
 **Published Review** `[shipped]`:
 A completed reflection whose decisions become part of the Personal Learning Journal and may change a project's status or Next Step.

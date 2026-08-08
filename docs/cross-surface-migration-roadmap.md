@@ -1,6 +1,6 @@
 # Cross-Surface Migration Roadmap
 
-Status: B2 complete; execution starts at B3
+Status: B3 iOS slice complete; B4 is next
 
 Product decisions: `docs/adr/0001` through `docs/adr/0033`
 Target domain language: `CONTEXT.md`
@@ -226,22 +226,28 @@ existing EventKit preview and confirmation boundary untouched.
 **Status (2026-08-09, complete for the iOS slice).** The domain/contract and migration layers now
 carry ordered Practice Blocks, optional Focus and Next Focus candidates, per-Block Segments and
 Summaries, and a dry-run/backup/idempotent explicit merge-or-archive migration. The Guided Routine
-Player, durable runtime recovery, service transaction, authoring UI, and startup gate are wired.
+Player, durable runtime recovery, one-operational-Routine service guard, authoring UI, and B1/B2/B3
+startup gate are wired.
 
 **Current.** PracticeTimerRuntime persists the ordered blocks, current Block, active segments,
-skip state, and pending completion. Pause time is excluded; direct selection, skip, extension,
-and revisits remain attributable to one session. Finishing writes the Practice Session, segments,
-and summary in one repository transaction and clears local timer state. Existing flat timers
-recover as one stable Block; corrupt or impossible state fails closed. Published plan revisions
-keep their routine structure locked and require a new revision. Web remains history/configuration
-only for practice timing.
+skip state, and a recoverable pending completion. Pause time is excluded; direct selection, skip,
+extension, and revisits remain attributable to one session. Save Practice writes the Practice
+Session, segments, observed Block/Focus snapshot, summary, optional note, and optional Attention
+Marker in one repository transaction, then clears the pending local draft. Existing flat timers
+recover as one stable Block with recovered active time; corrupt or impossible state fails closed.
+Published plan revisions keep their routine structure locked and require a new revision. Web
+remains history/configuration only for practice timing.
 
-**Remaining work.** Physical-device and real CloudKit acceptance remain separate release checks.
+**Remaining work.** Proof attachment is an explicit follow-up and is not part of the finish flow.
+Physical-device and real CloudKit acceptance remain separate release checks; Web timing/write parity
+is intentionally out of B3.
 
-**Independent verification.** swift test passes 393 tests with 0 failures, including runtime
-pause/skip/revisit/relaunch and legacy recovery tests, service atomic-save coverage, migration-gate
-backup/resolution coverage, and existing end-to-end practice workflows. No Block rating is
-required to save.
+**Independent verification.** Runtime tests cover pause/skip/revisit/relaunch, switch-boundary
+accounting, and legacy active-time recovery. Service tests cover atomic save and the one-operational-
+Routine guard; migration-gate tests cover backup/resolution sequencing and a clean flat-routine
+startup. No Block rating is required to save. Full-suite, unsigned-simulator, physical-device, and
+real CloudKit checks remain release evidence rather than being inferred from these static/runtime
+tests.
 
 **Risk.** High — the largest single model change, and the one the Web Practice view already
 assumes. Local crash recovery must keep working for in-progress sessions across the migration.

@@ -41,10 +41,16 @@ struct PracticeRoutineDraft: Equatable {
 
     func canSave(
         comparedWith routines: [PracticeRoutine],
-        activeRoutineId: UUID? = nil
+        activeRoutineId: UUID? = nil,
+        operationalRoutineProjectIDs: Set<UUID> = []
     ) -> Bool {
         if isStructuralLocked { return false }
         if let activeRoutineId, routineId == activeRoutineId { return false }
+        if routineId == nil,
+           let projectId,
+           operationalRoutineProjectIDs.contains(projectId) {
+            return false
+        }
         guard !trimmedName.isEmpty,
               projectId != nil,
               (1...1_440).contains(targetMinutes),
@@ -105,6 +111,14 @@ public struct PracticeManagerView: View {
                             routineRow(routine)
                         }
                     }
+                    if availableProjectsForNewRoutine.isEmpty && !activeRoutines.isEmpty {
+                        Label(
+                            "Archive or merge the current routine before adding another routine for these projects.",
+                            systemImage: "arrow.triangle.merge"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Archived") {
@@ -135,6 +149,12 @@ public struct PracticeManagerView: View {
                         Image(systemName: "plus")
                     }
                     .accessibilityLabel("Add practice routine")
+                    .accessibilityHint(
+                        availableProjectsForNewRoutine.isEmpty
+                            ? "Archive or merge an existing routine before adding another."
+                            : "Create a routine for a project without an active routine."
+                    )
+                    .disabled(availableProjectsForNewRoutine.isEmpty)
                 }
             }
         }
@@ -176,6 +196,26 @@ public struct PracticeManagerView: View {
                     return left.createdAt < right.createdAt
                 }
                 return left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
+            }
+    }
+
+    private var operationalRoutineProjectIDs: Set<UUID> {
+        Set(
+            viewModel.snapshot.operationalPracticeRoutines
+                .filter { !$0.isArchived }
+                .compactMap(\.projectId)
+        )
+    }
+
+    private var availableProjectsForNewRoutine: [Project] {
+        viewModel.projects
+            .filter {
+                $0.deletedAt == nil
+                    && !$0.isTrashed
+                    && !operationalRoutineProjectIDs.contains($0.id)
+            }
+            .sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
     }
 
@@ -356,7 +396,7 @@ private struct PracticeRoutineEditorView: View {
                 Section("Routine") {
                     Picker("Project", selection: $draft.projectId) {
                         Text("Choose a project").tag(Optional<UUID>.none)
-                        ForEach(viewModel.projects.filter { $0.deletedAt == nil && !$0.isTrashed }) { project in
+                        ForEach(projectsForEditor) { project in
                             Text(project.name).tag(Optional(project.id))
                         }
                     }
@@ -476,7 +516,8 @@ private struct PracticeRoutineEditorView: View {
                     Button("Save", action: save)
                         .disabled(!draft.canSave(
                             comparedWith: viewModel.practiceRoutines,
-                            activeRoutineId: practiceTimer.snapshot.activeRoutineId
+                            activeRoutineId: practiceTimer.snapshot.activeRoutineId,
+                            operationalRoutineProjectIDs: operationalRoutineProjectIDs
                         ))
                 }
             }
@@ -497,7 +538,29 @@ private struct PracticeRoutineEditorView: View {
         if draft.hasDuplicateActiveName(comparedWith: viewModel.practiceRoutines) {
             return "An active routine already uses this name."
         }
+        if draft.routineId == nil,
+           let projectId = draft.projectId,
+           operationalRoutineProjectIDs.contains(projectId) {
+            return "Archive or merge the existing routine before adding another for this project."
+        }
         return nil
+    }
+
+    private var operationalRoutineProjectIDs: Set<UUID> {
+        Set(
+            viewModel.snapshot.operationalPracticeRoutines
+                .filter { !$0.isArchived }
+                .compactMap(\.projectId)
+        )
+    }
+
+    private var projectsForEditor: [Project] {
+        let allProjects = viewModel.projects
+            .filter { $0.deletedAt == nil && !$0.isTrashed }
+        guard draft.routineId == nil else { return allProjects }
+        return allProjects.filter {
+            !operationalRoutineProjectIDs.contains($0.id)
+        }
     }
 
     @ViewBuilder
@@ -588,7 +651,8 @@ private struct PracticeRoutineEditorView: View {
             }
             if let summary = session.summary {
                 ForEach(summary.blockSummaries, id: \PracticeBlockSummary.blockID) { blockSummary in
-                    let name = draft.blocks.first(where: { $0.id == blockSummary.blockID })?.name
+                    let name = blockSummary.observedBlockName
+                        ?? draft.blocks.first(where: { $0.id == blockSummary.blockID })?.name
                         ?? "Practice block"
                     HStack(spacing: 6) {
                         Text(name)
@@ -610,6 +674,17 @@ private struct PracticeRoutineEditorView: View {
                     .accessibilityLabel(
                         "\(name), \(StudioDurationFormat.compact(seconds: blockSummary.activeDurationSeconds)), \(blockSummary.visitCount) visits\(blockSummary.wasSkipped ? ", skipped" : blockSummary.wasExtended ? ", extended" : "")"
                     )
+                    if let focus = blockSummary.observedFocus, !focus.isEmpty {
+                        Label(focus, systemImage: "scope")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if !blockSummary.observedNextFocusCandidates.isEmpty {
+                        Text("Next: \(blockSummary.observedNextFocusCandidates.joined(separator: ", "))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                 }
                 if let marker = summary.attentionMarker, !marker.isEmpty {
                     Label(marker, systemImage: "scope")
@@ -687,7 +762,8 @@ private struct PracticeRoutineEditorView: View {
     private func save() {
         guard draft.canSave(
             comparedWith: viewModel.practiceRoutines,
-            activeRoutineId: practiceTimer.snapshot.activeRoutineId
+            activeRoutineId: practiceTimer.snapshot.activeRoutineId,
+            operationalRoutineProjectIDs: operationalRoutineProjectIDs
         ) else { return }
         do {
             if let routineId = draft.routineId {

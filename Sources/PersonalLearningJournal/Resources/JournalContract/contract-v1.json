@@ -320,7 +320,22 @@
         "color": { "type": "enum", "required": true, "values": ["coral", "teal", "yellow", "blue", "green", "pink"] },
         "targetMinutes": { "type": "integer", "required": true, "minimum": 1, "maximum": 1440 },
         "weekdays": { "type": "integerArray", "required": true, "sort": "ascending" },
-        "blocks": { "type": "json", "required": false },
+        "blocks": {
+          "type": "array",
+          "required": false,
+          "items": {
+            "type": "object",
+            "required": true,
+            "objectFields": {
+              "id": { "type": "uuid", "required": true },
+              "name": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+              "targetMinutes": { "type": "integer", "required": true, "minimum": 1, "maximum": 1440 },
+              "ordinal": { "type": "integer", "required": true, "minimum": 0 },
+              "focus": { "type": "string", "required": false, "trim": true },
+              "nextFocusCandidates": { "type": "stringArray", "required": false, "trim": true }
+            }
+          }
+        },
         "reminderTime": {
           "type": "object",
           "required": false,
@@ -345,8 +360,52 @@
         "startedAt": { "type": "date", "required": true },
         "endedAt": { "type": "date", "required": true },
         "activeDurationSeconds": { "type": "integer", "required": true, "minimum": 0 },
-        "segments": { "type": "json", "required": false },
-        "summary": { "type": "json", "required": false },
+        "segments": {
+          "type": "array",
+          "required": false,
+          "items": {
+            "type": "object",
+            "required": true,
+            "objectFields": {
+              "id": { "type": "uuid", "required": true },
+              "blockID": { "type": "uuid", "required": true },
+              "startedAt": { "type": "date", "required": true },
+              "endedAt": { "type": "date", "required": true },
+              "activeDurationSeconds": { "type": "integer", "required": true, "minimum": 0 },
+              "isPause": { "type": "boolean", "required": true },
+              "observedBlockName": { "type": "string", "required": false, "trim": true },
+              "observedFocus": { "type": "string", "required": false, "trim": true },
+              "observedNextFocusCandidates": { "type": "stringArray", "required": false, "trim": true }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "required": false,
+          "objectFields": {
+            "totalActiveDurationSeconds": { "type": "integer", "required": true, "minimum": 0 },
+            "blockSummaries": {
+              "type": "array",
+              "required": true,
+              "items": {
+                "type": "object",
+                "required": true,
+                "objectFields": {
+                  "blockID": { "type": "uuid", "required": true },
+                  "targetMinutes": { "type": "integer", "required": true, "minimum": 1, "maximum": 1440 },
+                  "activeDurationSeconds": { "type": "integer", "required": true, "minimum": 0 },
+                  "visitCount": { "type": "integer", "required": true, "minimum": 0 },
+                  "wasSkipped": { "type": "boolean", "required": true },
+                  "wasExtended": { "type": "boolean", "required": true },
+                  "observedBlockName": { "type": "string", "required": false, "trim": true },
+                  "observedFocus": { "type": "string", "required": false, "trim": true },
+                  "observedNextFocusCandidates": { "type": "stringArray", "required": false, "trim": true }
+                }
+              }
+            },
+            "attentionMarker": { "type": "string", "required": false, "trim": true }
+          }
+        },
         "note": { "type": "string", "required": false, "trim": true },
         "createdAt": { "type": "date", "required": true },
         "updatedAt": { "type": "date", "required": true },

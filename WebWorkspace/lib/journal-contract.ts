@@ -28,10 +28,12 @@ export type JournalRecordFieldDefinition = {
   trim?: boolean;
   nonEmpty?: boolean;
   values?: string[];
+  format?: string;
   variants?: string[];
   minimum?: number;
   maximum?: number;
   sort?: string;
+  items?: JournalRecordNestedFieldDefinition;
   objectFields?: Record<string, JournalRecordNestedFieldDefinition>;
   variantFields?: Record<string, Record<string, JournalRecordNestedFieldDefinition>>;
 };
@@ -42,9 +44,13 @@ export type JournalRecordNestedFieldDefinition = {
   trim?: boolean;
   nonEmpty?: boolean;
   values?: string[];
+  variants?: string[];
+  variantFields?: Record<string, Record<string, JournalRecordNestedFieldDefinition>>;
   minimum?: number;
   maximum?: number;
   format?: string;
+  items?: JournalRecordNestedFieldDefinition;
+  objectFields?: Record<string, JournalRecordNestedFieldDefinition>;
 };
 
 export type JournalRecordDefinition = {
@@ -245,6 +251,10 @@ function validateValue(
         invalid(kind, field);
       }
       break;
+    case "array":
+      if (!Array.isArray(value) || !definition.items) invalid(kind, field);
+      else value.forEach((item, index) => validateNestedValue(item, `${field}[${index}]`, definition.items!, kind, contract));
+      break;
     case "object":
       if (!isObject(value) || !definition.objectFields) invalid(kind, field);
       else validateObject(value, field, definition.objectFields, kind, contract);
@@ -298,11 +308,21 @@ function validateObject(
       if (definition.required) invalid(kind, `${field}.${name}`);
       continue;
     }
-    validateValue(nested, `${field}.${name}`, definition, kind, contract);
+    validateNestedValue(nested, `${field}.${name}`, definition, kind, contract);
   }
   for (const name of Object.keys(value)) {
     if (!fields[name]) invalid(kind, `${field}.${name}`);
   }
+}
+
+function validateNestedValue(
+  value: unknown,
+  field: string,
+  definition: JournalRecordNestedFieldDefinition,
+  kind: JournalRecordKind,
+  contract: JournalRecordContractDocument,
+) {
+  validateValue(value, field, definition, kind, contract);
 }
 
 function validatePairs(
@@ -336,14 +356,17 @@ function normalizePayload(
     if (!definition.trim || value === undefined || value === null) continue;
     if (typeof value === "string") normalized[field] = value.trim();
     else if (Array.isArray(value)) {
-      normalized[field] = value.map((item) =>
+      const normalizedArray = value.map((item) =>
         typeof item === "string" ? item.trim() : item,
       );
-      if (definition.sort === "ascending" && normalized[field].every((item) => typeof item === "number")) {
-        normalized[field].sort((a, b) => a - b);
+      if (definition.sort === "ascending" && normalizedArray.every((item): item is number => typeof item === "number")) {
+        normalizedArray.sort((a, b) => a - b);
       }
+      normalized[field] = normalizedArray;
     }
-    if (definition.type === "object" && isObject(value) && definition.objectFields) {
+    if (definition.type === "array" && Array.isArray(value) && definition.items) {
+      normalized[field] = value.map((item) => normalizeNestedValue(item, definition.items!));
+    } else if (definition.type === "object" && isObject(value) && definition.objectFields) {
       normalizeObject(value, definition.objectFields);
     } else if (definition.type === "taggedUnion" && isObject(value) && definition.variantFields) {
       const tag = Object.keys(value)[0];
@@ -362,9 +385,27 @@ function normalizeObject(
   for (const [field, definition] of Object.entries(fields)) {
     const value = object[field];
     if (!definition.trim || value === undefined || value === null) continue;
-    if (typeof value === "string") object[field] = value.trim();
-    else if (Array.isArray(value)) object[field] = value.map((item) => typeof item === "string" ? item.trim() : item);
+    object[field] = normalizeNestedValue(value, definition);
   }
+}
+
+function normalizeNestedValue(
+  value: unknown,
+  definition: JournalRecordNestedFieldDefinition,
+): unknown {
+  if (definition.trim && typeof value === "string") return value.trim();
+  if (definition.type === "stringArray" && Array.isArray(value)) {
+    return value.map((item) => typeof item === "string" ? (definition.trim ? item.trim() : item) : item);
+  }
+  if (definition.type === "array" && Array.isArray(value) && definition.items) {
+    return value.map((item) => normalizeNestedValue(item, definition.items!));
+  }
+  if (definition.type === "object" && isObject(value) && definition.objectFields) {
+    const normalized = structuredClone(value);
+    normalizeObject(normalized, definition.objectFields);
+    return normalized;
+  }
+  return value;
 }
 
 function validateCrossFieldRules(
@@ -417,6 +458,18 @@ function validateCrossFieldRules(
       if (!Array.isArray(weekdays) || weekdays.length === 0 || !weekdays.every((day) => typeof day === "number" && day >= 1 && day <= 7)) {
         fail("weekdays");
       }
+      if (Array.isArray(payload.blocks)) {
+        const blockIDs = new Set<string>();
+        const ordinals = new Set<number>();
+        for (const block of payload.blocks) {
+          if (!isObject(block) || typeof block.id !== "string" || typeof block.ordinal !== "number" ||
+              blockIDs.has(block.id) || ordinals.has(block.ordinal)) fail("blocks");
+          blockIDs.add(block.id);
+          ordinals.add(block.ordinal);
+        }
+        const sortedOrdinals = [...ordinals].sort((left, right) => left - right);
+        if (sortedOrdinals.some((ordinal, index) => ordinal !== index)) fail("blocks");
+      }
       if (isObject(payload.reminderTime)) {
         if (typeof payload.reminderTime.hour !== "number" || payload.reminderTime.hour < 0 || payload.reminderTime.hour > 23 ||
             typeof payload.reminderTime.minute !== "number" || payload.reminderTime.minute < 0 || payload.reminderTime.minute > 59) {
@@ -429,6 +482,55 @@ function validateCrossFieldRules(
       if (!(date("endedAt") >= date("startedAt"))) fail("endedAt");
       if (!(integer("activeDurationSeconds") >= 0 && integer("activeDurationSeconds") <= (date("endedAt") - date("startedAt")) / 1000 + 1)) {
         fail("activeDurationSeconds");
+      }
+      const segmentVisits = new Map<string, number>();
+      let segmentActiveTotal = 0;
+      if (Array.isArray(payload.segments)) {
+        for (const segment of payload.segments) {
+          if (!isObject(segment) || typeof segment.blockID !== "string" ||
+              typeof segment.startedAt !== "string" || typeof segment.endedAt !== "string" ||
+              !isISO8601(segment.startedAt, contract) || !isISO8601(segment.endedAt, contract) ||
+              typeof segment.activeDurationSeconds !== "number" || !Number.isSafeInteger(segment.activeDurationSeconds) ||
+              typeof segment.isPause !== "boolean" || !(Date.parse(segment.endedAt) >= Date.parse(segment.startedAt)) ||
+              segment.activeDurationSeconds < 0 ||
+              segment.activeDurationSeconds > (Date.parse(segment.endedAt) - Date.parse(segment.startedAt)) / 1000 + 1 ||
+              (segment.isPause && segment.activeDurationSeconds !== 0)) fail("segments");
+          if (!segment.isPause && segment.activeDurationSeconds > 0) {
+            segmentVisits.set(segment.blockID, (segmentVisits.get(segment.blockID) ?? 0) + 1);
+            segmentActiveTotal += segment.activeDurationSeconds;
+          }
+        }
+        if (segmentActiveTotal !== integer("activeDurationSeconds")) fail("segments");
+      }
+      if (isObject(payload.summary)) {
+        const summary = payload.summary;
+        if (typeof summary.totalActiveDurationSeconds !== "number" ||
+            !Number.isSafeInteger(summary.totalActiveDurationSeconds) ||
+            summary.totalActiveDurationSeconds < 0 ||
+            summary.totalActiveDurationSeconds !== integer("activeDurationSeconds")) fail("summary");
+        const blockSummaries = Array.isArray(summary.blockSummaries)
+          ? summary.blockSummaries
+          : fail("summary");
+        const summaryIDs = new Set<string>();
+        let summaryTotal = 0;
+        for (const block of blockSummaries) {
+          if (!isObject(block) || typeof block.blockID !== "string" || summaryIDs.has(block.blockID) ||
+              typeof block.targetMinutes !== "number" || !Number.isSafeInteger(block.targetMinutes) || block.targetMinutes <= 0 ||
+              typeof block.activeDurationSeconds !== "number" || !Number.isSafeInteger(block.activeDurationSeconds) || block.activeDurationSeconds < 0 ||
+              typeof block.visitCount !== "number" || !Number.isSafeInteger(block.visitCount) || block.visitCount < 0 ||
+              typeof block.wasSkipped !== "boolean" || typeof block.wasExtended !== "boolean" ||
+              block.wasSkipped !== (block.activeDurationSeconds === 0) ||
+              block.wasExtended !== (block.activeDurationSeconds > block.targetMinutes * 60)) fail("summary.blockSummaries");
+          summaryIDs.add(block.blockID);
+          summaryTotal += block.activeDurationSeconds;
+          const expectedVisits = segmentVisits.get(block.blockID) ?? 0;
+          if (block.visitCount !== expectedVisits || (expectedVisits > 0 && block.activeDurationSeconds <= 0) ||
+              (expectedVisits === 0 && (block.activeDurationSeconds !== 0 || block.visitCount !== 0))) {
+            fail("summary.blockSummaries");
+          }
+        }
+        if (summaryTotal !== summary.totalActiveDurationSeconds ||
+            [...segmentVisits.keys()].some((blockID) => !summaryIDs.has(blockID))) fail("summary");
       }
       break;
     }

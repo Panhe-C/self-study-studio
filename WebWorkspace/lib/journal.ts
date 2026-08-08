@@ -38,7 +38,6 @@ export type PracticeBlock = {
   focus?: string;
   nextFocusCandidates?: string[];
   actualMinutes: number;
-  focus: string;
   nextFocus: string;
   tone: "coral" | "blue" | "green";
 };
@@ -50,6 +49,9 @@ export type PracticeSegment = {
   endedAt: string;
   activeDurationSeconds: number;
   isPause: boolean;
+  observedBlockName?: string;
+  observedFocus?: string;
+  observedNextFocusCandidates?: string[];
 };
 
 export type PracticeBlockSummary = {
@@ -59,6 +61,9 @@ export type PracticeBlockSummary = {
   visitCount: number;
   wasSkipped: boolean;
   wasExtended: boolean;
+  observedBlockName?: string;
+  observedFocus?: string;
+  observedNextFocusCandidates?: string[];
 };
 
 export type PracticeSummary = {

@@ -129,6 +129,25 @@ final class JournalRecordContractTests: XCTestCase {
         }
     }
 
+    func testPracticeNestedFixturesRejectScalarShapeAndRelationshipDrift() throws {
+        let suite = try JournalContractFixtures.load()
+        let requiredIDs = [
+            "practice-routine-blocks-scalar",
+            "practice-routine-blocks-duplicate-id",
+            "practice-session-segments-scalar",
+            "practice-session-segment-pause-with-active-time",
+            "practice-session-summary-missing-block",
+            "practice-session-summary-total-mismatch"
+        ]
+        for id in requiredIDs {
+            let fixture = try XCTUnwrap(suite.invalid.first(where: { $0.id == id }))
+            XCTAssertThrowsError(
+                try JournalRecordContractDecoder.decode(fixture.payload, kind: fixture.kind),
+                id
+            )
+        }
+    }
+
     private func storedFieldNames(_ entity: JournalEntity) -> Set<String> {
         func labels<T>(_ value: T) -> Set<String> {
             Set(Mirror(reflecting: value).children.compactMap(\.label))

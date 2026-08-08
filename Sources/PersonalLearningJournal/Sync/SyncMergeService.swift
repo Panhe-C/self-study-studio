@@ -103,9 +103,9 @@ public struct SyncMergeService {
                    base: base,
                    local: local,
                    server: server,
-                   structuralFields: [
+                    structuralFields: [
                        "projectId", "planRevisionID", "planSeriesID", "name", "symbolName",
-                       "color", "targetMinutes", "weekdays", "reminderTime", "isArchived"
+                       "color", "targetMinutes", "weekdays", "blocks", "reminderTime", "isArchived"
                    ],
                    wrap: JournalEntity.practiceRoutine,
                    now: now
