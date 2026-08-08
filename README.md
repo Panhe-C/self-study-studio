@@ -4,7 +4,11 @@ Personal Learning Journal is a SwiftUI-first, evidence-first learning system. A 
 
 ## Product Documentation
 
+- [产品功能演示页（单文件 HTML）](docs/product-guide/self-study-studio-product-tour.html)
 - [产品功能手册](docs/PRODUCT_GUIDE.md)
+- [Web Workspace MVP 产品规格](docs/web-workspace-mvp-spec.md)
+- [跨端迁移路线图](docs/cross-surface-migration-roadmap.md)
+- [领域语言与实现状态](CONTEXT.md)
 - [Canva 可导入演示稿](docs/product-guide/self-study-studio-product-deck.pptx)
 - [Canva 可导入 A4 手册](docs/product-guide/self-study-studio-product-guide-a4.pdf)
 - [产品功能说明图](diagrams/PRODUCT_FUNCTION_DIAGRAMS.md)
@@ -19,6 +23,11 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 ```
 
 ## What Is Implemented
+
+The list below describes the shipped iPhone model. The accepted target domain language in
+`CONTEXT.md` is ahead of it: Practice Blocks, Today Agenda, Carryover, Plan Revisions as a
+first-class type, Stage Review, and Qualifying Proof are decided but not yet built. Each term in
+`CONTEXT.md` is marked with its implementation status.
 
 - Two-step onboarding for 1-3 current projects with `name`, `area`, `goal`, one `Next Step`, and a required first Session before Today opens
 - Project creation after onboarding, plus edit and status changes
@@ -98,6 +107,7 @@ xcodebuild -project SelfStudyStudio.xcodeproj -target SelfStudyStudio -sdk iphon
 
 Current verification status:
 
+- 2026-08-08: `swift test` completed 261 tests with 0 failures, and `npm test` in `WebWorkspace` completed 39 tests with 0 failures. The count includes the in-progress practice-timer runtime work in the working tree.
 - 2026-07-15: evidence-first convergence completed `swift test` with 260 tests and 0 failures; `swift build` and the unsigned iOS Simulator build succeeded. A clean iPhone 16 Pro Simulator install launched into onboarding. See `docs/product-health-validation.md` for the requirement audit and the separate physical-device gate.
 - 2026-07-10: `swift test` completed 49 tests with 0 failures.
 - 2026-07-10: `swift build` completed successfully.
@@ -129,4 +139,10 @@ Per the PRD, these are intentionally not implemented yet:
 - Complete Pomodoro system
 - Full autonomous learning agent
 - Search
-- Desktop or web app
+- Desktop app
+
+The Web Workspace is no longer excluded. `WebWorkspace/` contains a Next.js implementation of
+the Dashboard, Project Workspace, Plan, Practice, Proof, Learning Trail, and Review Inbox, but
+it renders demo data and reads CloudKit only for diagnostics. See
+[跨端迁移路线图](docs/cross-surface-migration-roadmap.md) for the accepted sequence that connects
+it to the real Journal.

@@ -1,10 +1,13 @@
 # Canva 导入与持续更新说明
 
-本目录提供同一份产品内容的三种输出：
+本目录提供同一份产品内容的四种输出：
 
+- `self-study-studio-product-tour.html`：单文件网页走查，13 张图讲清核心闭环、三道确认边界与目标模型差距。直接在浏览器打开即可，图表由 Mermaid CDN 渲染，首次打开需要网络；离网时自动降级显示图源码。
 - `self-study-studio-product-deck.pptx`：16:9，20 页，适合产品演示、路演与评审。
 - `self-study-studio-product-guide-a4.pptx`：A4 纵向，28 页，适合在 Canva 中继续编辑手册。
 - `self-study-studio-product-guide-a4.pdf`：A4 纵向，适合直接阅读、发送与归档。
+
+HTML 走查独立于 Canva 生成链路，不需要运行 `scripts/generate-product-guide.sh`；它的图表源码内嵌在页面里，改完直接刷新浏览器即可。三个 PPTX/PDF 输出目前仍是 v1.0 内容，需按下方流程重新生成。
 
 ## 导入 Canva
 

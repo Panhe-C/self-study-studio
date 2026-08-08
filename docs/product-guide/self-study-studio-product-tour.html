@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self Study Studio · 产品功能演示</title>
+<meta name="description" content="Self Study Studio 产品功能走查：核心闭环、信息架构、数据骨架、三道确认边界，以及已发布形态与目标模型的差距。">
+<style>
+  :root {
+    --ink: #1c1917;
+    --ink-soft: #44403c;
+    --ink-faint: #78716c;
+    --paper: #fbfaf8;
+    --surface: #ffffff;
+    --rule: #e7e3dd;
+    --rule-strong: #d4cec5;
+    --accent: #a8442a;
+    --accent-soft: #fdf3f0;
+    --shipped: #2f6b46;
+    --shipped-bg: #eaf3ed;
+    --partial: #8a5a08;
+    --partial-bg: #fdf4e3;
+    --planned: #2b5578;
+    --planned-bg: #eaf1f7;
+    --sidebar-w: 264px;
+    --measure: 68ch;
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #f2efea;
+      --ink-soft: #d0cac1;
+      --ink-faint: #9c948a;
+      --paper: #16150f;
+      --surface: #1f1e17;
+      --rule: #332f26;
+      --rule-strong: #453f33;
+      --accent: #e08262;
+      --accent-soft: #2a1e19;
+      --shipped: #7fc39a;
+      --shipped-bg: #1a2a20;
+      --partial: #d9a94e;
+      --partial-bg: #2b2317;
+      --planned: #8fb8d9;
+      --planned-bg: #1a2530;
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .skip {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 12px 20px;
+    z-index: 100;
+  }
+  .skip:focus { left: 8px; top: 8px; }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  /* ---------- Layout ---------- */
+
+  .shell { display: flex; align-items: flex-start; }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    flex: 0 0 var(--sidebar-w);
+    width: var(--sidebar-w);
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--rule);
+    background: var(--surface);
+    padding: 28px 0 40px;
+  }
+
+  .brand { padding: 0 24px 20px; border-bottom: 1px solid var(--rule); }
+  .brand strong { display: block; font-size: 15px; letter-spacing: -0.01em; }
+  .brand span { display: block; font-size: 12.5px; color: var(--ink-faint); margin-top: 3px; }
+
+  .toc { margin: 16px 0 0; padding: 0; list-style: none; }
+  .toc a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 6px 24px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 14px;
+    border-left: 3px solid transparent;
+  }
+  .toc a:hover { background: var(--accent-soft); color: var(--ink); }
+  .toc a[aria-current="true"] {
+    border-left-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+    font-weight: 600;
+  }
+  .toc .num {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    min-width: 1.4em;
+  }
+  .toc a[aria-current="true"] .num { color: var(--accent); }
+
+  main { flex: 1 1 auto; min-width: 0; padding: 0 0 120px; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 40px; }
+
+  /* ---------- Hero ---------- */
+
+  .hero { border-bottom: 1px solid var(--rule); padding: 72px 0 56px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+  }
+  h1 {
+    font-size: clamp(29px, 4.2vw, 44px);
+    line-height: 1.22;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+    max-width: 24ch;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 19px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    max-width: 58ch;
+    margin: 0 0 32px;
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+  .fact { background: var(--surface); padding: 16px 18px; }
+  .fact dt { font-size: 12.5px; color: var(--ink-faint); margin: 0 0 4px; }
+  .fact dd { margin: 0; font-size: 15px; font-weight: 600; }
+
+  /* ---------- Sections ---------- */
+
+  section { padding: 64px 0 8px; scroll-margin-top: 24px; }
+  section + section { border-top: 1px solid var(--rule); }
+
+  h2 {
+    font-size: 26px;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    margin: 0 0 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  h2 .idx {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    flex: none;
+  }
+  .kicker {
+    color: var(--ink-faint);
+    font-size: 15px;
+    margin: 0 0 28px;
+    padding-left: 34px;
+  }
+  @media (max-width: 700px) { .kicker { padding-left: 0; } }
+
+  p, ul, ol { max-width: var(--measure); }
+  p { margin: 0 0 18px; }
+  ul, ol { margin: 0 0 18px; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+
+  strong { font-weight: 650; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+
+  /* ---------- Diagram ---------- */
+
+  figure {
+    margin: 0 0 28px;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    position: relative;
+  }
+  .diagram {
+    padding: 28px 20px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+  .diagram > svg { display: block; margin: 0 auto; }
+  .diagram:focus-visible { outline-offset: -2px; }
+
+  /* Shown only when a diagram is too wide to scale down legibly and therefore
+     scrolls. Without it the cut-off edge reads as a rendering bug. */
+  .scroll-hint {
+    position: absolute;
+    right: 0;
+    top: 1px;
+    bottom: 42px;
+    width: 52px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--surface) 72%);
+    opacity: 0;
+    transition: opacity 0.18s;
+  }
+  figure[data-scrollable="true"] .scroll-hint { opacity: 1; }
+  figure[data-scrolled="end"] .scroll-hint { opacity: 0; }
+  .scroll-note { display: none; }
+  figure[data-scrollable="true"] .scroll-note {
+    display: inline;
+    color: var(--accent);
+  }
+
+  /* Diagrams may exceed the prose measure; prose stays narrow for readability. */
+  @media (min-width: 1180px) {
+    figure { margin-left: -108px; margin-right: -108px; }
+  }
+  figcaption {
+    border-top: 1px solid var(--rule);
+    padding: 11px 18px;
+    font-size: 13.5px;
+    color: var(--ink-faint);
+    text-align: left;
+  }
+  .diagram-fallback {
+    padding: 20px;
+    font-size: 14px;
+    color: var(--ink-faint);
+    text-align: left;
+  }
+  .diagram-fallback pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    color: var(--ink-soft);
+    margin: 10px 0 0;
+  }
+
+  /* ---------- Callout ---------- */
+
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 16px 20px;
+    margin: 0 0 28px;
+    max-width: var(--measure);
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note .label {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  /* ---------- Status ---------- */
+
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+    vertical-align: 1px;
+  }
+  .t-shipped { color: var(--shipped); background: var(--shipped-bg); }
+  .t-partial { color: var(--partial); background: var(--partial-bg); }
+  .t-planned { color: var(--planned); background: var(--planned-bg); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    margin: 0 0 28px;
+    padding: 14px 18px;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    font-size: 14px;
+    max-width: var(--measure);
+  }
+  .legend div { display: flex; align-items: center; gap: 8px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+    margin: 0 0 28px;
+    border: 1px solid var(--rule);
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: 13.5px;
+    color: var(--ink-faint);
+    padding: 0 0 8px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  thead th {
+    background: var(--surface);
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+    color: var(--ink-faint);
+    font-weight: 600;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    margin-top: 64px;
+    padding-top: 28px;
+    font-size: 14px;
+    color: var(--ink-faint);
+  }
+  footer a { color: var(--accent); }
+
+  /* ---------- Responsive ---------- */
+
+  @media (max-width: 980px) {
+    .shell { display: block; }
+    .sidebar {
+      position: static;
+      width: auto;
+      height: auto;
+      border-right: none;
+      border-bottom: 1px solid var(--rule);
+      padding: 20px 0 8px;
+    }
+    .brand { border-bottom: none; padding-bottom: 12px; }
+    .toc {
+      display: flex;
+      overflow-x: auto;
+      gap: 4px;
+      padding: 0 16px 12px;
+      margin-top: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .toc li { flex: none; }
+    .toc a {
+      border-left: none;
+      border-bottom: 3px solid transparent;
+      padding: 6px 12px;
+      white-space: nowrap;
+      border-radius: 0;
+    }
+    .toc a[aria-current="true"] { border-left: none; border-bottom-color: var(--accent); }
+    .toc .num { display: none; }
+    .wrap { padding: 0 22px; }
+    .hero { padding: 44px 0 36px; }
+    section { padding: 44px 0 8px; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">跳到正文</a>
+
+<div class="shell">
+  <nav class="sidebar" aria-label="章节导航">
+    <div class="brand">
+      <strong>Self Study Studio</strong>
+      <span>产品功能演示 · 2026-07-25</span>
+    </div>
+    <ul class="toc" id="toc">
+      <li><a href="#loop"><span class="num">01</span>核心闭环</a></li>
+      <li><a href="#ia"><span class="num">02</span>信息架构</a></li>
+      <li><a href="#model"><span class="num">03</span>数据骨架</a></li>
+      <li><a href="#today"><span class="num">04</span>Today 排序</a></li>
+      <li><a href="#session"><span class="num">05</span>两条记录路径</a></li>
+      <li><a href="#proof"><span class="num">06</span>Proof 门槛</a></li>
+      <li><a href="#plan"><span class="num">07</span>计划与草稿</a></li>
+      <li><a href="#boundaries"><span class="num">08</span>三道确认边界</a></li>
+      <li><a href="#practice"><span class="num">09</span>练习例程</a></li>
+      <li><a href="#review"><span class="num">10</span>复盘与降级</a></li>
+      <li><a href="#sync"><span class="num">11</span>同步与冲突</a></li>
+      <li><a href="#data"><span class="num">12</span>数据主权</a></li>
+      <li><a href="#gap"><span class="num">13</span>现状与差距</a></li>
+    </ul>
+  </nav>
+
+  <main id="content">
+    <header class="hero">
+      <div class="wrap">
+        <p class="eyebrow">产品功能走查</p>
+        <h1>把「我学了什么」变成「下一步做什么」</h1>
+        <p class="lede">
+          Self Study Studio 是给同时推进多个自学项目、又不想维护知识管理系统的人做的学习系统。
+          它的立场是<strong>证据先于活动</strong>：时长和频次只解释进度，真正让进度成立的是被接受的
+          Proof 和学习者自己做出的复盘决定。
+        </p>
+        <dl class="facts">
+          <div class="fact"><dt>已发布形态</dt><dd>iPhone App</dd></div>
+          <div class="fact"><dt>Web Workspace</dt><dd>原型 · demo 数据</dd></div>
+          <div class="fact"><dt>测试基线</dt><dd>261 通过 · 0 失败</dd></div>
+          <div class="fact"><dt>产品决策</dt><dd>33 条 ADR</dd></div>
+        </dl>
+      </div>
+    </header>
+
+    <div class="wrap">
+
+      <section id="loop">
+        <h2><span class="idx">01</span>产品只做一件事</h2>
+        <p class="kicker">其他所有功能都挂在这条链上。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart LR
+  P["选择学习项目"] --> N["明确唯一 Next Step"]
+  N --> C{"怎么记录"}
+  C -->|"30 秒补记"| Q["Quick Log"]
+  C -->|"专注学习"| T["Timer"]
+  Q --> S["生成 Session"]
+  T --> S
+  S --> E{"留下证据吗"}
+  E -->|"是"| F["添加 Proof<br/>图片 · 录音 · 文件 · 链接"]
+  E -->|"暂不"| L["写入 Learning Trail"]
+  F --> L
+  L --> R["Weekly Review<br/>Facts · Patterns · Decisions"]
+  R --> A{"用户显式确认"}
+  A -->|"应用建议"| N
+  A -->|"降频或暂停"| P</pre>
+          </div>
+          <figcaption>核心闭环。终点回到起点的 Next Step，形成可持续的循环。</figcaption>
+        </figure>
+        <div class="note">
+          <span class="label">关键立场</span>
+          <p>
+            注意最后那个菱形。复盘产出的是<strong>建议</strong>，必须你点一下才生效。
+            产品从不自己改你的计划或状态，这个约束贯穿全部功能。
+          </p>
+        </div>
+      </section>
+
+      <section id="ia">
+        <h2><span class="idx">02</span>四个 Tab，入口刻意少</h2>
+        <p class="kicker">实线是 Tab，虚线是从 Tab 里打开的流程。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  R["App 启动"] --> O{"Onboarding 完成了吗"}
+  O -->|"没有"| ON["首次设置<br/>1-3 个项目 + 首条记录"]
+  O -->|"完成"| TABS["四个主 Tab"]
+  TABS --> T["Today<br/>继续学习 · 复盘提醒"]
+  TABS --> P["Projects<br/>创建 · 编辑 · 状态 · 详情"]
+  TABS --> C["Calendar<br/>日周月 · 排课草稿"]
+  TABS --> L["Library<br/>浏览 Proof · 导出"]
+  T -.-> RV["Weekly Review"]
+  T -.-> QL["Quick Log"]
+  T -.-> TM["Timer"]
+  P -.-> PD["Project Detail<br/>Trail · Sessions · Proofs · Reviews"]
+  P -.-> CP["Course Plan 向导"]
+  L -.-> EX["导出与归档"]
+  RV -.-> ST["AI Review Settings"]</pre>
+          </div>
+          <figcaption>信息架构。Onboarding 未完成时主 Tab 不出现。</figcaption>
+        </figure>
+        <p>
+          Review、Course Plan、Cloud Sync、AI 设置都<strong>不是</strong>独立 Tab，
+          它们从需要它们的地方进入。首次设置要求至少为第一个项目存下一条记录，Today 才开放，
+          避免用户面对一个空壳应用。
+        </p>
+      </section>
+
+      <section id="model">
+        <h2><span class="idx">03</span>数据骨架</h2>
+        <p class="kicker">六个核心概念以及它们背后的实际记录类型。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">erDiagram
+  PROJECT ||--o{ SESSION : "产生"
+  PROJECT ||--o{ PROOF : "拥有"
+  PROJECT ||--o{ TRAIL_EVENT : "累积"
+  PROJECT ||--o{ REVIEW : "被复盘"
+  PROJECT ||--o| COURSE_PLAN : "至多一个活跃"
+  PROJECT ||--o| EVIDENCE_CONTRACT : "承诺时必须有"
+  COURSE_PLAN ||--o{ PLAN_PHASE : "有序阶段"
+  PLAN_PHASE ||--o{ PLANNED_SESSION : "包含"
+  PLANNED_SESSION ||--o| SESSION : "被完成"
+  SESSION ||--o{ PROOF : "可附带"
+  PRACTICE_ROUTINE ||--o{ PRACTICE_SESSION : "重复执行"
+  REVIEW ||--o{ REVIEW_DECISION : "产出"
+  PROOF ||--o{ PROOF_REVISION : "被引用快照"</pre>
+          </div>
+          <figcaption>记录关系。计划与实际是两条独立的记录线。</figcaption>
+        </figure>
+        <p>
+          两个容易搞混的地方。<code>PLANNED_SESSION</code> 和 <code>SESSION</code>
+          是两个不同的东西：前者是「计划要做」，后者是「实际做了」，完成计划时前者指向后者；
+          Proof 挂在实际记录上，不挂在计划上。
+        </p>
+        <p>
+          另外，一个项目要变成 active，必须有 Goal、唯一 Next Step 和一份
+          <code>EVIDENCE_CONTRACT</code>。这是「证据优先」在代码里的强制点，不是一句口号。
+        </p>
+      </section>
+
+      <section id="today">
+        <h2><span class="idx">04</span>Today 怎么决定给你看什么</h2>
+        <p class="kicker">纯确定性排序，没有 AI，没有黑盒评分。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  S["扫描所有 active 项目"] --> F1{"用户手动置顶"}
+  F1 -->|"是"| R0["优先级 0"]
+  F1 -->|"否"| F2{"证据契约到期边界"}
+  F2 -->|"是"| R1["优先级 1"]
+  F2 -->|"否"| F3{"已确认排课的计划会话<br/>今天到期或逾期"}
+  F3 -->|"是"| R2["优先级 2"]
+  F3 -->|"否"| F4{"项目已停滞"}
+  F4 -->|"是"| R3["优先级 3"]
+  F4 -->|"否"| X["不进入推荐"]
+  R0 --> T["按优先级排序<br/>同级用到期日 → 创建时间 → UUID 打破平局"]
+  R1 --> T
+  R2 --> T
+  R3 --> T
+  T --> CAP["最多显示 3 条"]
+  CAP --> UI["主推荐 + 备选 + 练习"]</pre>
+          </div>
+          <figcaption>Today 推荐排序。四档优先级加稳定的平局打破规则。</figcaption>
+        </figure>
+        <p>
+          「最多 3 条」和「稳定打破平局」都有测试保护。产品刻意不做「今天做 12 件事」的清单，
+          因为一个做不完的清单只会让人关掉应用。
+        </p>
+      </section>
+
+      <section id="session">
+        <h2><span class="idx">05</span>两条记录路径，一种 Session</h2>
+        <p class="kicker">摩擦程度不同，落地成同一种记录。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  A["Today 或 Project Detail"] --> B{"哪种方式"}
+  B -->|"补记已发生的事"| C["Quick Log"]
+  B -->|"现在就开始学"| D["Timer"]
+  C --> E["项目默认类型与时长<br/>预设或自定义步进"]
+  E --> F["一句记录 + 新的 Next Step"]
+  D --> G["开始计时"]
+  G --> H{"学习中"}
+  H -->|"暂停"| I["暂停"]
+  I -->|"继续"| G
+  H -->|"舍弃"| J["不保存退出"]
+  H -->|"结束"| K["计算实际活动时长<br/>暂停时间不计入"]
+  F --> L["保存 Session"]
+  K --> L
+  L --> M["更新 Project 最近行动<br/>写入 Trail"]
+  M --> N{"Next Step 变了吗"}
+  N -->|"变了"| O["同步 Project 并写 Trail 事件"]
+  N -->|"没变"| P["保持"]
+  O --> Q{"现在加 Proof 吗"}
+  P --> Q
+  Q -->|"加"| RR["Add Proof"]
+  Q -->|"不加"| SS["返回"]</pre>
+          </div>
+          <figcaption>Quick Log 与 Timer 汇聚成同一种 Session，统计和复盘不用区分来源。</figcaption>
+        </figure>
+        <p>
+          如果这条 Session 是从某个计划会话启动的，保存时会<strong>原子地</strong>
+          把那个计划会话标记完成，不会出现「记录存了但计划没勾上」的中间态。
+        </p>
+      </section>
+
+      <section id="proof">
+        <h2><span class="idx">06</span>Proof 的门槛</h2>
+        <p class="kicker">必须回答「这证明了什么」，否则存不下去。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  A["入口：Project · Session · Quick Log · Timer · Library"] --> B{"选择证据类型"}
+  B --> C["拍照或相册"]
+  B --> D["录音"]
+  B --> E["导入文件"]
+  B --> F["粘贴链接"]
+  C --> G["必填：这证明了什么"]
+  D --> G
+  E --> G
+  F --> G
+  G --> H{"陈述是否非空"}
+  H -->|"空"| I["不能保存"]
+  H -->|"有"| J["保存 Proof<br/>附件落本地目录"]
+  J --> K["写入 Trail"]
+  K --> L["Proof Detail<br/>图片预览 · 音频播放 · Quick Look · 打开链接"]</pre>
+          </div>
+          <figcaption>Proof 创建。四种类型共用同一个必填陈述关卡。</figcaption>
+        </figure>
+        <div class="note">
+          <span class="label">为什么加这道摩擦</span>
+          <p>
+            这是产品最有态度的设计，它拒绝变成附件仓库。一张截图加上「这证明我能独立推导反向传播」
+            才是 Proof；只有截图不是。
+          </p>
+        </div>
+      </section>
+
+      <section id="plan">
+        <h2><span class="idx">07</span>从目标到计划</h2>
+        <p class="kicker">四步草稿，AI 没有权威。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  A["从 Project 进入计划向导"] --> B{"手动还是 AI 协助"}
+  B -->|"手动"| C["自己填阶段与会话"]
+  B -->|"AI 协助"| D["发送课程输入 + 摘要化学习上下文"]
+  D --> N["绝不发送日历内容 · 联系人 · 位置"]
+  D --> E["AI 返回结构"]
+  E --> F["本地校验：日期 · 时长 · 预算 · 结构"]
+  F -->|"不合法"| C
+  F -->|"合法"| G["填充为草稿"]
+  C --> G
+  G --> H["四步编辑<br/>目标与产出 → 阶段 → 预期 Proof → 具体会话"]
+  H --> W{"周预算超过可用时间"}
+  W -->|"是"| WARN["显示警告但不阻止"]
+  W -->|"否"| OK["无警告"]
+  WARN --> I{"显式激活"}
+  OK --> I
+  I -->|"激活"| J["创建内部计划会话<br/>旧计划保留为历史修订"]
+  I -->|"不激活"| K["停留在草稿"]</pre>
+          </div>
+          <figcaption>计划生成。AI 输出先过本地校验，再变成可编辑草稿。</figcaption>
+        </figure>
+        <p>
+          两点值得强调。AI 的输出不点「激活」什么都不是；周预算超了只警告不拦，
+          因为产品认为「明知故犯地过载」是学习者的合法选择，不是需要被系统纠正的错误。
+        </p>
+      </section>
+
+      <section id="boundaries">
+        <h2><span class="idx">08</span>三道互不越界的确认边界</h2>
+        <p class="kicker">如果只记一张图，记这张。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  subgraph L1["边界一 · 计划"]
+    A["激活课程计划"] --> B["只创建内部计划会话"]
+  end
+  subgraph L2["边界二 · 排课"]
+    C["确定性排课<br/>可用时段 · 时长偏好 · 每日上限<br/>最小间隔 · 周末策略 · 截止日"] --> D["只创建可编辑 ScheduleDraft"]
+    D --> E["草稿内可 置顶 · 移动 · 缩放 · 移除<br/>显示冲突与未排入"]
+  end
+  subgraph L3["边界三 · 写入系统日历"]
+    F["预览精确的增改删列表"] --> G{"Confirm Calendar Changes"}
+    G -->|"确认"| H["写入 EventKit<br/>逐项失败可重试"]
+    G -->|"不确认"| I["什么都不写"]
+  end
+  B --> C
+  E --> F
+  H --> J{"外部在系统日历改动了"}
+  J -->|"改了或删了"| K["提供 Adopt · Overwrite/Recreate · Detach<br/>绝不自动处理"]</pre>
+          </div>
+          <figcaption>三道确认边界。这解释了为什么这个 App 不会偷偷改你的系统日历。</figcaption>
+        </figure>
+        <p>
+          日历权限也不在启动时索要，必须你主动去设置里授权并选目标日历。同步给 iCloud 的
+          「忙碌时段」只有区间边界，不含事件标题、备注、参与人、地点。
+        </p>
+        <p>
+          内部日历在没有 iCloud、没有 AI 配置、没有网络、没有日历权限的情况下依然可用。
+          这不是降级体验，是设计目标。
+        </p>
+      </section>
+
+      <section id="practice">
+        <h2><span class="idx">09</span>练习例程</h2>
+        <p class="kicker">和计划完成度解耦。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  A["创建练习例程<br/>名称 · 目标分钟 · 周几 · 可选提醒"] --> B{"今天是安排日吗"}
+  B -->|"是"| C["Today 显示练习"]
+  B -->|"否"| D["不显示"]
+  C --> E["向上计时开始"]
+  E --> F{"中途崩溃"}
+  F -->|"是"| G["本地恢复进行中的会话"]
+  G --> E
+  E --> H["结束并保存练习会话"]
+  H --> I["统计 今日 · 本周 · 全部时长"]
+  I --> J["同步到 iCloud"]
+  H -.->|"不影响"| K["课程计划完成度"]</pre>
+          </div>
+          <figcaption>练习例程。崩溃恢复是本地能力，不依赖网络。</figcaption>
+        </figure>
+        <p>
+          练习是「保持手感」，计划完成度是「推进阶段」。产品刻意不让前者冒充后者，
+          否则每天弹半小时琴就能刷出「课程完成 80%」的假象。
+        </p>
+      </section>
+
+      <section id="review">
+        <h2><span class="idx">10</span>复盘与 AI 降级</h2>
+        <p class="kicker">AI 不可用时闭环不断。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  A["项目 7 天无记录<br/>或近期证据够了"] --> B["Today 显示复盘提醒"]
+  B --> C["聚合本周期 Session 与 Proof"]
+  C --> D{"Endpoint · Model · API Key 齐全"}
+  D -->|"不齐"| E["本地规则复盘"]
+  D -->|"齐全"| F["请求 OpenAI 兼容接口"]
+  F --> G{"请求与 JSON 解析成功"}
+  G -->|"失败"| E
+  G -->|"成功"| H["AI 复盘草稿"]
+  E --> I["可编辑 Review<br/>Facts · Patterns · Decisions · Next Steps"]
+  H --> I
+  I --> J["每条结论下方显示来源引用"]
+  J --> K{"要应用建议吗"}
+  K -->|"应用状态"| L["显式修改项目状态"]
+  K -->|"应用 Next Step"| M["显式更新唯一下一步"]
+  K -->|"都不应用"| N["只保留 Review 记录"]
+  L --> O["写入 Trail"]
+  M --> O</pre>
+          </div>
+          <figcaption>复盘流程。三种失败情形都落到同一条本地规则路径。</figcaption>
+        </figure>
+        <p>
+          没配 AI、没网、返回的 JSON 解析失败，任何一种情况都落到本地规则复盘。
+          API Key 存 Keychain，Endpoint 和 Model 存偏好设置，两者的生命周期不同，所以分开放。
+        </p>
+      </section>
+
+      <section id="sync">
+        <h2><span class="idx">11</span>同步与冲突</h2>
+        <p class="kicker">本地先落地，网络是后续动作。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  A["本地修改"] --> B["立即写入本地存储"]
+  B --> C["进入可重试发件箱"]
+  C --> D{"有网络和 Apple 账号"}
+  D -->|"否"| E["排队等待<br/>飞行模式也不丢"]
+  E --> D
+  D -->|"是"| F["上传到私有 CloudKit"]
+  F --> G{"和远端冲突了吗"}
+  G -->|"不同字段"| H["自动合并"]
+  G -->|"同字段"| I["生成冲突待人工审阅"]
+  H --> J["可见的 iCloud 状态"]
+  I --> J
+  B --> K["附件先存本地目录"]
+  K --> L["按需上传下载"]
+  M["切换 Apple 账号"] --> N["账号级隔离的本地存储<br/>不自动合并也不删除另一空间"]</pre>
+          </div>
+          <figcaption>同步模型。不同字段自动合并，同字段永远交给人判断。</figcaption>
+        </figure>
+      </section>
+
+      <section id="data">
+        <h2><span class="idx">12</span>数据主权</h2>
+        <p class="kicker">导出的是你的学习内容，不是应用的内部状态。</p>
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart LR
+  A["Library"] --> B["JSON 导出 + 附件目录"]
+  A --> C["加密归档<br/>AES.GCM 口令保护 · SHA-256 校验"]
+  C --> D["导入前显示稳定 ID 预览"]
+  E["删除项目"] --> F["进入 Trash<br/>30 天可恢复"]
+  F --> G["永久清除前显示影响范围"]
+  H["可选 App Lock"] --> I["前台解锁门 + 后台隐私遮罩"]</pre>
+          </div>
+          <figcaption>导出、回收站与应用锁。</figcaption>
+        </figure>
+        <p>
+          导出内容<strong>不含</strong>账号标识、CloudKit 元数据、排队中的变更、冲突记录和日历绑定。
+        </p>
+      </section>
+
+      <section id="gap">
+        <h2><span class="idx">13</span>已发布形态与目标模型的差距</h2>
+        <p class="kicker">诚实版本：产品决策已经跑在代码前面。</p>
+
+        <div class="legend">
+          <div><span class="tag t-shipped">shipped</span> 已实现且可用</div>
+          <div><span class="tag t-partial">partial</span> 有相关机制，约束未落地</div>
+          <div><span class="tag t-planned">planned</span> 已决定未实现</div>
+        </div>
+
+        <figure>
+          <div class="diagram">
+            <pre class="mermaid">flowchart TD
+  subgraph NOW["已发布 · iPhone"]
+    A1["Project 七种状态"]
+    A2["CoursePlan + 整数 revision"]
+    A3["扁平 PracticeRoutine<br/>只记总时长"]
+    A4["主推荐 + 备选 + 练习 三段式"]
+    A5["Weekly Review"]
+    A6["EvidenceContract 接受证据"]
+  end
+  subgraph NEXT["已决定 · 未实现"]
+    B1["Active/Paused/Completed/Abandoned<br/>+ 独立的承诺前状态"]
+    B2["Learning Plan + 不可变 Plan Revision<br/>+ Revision Guard"]
+    B3["有序 Practice Block<br/>Focus · Segment · 分块时长"]
+    B4["派生 Today Agenda<br/>+ Carryover + 当日调序"]
+    B5["项目级 Stage Review<br/>锚定阶段"]
+    B6["Qualifying Proof<br/>无证据不能推进阶段"]
+  end
+  subgraph WEB["Web Workspace"]
+    C1["界面与派生逻辑已写"]
+    C2["跑两个硬编码 demo"]
+    C3["CloudKit 只读诊断"]
+  end
+  A1 --> B1
+  A2 --> B2
+  A3 --> B3
+  A4 --> B4
+  A5 --> B5
+  A6 --> B6
+  B1 --> C1
+  B3 --> C1
+  C2 -.->|"待替换"| C1</pre>
+          </div>
+          <figcaption>已发布形态、目标模型与 Web 现状之间的映射。</figcaption>
+        </figure>
+
+        <table>
+          <caption>核心术语的实现状态（完整清单见仓库 CONTEXT.md）</caption>
+          <thead>
+            <tr><th>术语</th><th>状态</th><th>缺口</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Learning Trail</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>Sync Conflict</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>Project Status</td>
+              <td><span class="tag t-partial">partial</span></td>
+              <td>七种值而非四种；映射已由 ADR 0032 与 0033 定案</td>
+            </tr>
+            <tr>
+              <td>Learning Plan</td>
+              <td><span class="tag t-partial">partial</span></td>
+              <td>类型与用户语言仍是 CoursePlan</td>
+            </tr>
+            <tr>
+              <td>Practice Routine</td>
+              <td><span class="tag t-partial">partial</span></td>
+              <td>扁平结构，无 Block，一个项目可有多个活跃例程</td>
+            </tr>
+            <tr>
+              <td>Qualifying Proof</td>
+              <td><span class="tag t-partial">partial</span></td>
+              <td>证据接受挂在契约标准上，而非阶段成果；无阶段推进关卡</td>
+            </tr>
+            <tr>
+              <td>Practice Block</td>
+              <td><span class="tag t-planned">planned</span></td>
+              <td>Web 的练习视图已假设它存在</td>
+            </tr>
+            <tr>
+              <td>Today Agenda</td>
+              <td><span class="tag t-planned">planned</span></td>
+              <td>当前是主推荐 + 备选 + 练习三段式</td>
+            </tr>
+            <tr>
+              <td>Carryover</td>
+              <td><span class="tag t-planned">planned</span></td>
+              <td>逾期会话会出现在 Today，但没有保留原窗口的解决动作</td>
+            </tr>
+            <tr>
+              <td>Stage Review</td>
+              <td><span class="tag t-planned">planned</span></td>
+              <td>只有跨项目的 Weekly Review</td>
+            </tr>
+            <tr>
+              <td>Revision Guard</td>
+              <td><span class="tag t-planned">planned</span></td>
+              <td>Web 写入路径的前置条件</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="note">
+          <span class="label">当前最大的一处不一致</span>
+          <p>
+            Web 和 iPhone 还不在同一个领域模型上，所以 Web MVP 规格里的 12 条验收场景
+            目前没有一条能端到端跑通。收敛顺序写在仓库的跨端迁移路线图里，
+            分四个阶段十一个里程碑，每个里程碑都能独立验证。
+          </p>
+        </div>
+      </section>
+
+      <footer>
+        <p>
+          Self Study Studio · 产品功能演示页。内容对应 2026-07-25 的仓库状态。
+          术语与实现状态见 <code>CONTEXT.md</code>，产品决策见 <code>docs/adr/</code>，
+          收敛顺序见 <code>docs/cross-surface-migration-roadmap.md</code>。
+        </p>
+        <p>
+          图表由 <a href="https://mermaid.js.org">Mermaid</a> 在浏览器中渲染，首次打开需要网络。
+        </p>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const fontStack = getComputedStyle(document.body).fontFamily;
+
+  async function renderDiagrams() {
+    try {
+      const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: dark ? 'dark' : 'neutral',
+        fontFamily: fontStack,
+        fontSize: 15,
+        securityLevel: 'strict',
+        flowchart: { curve: 'basis', padding: 12, useMaxWidth: false },
+        er: { useMaxWidth: false },
+        themeVariables: dark
+          ? { primaryColor: '#262418', primaryTextColor: '#f2efea', lineColor: '#7d7466' }
+          : { primaryColor: '#fdf3f0', primaryTextColor: '#1c1917', lineColor: '#8c8378' }
+      });
+      await mermaid.run({ querySelector: 'pre.mermaid' });
+      fitDiagrams();
+      wireDiagramHints();
+      let pending = null;
+      window.addEventListener('resize', () => {
+        clearTimeout(pending);
+        pending = setTimeout(fitDiagrams, 120);
+      }, { passive: true });
+    } catch (error) {
+      for (const node of document.querySelectorAll('pre.mermaid')) {
+        const source = node.textContent;
+        const box = document.createElement('div');
+        box.className = 'diagram-fallback';
+        box.innerHTML = '<p>图表渲染需要网络加载 Mermaid。以下是图的源码：</p>';
+        const pre = document.createElement('pre');
+        pre.textContent = source;
+        box.appendChild(pre);
+        node.replaceWith(box);
+      }
+    }
+  }
+
+  // Scaling a diagram down to container width makes CJK labels unreadable on
+  // narrow screens; keeping natural width crops it on wide ones. Scale to fit
+  // while it stays legible, otherwise keep natural size and scroll.
+  const MIN_LEGIBLE_SCALE = 0.7;
+
+  function fitDiagrams() {
+    const boxes = [...document.querySelectorAll('.diagram')];
+
+    for (const box of boxes) {
+      const svg = box.querySelector('svg');
+      if (!svg) continue;
+
+      if (!box.dataset.naturalWidth) {
+        const attr = parseFloat(svg.getAttribute('width'));
+        const natural = Number.isFinite(attr) ? attr : svg.getBoundingClientRect().width;
+        box.dataset.naturalWidth = String(Math.round(natural));
+      }
+
+      const natural = Number(box.dataset.naturalWidth);
+      const style = getComputedStyle(box);
+      const available = box.clientWidth
+        - parseFloat(style.paddingLeft)
+        - parseFloat(style.paddingRight);
+      const scale = available / natural;
+      const figure = box.closest('figure');
+
+      if (scale >= 1 || scale >= MIN_LEGIBLE_SCALE) {
+        svg.style.width = '100%';
+        svg.style.maxWidth = `${natural}px`;
+        svg.style.height = 'auto';
+        figure?.setAttribute('data-scrollable', 'false');
+        box.removeAttribute('tabindex');
+        box.removeAttribute('role');
+        box.removeAttribute('aria-label');
+      } else {
+        svg.style.width = `${natural}px`;
+        svg.style.maxWidth = 'none';
+        svg.style.height = 'auto';
+        figure?.setAttribute('data-scrollable', 'true');
+        // A scrollable region must be keyboard reachable and announced.
+        box.setAttribute('tabindex', '0');
+        box.setAttribute('role', 'group');
+        box.setAttribute('aria-label', '图表，可横向滚动查看');
+      }
+    }
+  }
+
+  function wireDiagramHints() {
+    for (const box of document.querySelectorAll('.diagram')) {
+      const figure = box.closest('figure');
+      if (!figure) continue;
+
+      const hint = document.createElement('div');
+      hint.className = 'scroll-hint';
+      hint.setAttribute('aria-hidden', 'true');
+      figure.appendChild(hint);
+
+      const caption = figure.querySelector('figcaption');
+      if (caption) {
+        const note = document.createElement('span');
+        note.className = 'scroll-note';
+        note.textContent = ' 可横向滚动查看完整图表。';
+        caption.appendChild(note);
+      }
+
+      box.addEventListener('scroll', () => {
+        const atEnd = box.scrollLeft + box.clientWidth >= box.scrollWidth - 2;
+        figure.setAttribute('data-scrolled', atEnd ? 'end' : 'start');
+      }, { passive: true });
+    }
+  }
+
+  function wireNavigation() {
+    const links = [...document.querySelectorAll('#toc a')];
+    const byId = new Map(links.map((link) => [link.getAttribute('href').slice(1), link]));
+    const sections = [...document.querySelectorAll('main section[id]')];
+
+    let current = null;
+    const setCurrent = (id) => {
+      if (id === current) return;
+      current = id;
+      for (const link of links) link.removeAttribute('aria-current');
+      byId.get(id)?.setAttribute('aria-current', 'true');
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visible.length) setCurrent(visible[0].target.id);
+    }, { rootMargin: '-12% 0px -70% 0px', threshold: 0 });
+
+    for (const section of sections) observer.observe(section);
+    setCurrent(sections[0]?.id);
+
+    if (reduce) {
+      for (const link of links) {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          document.getElementById(link.getAttribute('href').slice(1))
+            ?.scrollIntoView({ behavior: 'auto' });
+        });
+      }
+    }
+  }
+
+  wireNavigation();
+  renderDiagrams();
+</script>
+</body>
+</html>

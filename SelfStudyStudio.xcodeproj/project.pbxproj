@@ -88,6 +88,7 @@
 		100000000000000000000155 /* TrashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000256 /* TrashView.swift */; };
 		100000000000000000000156 /* AppLockController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000257 /* AppLockController.swift */; };
 		100000000000000000000157 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025A /* Localizable.strings */; };
+		100000000000000000000158 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025B /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -172,6 +173,7 @@
 		100000000000000000000255 /* JournalArchiveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Archive/JournalArchiveService.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000256 /* TrashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/TrashView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000257 /* AppLockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Security/AppLockController.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000025B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = App/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 		100000000000000000000258 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		100000000000000000000259 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -272,6 +274,7 @@
 				100000000000000000000255 /* JournalArchiveService.swift */,
 				100000000000000000000256 /* TrashView.swift */,
 				100000000000000000000257 /* AppLockController.swift */,
+				10000000000000000000025B /* Assets.xcassets */,
 				10000000000000000000025A /* Localizable.strings */,
 				10000000000000000000020B /* ProjectsView.swift */,
 				10000000000000000000020C /* QuickLogView.swift */,
@@ -353,6 +356,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000157 /* Localizable.strings in Resources */,
+				100000000000000000000158 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -578,6 +582,7 @@
 		100000000000000000000B01 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				APS_ENVIRONMENT = development;
 				CODE_SIGN_ENTITLEMENTS = SelfStudyStudio/SelfStudyStudio.entitlements;
@@ -617,6 +622,7 @@
 		100000000000000000000B02 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				APS_ENVIRONMENT = production;
 				CODE_SIGN_ENTITLEMENTS = SelfStudyStudio/SelfStudyStudio.entitlements;
