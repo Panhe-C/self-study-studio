@@ -1,9 +1,49 @@
+import Combine
 import Foundation
 import XCTest
 @testable import PersonalLearningJournal
 
 @MainActor
 final class PracticeTimerRuntimeTests: XCTestCase {
+    func testRefreshCoalescesDuplicateCallsWithinSameWallClockSecond() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100.1))
+        let runtime = PracticeTimerRuntime(
+            store: InMemoryPracticeTimerStateStore(),
+            now: clock.now
+        )
+        let lifecycle = PracticeTimerLifecycleCoordinator(runtime: runtime)
+
+        try runtime.start(routineId: UUID(), targetSeconds: 30)
+
+        var publicationCount = 0
+        let observation = runtime.objectWillChange.sink {
+            publicationCount += 1
+        }
+
+        lifecycle.refresh(deliverFeedback: true)
+        clock.advance(by: 0.2)
+        lifecycle.refresh(deliverFeedback: true)
+
+        XCTAssertEqual(publicationCount, 0)
+
+        clock.advance(by: 0.8)
+        lifecycle.refresh(deliverFeedback: true)
+
+        XCTAssertEqual(publicationCount, 1)
+        XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 1)
+
+        clock.advance(by: 1)
+        lifecycle.refresh(deliverFeedback: true)
+        XCTAssertEqual(publicationCount, 2)
+        XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 2)
+
+        clock.advance(by: 1)
+        lifecycle.refresh(deliverFeedback: true)
+        XCTAssertEqual(publicationCount, 3)
+        XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 3)
+        withExtendedLifetime(observation) {}
+    }
+
     func testStartRejectsInvalidTargetsAndASecondActiveTimer() throws {
         let clock = TestClock(now: Date(timeIntervalSince1970: 100))
         let runtime = PracticeTimerRuntime(store: InMemoryPracticeTimerStateStore(), now: clock.now)
@@ -42,14 +82,20 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         let runtime = PracticeTimerRuntime(store: store, now: clock.now)
 
         try runtime.start(routineId: UUID(), targetSeconds: 10)
+        var publicationCount = 0
+        let observation = runtime.objectWillChange.sink {
+            publicationCount += 1
+        }
         clock.advance(by: 11)
         runtime.refresh()
 
         XCTAssertTrue(runtime.consumeTargetCrossing())
+        XCTAssertEqual(publicationCount, 1)
         XCTAssertFalse(runtime.consumeTargetCrossing())
         XCTAssertTrue(runtime.snapshot.isRunning)
         XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 11)
         XCTAssertFalse(PracticeTimerRuntime(store: store, now: clock.now).consumeTargetCrossing())
+        withExtendedLifetime(observation) {}
     }
 
     func testFinishReturnsImmutableCompletionAndPersistsPendingDraft() throws {

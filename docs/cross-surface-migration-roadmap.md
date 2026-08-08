@@ -91,8 +91,8 @@ assets (`App/Assets.xcassets`, `docs/assets/self-study-studio-icon-1024.png`, an
 `scripts/generate-app-icon.py`) are now tracked, with the AppIcon asset catalog wired into
 `SelfStudyStudio.xcodeproj`. Verification on the A1 commit: `swift test` 261 tests / 0
 failures, `npm test` in `WebWorkspace` 39 tests / 0 failures, the unsigned iOS Simulator
-build succeeded, and `git diff --check` is clean. The 17 commits that predate A1 are still
-unpushed; pushing them is deferred and remains pending.
+build succeeded, and `git diff --check` is clean. The 17 commits that predate A1 were pushed
+on 2026-08-08; A2 remains the next milestone and is not completed by this roadmap update.
 
 ### A2. Versioned record contract and shared fixtures
 

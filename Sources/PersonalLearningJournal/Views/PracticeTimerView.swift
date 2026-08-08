@@ -75,21 +75,18 @@ public struct PracticeTimerView: View {
     }
 
     private var timerContent: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { timeline in
-            ScrollView {
-                VStack(spacing: 28) {
-                    timerSummary
-                    timerControls
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, StudioTheme.pageInset)
-                .padding(.vertical, 28)
+        // RootView owns the app-wide one-second lifecycle tick; this view renders the
+        // published runtime snapshot without starting a second refresh loop.
+        ScrollView {
+            VStack(spacing: 28) {
+                timerSummary
+                timerControls
             }
-            .background(StudioTheme.pageBackground.ignoresSafeArea())
-            .onChange(of: timeline.date, initial: true) { _, _ in
-                refreshTimer()
-            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, StudioTheme.pageInset)
+            .padding(.vertical, 28)
         }
+        .background(StudioTheme.pageBackground.ignoresSafeArea())
     }
 
     private var timerSummary: some View {

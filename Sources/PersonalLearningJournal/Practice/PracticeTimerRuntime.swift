@@ -195,7 +195,12 @@ public final class PracticeTimerRuntime: ObservableObject {
     private var activeState: PersistedPracticeTimerState?
     @Published public private(set) var snapshot: PracticeTimerSnapshot
     @Published public private(set) var pendingCompletion: PracticePendingCompletionDraft?
-    @Published public private(set) var lastRefreshDate: Date
+    /// The last wall-clock instant observed by the runtime.
+    ///
+    /// This is intentionally not a second published source of truth. Refreshes update
+    /// `snapshot` and `lastRefreshDate` together, so an active timer produces one
+    /// observable change per displayed second instead of one publication per property.
+    public private(set) var lastRefreshDate: Date
 
     public var activeRoutinePresentation: PracticeRoutinePresentationSnapshot? {
         activeState?.routinePresentation
@@ -281,14 +286,32 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     public func refresh() {
         let timestamp = now()
-        lastRefreshDate = timestamp
+        let nextSnapshot: PracticeTimerSnapshot
         guard let state = validActiveState(at: timestamp) else {
             if activeState == nil {
-                snapshot = .inactive
+                nextSnapshot = .inactive
+            } else {
+                return
             }
-            return
+            return publishRefresh(nextSnapshot, at: timestamp)
         }
-        snapshot = Self.makeSnapshot(for: state, at: timestamp)
+        nextSnapshot = Self.makeSnapshot(for: state, at: timestamp)
+        publishRefresh(nextSnapshot, at: timestamp)
+    }
+
+    private func publishRefresh(_ nextSnapshot: PracticeTimerSnapshot, at timestamp: Date) {
+        let crossedWallClockSecond = floor(timestamp.timeIntervalSinceReferenceDate)
+            != floor(lastRefreshDate.timeIntervalSinceReferenceDate)
+        let snapshotChanged = nextSnapshot != snapshot
+        guard crossedWallClockSecond || snapshotChanged else { return }
+
+        if snapshotChanged {
+            lastRefreshDate = timestamp
+            snapshot = nextSnapshot
+        } else {
+            objectWillChange.send()
+            lastRefreshDate = timestamp
+        }
     }
 
     public func consumeTargetCrossing() -> Bool {
@@ -384,12 +407,18 @@ public final class PracticeTimerRuntime: ObservableObject {
             try save(state)
         } catch {
             if let activeState {
-                snapshot = Self.makeSnapshot(for: activeState, at: timestamp)
+                let nextSnapshot = Self.makeSnapshot(for: activeState, at: timestamp)
+                if nextSnapshot != snapshot {
+                    snapshot = nextSnapshot
+                }
             }
             return false
         }
         activeState = state
-        snapshot = Self.makeSnapshot(for: state, at: timestamp)
+        let nextSnapshot = Self.makeSnapshot(for: state, at: timestamp)
+        if nextSnapshot != snapshot {
+            snapshot = nextSnapshot
+        }
         return true
     }
 
