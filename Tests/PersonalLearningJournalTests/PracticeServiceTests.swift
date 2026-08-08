@@ -289,6 +289,55 @@ final class PracticeServiceTests: XCTestCase {
         XCTAssertEqual(try repository.snapshot(), before)
     }
 
+    func testReflectionUpdateRejectsACompletionForAnotherRoutine() throws {
+        let secondProject = Project(name: "Second Project", area: "Learning", goal: "Improve", status: .idea, currentNextStep: "")
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project, secondProject]))
+        let service = PracticeService(repository: repository)
+        let firstRoutine = try service.createRoutine(
+            projectId: project.id,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2]
+        )
+        let secondRoutine = try service.createRoutine(
+            projectId: secondProject.id,
+            name: "Piano",
+            symbolName: "pianokeys",
+            color: .blue,
+            targetMinutes: 30,
+            weekdays: [3]
+        )
+        let startedAt = Date(timeIntervalSince1970: 100)
+        let endedAt = Date(timeIntervalSince1970: 160)
+        let base = try service.saveSession(
+            sessionId: UUID(),
+            routineId: firstRoutine.id,
+            linkedProjectId: firstRoutine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 60,
+            note: nil
+        )
+        let before = try repository.snapshot()
+
+        XCTAssertThrowsError(
+            try service.updateSessionReflection(
+                sessionId: base.session.id,
+                routineId: secondRoutine.id,
+                linkedProjectId: secondRoutine.projectId,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                activeDurationSeconds: 60,
+                note: "Wrong routine"
+            )
+        ) { error in
+            XCTAssertEqual(error as? PracticeServiceError, .sessionIdentityMismatch)
+        }
+        XCTAssertEqual(try repository.snapshot(), before)
+    }
+
     func testRoutineProjectWinsOverMissingCompletionOverrideAndCreatesLearningSession() throws {
         let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = PracticeService(repository: repository)

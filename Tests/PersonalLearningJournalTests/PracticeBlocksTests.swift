@@ -205,7 +205,25 @@ final class PracticeBlocksTests: XCTestCase {
                 wasExtended: false
             )]
         )
-        XCTAssertThrowsError(try summaryWithoutSegments.validated())
+        XCTAssertNoThrow(try summaryWithoutSegments.validated())
+
+        var inconsistentEmptySummary = summaryWithoutSegments
+        inconsistentEmptySummary.summary = PracticeSummary(
+            totalActiveDurationSeconds: 0,
+            blockSummaries: [PracticeBlockSummary(
+                blockID: block.id,
+                targetMinutes: block.targetMinutes,
+                activeDurationSeconds: 0,
+                visitCount: 1,
+                wasSkipped: true,
+                wasExtended: false
+            )]
+        )
+        XCTAssertThrowsError(try inconsistentEmptySummary.validated())
+
+        var emptyBlockSummary = summaryWithoutSegments
+        emptyBlockSummary.summary = PracticeSummary(totalActiveDurationSeconds: 0, blockSummaries: [])
+        XCTAssertThrowsError(try emptyBlockSummary.validated())
 
         let legacy = PracticeSession(
             routineId: UUID(),

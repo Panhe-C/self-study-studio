@@ -274,6 +274,15 @@ final class PracticeTimerEndToEndTests: XCTestCase {
             completion,
             linkedProjectId: routine.projectId
         )
+        XCTAssertEqual(fixture.viewModel.practiceTimer.pendingCompletion?.completion, completion)
+        XCTAssertTrue(fixture.viewModel.practiceSessions.contains { $0.id == base.session.id })
+        let baseSnapshot = try fixture.repository.snapshot()
+        let baseLearningSessions = baseSnapshot.sessions
+        let baseTrailEvents = baseSnapshot.trailEvents
+        let baseProjects = baseSnapshot.projects
+        let basePracticeSession = try XCTUnwrap(
+            baseSnapshot.practiceSessions.first(where: { $0.id == base.session.id })
+        )
 
         let enriched = try fixture.viewModel.savePracticeCompletion(
             completion,
@@ -290,7 +299,97 @@ final class PracticeTimerEndToEndTests: XCTestCase {
             fixture.viewModel.practiceSessions.first?.summary?.attentionMarker,
             "Return to the transition"
         )
+        let enrichedSnapshot = try fixture.repository.snapshot()
+        let enrichedSession = try XCTUnwrap(
+            enrichedSnapshot.practiceSessions.first(where: { $0.id == base.session.id })
+        )
+        XCTAssertEqual(enrichedSnapshot.practiceSessions.count, baseSnapshot.practiceSessions.count)
+        XCTAssertEqual(enrichedSnapshot.sessions, baseLearningSessions)
+        XCTAssertEqual(enrichedSnapshot.trailEvents, baseTrailEvents)
+        XCTAssertEqual(enrichedSnapshot.projects, baseProjects)
+        XCTAssertEqual(enrichedSession.routineId, basePracticeSession.routineId)
+        XCTAssertEqual(enrichedSession.linkedProjectId, basePracticeSession.linkedProjectId)
+        XCTAssertEqual(enrichedSession.startedAt, basePracticeSession.startedAt)
+        XCTAssertEqual(enrichedSession.endedAt, basePracticeSession.endedAt)
+        XCTAssertEqual(enrichedSession.activeDurationSeconds, basePracticeSession.activeDurationSeconds)
+        XCTAssertEqual(enrichedSession.segments, basePracticeSession.segments)
+        XCTAssertEqual(enrichedSession.createdAt, basePracticeSession.createdAt)
+        XCTAssertEqual(enrichedSession.summary?.blockSummaries, basePracticeSession.summary?.blockSummaries)
+        let firstEnrichmentUpdatedAt = enrichedSession.updatedAt
+        let pendingMutationsAfterFirstEnrichment = try fixture.repository.pendingMutations(limit: 100)
+
+        fixture.clock.advance(by: 60)
+        let reflectionService = PracticeService(
+            repository: fixture.repository,
+            now: fixture.clock.now
+        )
+        _ = try reflectionService.updateSessionReflection(
+            sessionId: base.session.id,
+            routineId: completion.routineId,
+            linkedProjectId: routine.projectId,
+            startedAt: completion.startedAt,
+            endedAt: completion.endedAt,
+            activeDurationSeconds: completion.activeDurationSeconds,
+            segments: completion.segments,
+            summary: PracticeSummary.from(
+                blocks: completion.blocks,
+                segments: completion.segments,
+                attentionMarker: "Return to the transition"
+            ),
+            note: "Keep the cadence relaxed"
+        )
+        let retriedSnapshot = try fixture.repository.snapshot()
+        let retriedSession = try XCTUnwrap(
+            retriedSnapshot.practiceSessions.first(where: { $0.id == base.session.id })
+        )
+        XCTAssertEqual(retriedSnapshot.practiceSessions.count, 1)
+        XCTAssertEqual(retriedSnapshot.sessions, baseLearningSessions)
+        XCTAssertEqual(retriedSnapshot.trailEvents, baseTrailEvents)
+        XCTAssertEqual(retriedSnapshot.projects, baseProjects)
+        XCTAssertEqual(retriedSession.updatedAt, firstEnrichmentUpdatedAt)
+        XCTAssertEqual(
+            try fixture.repository.pendingMutations(limit: 100),
+            pendingMutationsAfterFirstEnrichment
+        )
         XCTAssertNil(fixture.viewModel.practiceTimer.pendingCompletion)
+    }
+
+    func testAllSkippedGuidedCompletionPersistsBaseSessionImmediately() throws {
+        let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 100))
+        let routine = try fixture.viewModel.createPracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            blocks: [
+                PracticeBlock(name: "Technique", targetMinutes: 15, ordinal: 0),
+                PracticeBlock(name: "Repertoire", targetMinutes: 15, ordinal: 1)
+            ]
+        )
+
+        try fixture.viewModel.startPractice(routine)
+        XCTAssertTrue(fixture.viewModel.practiceTimer.skipCurrentBlock())
+        XCTAssertTrue(fixture.viewModel.practiceTimer.skipCurrentBlock())
+        let completion = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
+
+        XCTAssertEqual(completion.activeDurationSeconds, 0)
+        XCTAssertTrue(completion.segments.isEmpty)
+        XCTAssertEqual(completion.summary?.totalActiveDurationSeconds, 0)
+        XCTAssertTrue(completion.summary?.blockSummaries.allSatisfy {
+            $0.activeDurationSeconds == 0 &&
+            $0.visitCount == 0 &&
+            $0.wasSkipped &&
+            !$0.wasExtended
+        } == true)
+
+        let base = try fixture.viewModel.persistPracticeCompletionBase(
+            completion,
+            linkedProjectId: routine.projectId
+        )
+        let persisted = try fixture.repository.snapshot().practiceSessions
+        XCTAssertEqual(persisted.map(\.id), [base.session.id])
+        XCTAssertEqual(persisted.first?.summary, completion.summary)
     }
 
     func testRoutineDraftBlockOrdinalsStayContiguousAfterDeleteAndAppend() {

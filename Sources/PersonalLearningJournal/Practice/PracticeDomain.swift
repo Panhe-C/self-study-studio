@@ -570,9 +570,10 @@ public struct PracticeSession: Codable, Equatable, Identifiable, Sendable {
         let hasSegments = !normalized.segments.isEmpty
         let hasSummary = summary != nil
         // A record with neither nested field is the explicitly supported
-        // legacy shape. Once either current-v2 field is present, both sides
-        // must be present so their cross-field invariants can be checked.
-        guard hasSegments == hasSummary else {
+        // legacy shape. A guided session may also finish with every block
+        // skipped: that shape has a present summary but intentionally no
+        // active segments. All other one-sided shapes are inconsistent.
+        if hasSegments && !hasSummary {
             throw PracticeValidationError.invalidSessionTiming
         }
         guard let summary else {
@@ -582,6 +583,27 @@ public struct PracticeSession: Codable, Equatable, Identifiable, Sendable {
 
         guard summary.totalActiveDurationSeconds >= 0 else {
             throw PracticeValidationError.invalidSessionTiming
+        }
+
+        if normalized.segments.isEmpty {
+            guard activeDurationSeconds == 0,
+                  summary.totalActiveDurationSeconds == 0,
+                  !summary.blockSummaries.isEmpty else {
+                throw PracticeValidationError.invalidSessionTiming
+            }
+            var summaryIDs = Set<UUID>()
+            for blockSummary in summary.blockSummaries {
+                guard summaryIDs.insert(blockSummary.blockID).inserted,
+                      (1...1_440).contains(blockSummary.targetMinutes),
+                      blockSummary.activeDurationSeconds == 0,
+                      blockSummary.visitCount == 0,
+                      blockSummary.wasSkipped,
+                      !blockSummary.wasExtended else {
+                    throw PracticeValidationError.invalidSessionTiming
+                }
+            }
+            normalized.summary = summary
+            return normalized
         }
 
         var segmentDurations: [UUID: Int] = [:]

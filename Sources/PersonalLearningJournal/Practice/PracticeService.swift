@@ -3,6 +3,7 @@ import Foundation
 public enum PracticeServiceError: Error, Equatable, Sendable {
     case missingRoutine
     case missingSession
+    case sessionIdentityMismatch
     case duplicateActiveRoutineName
     case activeRoutineAlreadyExists
     case routineHasSessions
@@ -19,6 +20,8 @@ extension PracticeServiceError: LocalizedError {
             "The practice routine is no longer available."
         case .missingSession:
             "The practice session is no longer available for reflection."
+        case .sessionIdentityMismatch:
+            "The reflection does not match the saved practice session."
         case .duplicateActiveRoutineName:
             "An active practice routine already uses this name."
         case .activeRoutineAlreadyExists:
@@ -327,22 +330,67 @@ public final class PracticeService {
         note: String?
     ) throws -> PracticeSessionSaveResult {
         let snapshot = try repository.snapshot()
-        guard snapshot.practiceSessions.contains(where: {
+        guard let existingSession = snapshot.practiceSessions.first(where: {
+            $0.id == sessionId && $0.deletedAt == nil
+        }),
+        let existingLearningSession = snapshot.sessions.first(where: {
             $0.id == sessionId && $0.deletedAt == nil
         }) else {
             throw PracticeServiceError.missingSession
         }
-        return try saveSession(
-            sessionId: sessionId,
-            routineId: routineId,
-            recoverDeletedRoutine: recoverDeletedRoutine,
-            linkedProjectId: linkedProjectId,
-            startedAt: startedAt,
-            endedAt: endedAt,
-            activeDurationSeconds: activeDurationSeconds,
-            segments: segments,
-            summary: summary,
-            note: note
+
+        // Reflection is an enrichment of the already-persisted base record.
+        // Every completion field that establishes identity must match before
+        // we touch the note/attention marker. In particular, never route this
+        // through saveSession: that would recreate the LearningSession,
+        // project, and TrailEvent side effects.
+        guard existingSession.routineId == routineId,
+              existingSession.startedAt == startedAt,
+              existingSession.endedAt == endedAt,
+              existingSession.activeDurationSeconds == activeDurationSeconds,
+              existingSession.segments == segments,
+              summaryIdentityMatches(existingSession.summary, summary),
+              linkedProjectId == nil || linkedProjectId == existingSession.linkedProjectId else {
+            throw PracticeServiceError.sessionIdentityMismatch
+        }
+
+        let normalizedNote = note?.trimmedForJournal
+        var updatedSession = existingSession
+        updatedSession.note = normalizedNote
+        if let summary,
+           let existingSummary = existingSession.summary {
+            // The identity guard above already established that all observed
+            // block fields are unchanged. Rebuild only the marker so no
+            // completion payload can rewrite historical observations.
+            updatedSession.summary = PracticeSummary(
+                totalActiveDurationSeconds: existingSummary.totalActiveDurationSeconds,
+                blockSummaries: existingSummary.blockSummaries,
+                attentionMarker: summary.attentionMarker
+            )
+        } else {
+            updatedSession.summary = existingSession.summary
+        }
+
+        // Retrying the same reflection is a no-op: this avoids a new outbox
+        // mutation and keeps all timestamps stable for idempotent enrichment.
+        guard updatedSession.note != existingSession.note ||
+              updatedSession.summary != existingSession.summary else {
+            return PracticeSessionSaveResult(
+                session: existingSession,
+                learningSession: existingLearningSession,
+                didDropMissingProjectLink: false
+            )
+        }
+
+        updatedSession.updatedAt = now()
+        try repository.commit(
+            JournalTransaction(upserts: [.practiceSession(updatedSession)], origin: .user)
+        )
+        _ = recoverDeletedRoutine
+        return PracticeSessionSaveResult(
+            session: updatedSession,
+            learningSession: existingLearningSession,
+            didDropMissingProjectLink: false
         )
     }
 
@@ -370,6 +418,21 @@ public final class PracticeService {
 
     private func liveRoutine(id: UUID, in snapshot: JournalSnapshot) -> PracticeRoutine? {
         snapshot.practiceRoutines.first { $0.id == id && $0.deletedAt == nil }
+    }
+
+    private func summaryIdentityMatches(
+        _ existing: PracticeSummary?,
+        _ incoming: PracticeSummary?
+    ) -> Bool {
+        switch (existing, incoming) {
+        case (nil, nil):
+            return true
+        case let (.some(existing), .some(incoming)):
+            return existing.totalActiveDurationSeconds == incoming.totalActiveDurationSeconds &&
+                existing.blockSummaries == incoming.blockSummaries
+        default:
+            return false
+        }
     }
 
     private func hasDuplicateActiveName(
