@@ -5,11 +5,15 @@ import Foundation
 public final class JournalApplicationSession: ObservableObject {
     @Published public private(set) var viewModel: JournalViewModel
     @Published public private(set) var calendarViewModel: CalendarViewModel
+    @Published public private(set) var pendingMigration: MigrationDryRun?
+    @Published public private(set) var migrationError: String?
 
     private let documentsDirectory: URL
     private let accountCoordinator: CloudAccountCoordinator
     private let accountProvider: any CloudAccountProviding
     private let practiceTimer: PracticeTimerRuntime
+    private var migrationRepository: any JournalRepository
+    private var migrationResolutions: [UUID: ProjectStatusMigrationResolution] = [:]
 
     public init(
         documentsDirectory: URL,
@@ -28,6 +32,9 @@ public final class JournalApplicationSession: ObservableObject {
             )
         }
         let repository = accountCoordinator.activeRepository ?? InMemoryJournalRepository()
+        self.migrationRepository = repository
+        self.pendingMigration = nil
+        self.migrationError = nil
         self.calendarViewModel = CalendarViewModel(
             repository: repository,
             calendarClient: EventKitCalendarClient()
@@ -37,6 +44,7 @@ public final class JournalApplicationSession: ObservableObject {
             accountCoordinator: accountCoordinator,
             practiceTimer: practiceTimer
         )
+        prepareMigrationGate(for: repository)
 
         Task { [weak self] in
             await self?.refreshAccount()
@@ -46,6 +54,74 @@ public final class JournalApplicationSession: ObservableObject {
     public func refreshAccount() async {
         await accountCoordinator.refresh(using: accountProvider)
         guard let repository = accountCoordinator.activeRepository else { return }
+        migrationRepository = repository
+        rebuildViewModels(using: repository)
+        prepareMigrationGate(for: repository)
+        if case .cloud = accountCoordinator.state.mode {
+            await viewModel.refreshSyncSummary()
+            try? await viewModel.syncNow()
+        } else {
+            await viewModel.refreshSyncSummary()
+        }
+    }
+
+    public func resolveArchivedProject(
+        projectID: UUID,
+        resolution: ProjectStatusMigrationResolution
+    ) {
+        migrationResolutions[projectID] = resolution
+    }
+
+    public func clearMigrationError() {
+        migrationError = nil
+    }
+
+    public func continueMigration() {
+        let resolutions: [MigrationResolution] = migrationResolutions.map {
+            .project($0.key, $0.value)
+        }
+        continueMigration(with: resolutions)
+    }
+
+    public func continueMigration(with resolutions: [MigrationResolution]) {
+        guard pendingMigration != nil else { return }
+        do {
+            let snapshot = try migrationRepository.snapshot()
+            let backupDirectory = documentsDirectory
+                .appendingPathComponent("LearningJournal", isDirectory: true)
+                .appendingPathComponent("Migrations", isDirectory: true)
+                .appendingPathComponent("B1", isDirectory: true)
+            _ = try ProductConvergenceMigration().execute(
+                snapshot: snapshot,
+                resolutions: resolutions,
+                repository: migrationRepository,
+                backupDirectory: backupDirectory
+            )
+            migrationError = nil
+            migrationResolutions = [:]
+            pendingMigration = nil
+            rebuildViewModels(using: migrationRepository)
+        } catch {
+            migrationError = error.localizedDescription
+        }
+    }
+
+    private func prepareMigrationGate(for repository: any JournalRepository) {
+        guard (try? repository.hasCompletedMigration(
+            identifier: ProductConvergenceMigration.statusMigrationIdentifier
+        )) != true else {
+            pendingMigration = nil
+            return
+        }
+        guard let snapshot = try? repository.snapshot() else { return }
+        let dryRun = ProductConvergenceMigration().dryRun(snapshot: snapshot)
+        let hasLegacyStatus = snapshot.projects.contains {
+            $0.status.isLegacy || $0.isTrashed
+        }
+        pendingMigration = dryRun.issues.isEmpty && !hasLegacyStatus ? nil : dryRun
+    }
+
+    private func rebuildViewModels(using repository: any JournalRepository) {
         calendarViewModel = CalendarViewModel(
             repository: repository,
             calendarClient: EventKitCalendarClient()
@@ -55,12 +131,6 @@ public final class JournalApplicationSession: ObservableObject {
             accountCoordinator: accountCoordinator,
             practiceTimer: practiceTimer
         )
-        if case .cloud = accountCoordinator.state.mode {
-            await viewModel.refreshSyncSummary()
-            try? await viewModel.syncNow()
-        } else {
-            await viewModel.refreshSyncSummary()
-        }
     }
 
     private static func makeViewModel(

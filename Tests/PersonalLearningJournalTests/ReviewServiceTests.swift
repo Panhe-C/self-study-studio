@@ -52,7 +52,7 @@ final class ReviewServiceTests: XCTestCase {
 
         try service.applyReviewRecommendation(reviewId: review.id, projectId: project.id)
 
-        XCTAssertEqual(service.project(id: project.id)?.status, .lowFrequency)
+        XCTAssertEqual(service.project(id: project.id)?.status, .active)
     }
 
     func testRuleBasedWeeklyReviewProducesFactPatternDecisionAndNextStep() async throws {
@@ -120,8 +120,8 @@ final class ReviewServiceTests: XCTestCase {
             periodEnd: referenceDate
         )
 
-        XCTAssertEqual(draft.projectRecommendations[project.id], .lowFrequency)
-        XCTAssertEqual(draft.nextSteps[project.id], "Choose one small Proof or lower this project for the week")
+        XCTAssertEqual(draft.projectRecommendations[project.id], .active)
+        XCTAssertEqual(draft.nextSteps[project.id], "Choose one small Proof or reduce this project's cadence/planned load for the week")
         XCTAssertTrue(draft.facts.joined(separator: " ").contains("no sessions or Proofs"))
         XCTAssertTrue(draft.decisions.isEmpty)
     }

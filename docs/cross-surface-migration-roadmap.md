@@ -1,6 +1,6 @@
 # Cross-Surface Migration Roadmap
 
-Status: A1 complete; execution starts at A2
+Status: B1 complete; execution starts at B2
 
 Product decisions: `docs/adr/0001` through `docs/adr/0033`
 Target domain language: `CONTEXT.md`
@@ -114,6 +114,12 @@ contract fails a test.
 **Risk.** Low. Additive; no stored-data change. This milestone pays for itself immediately
 because every later model change lands in one place and is checked on both sides.
 
+**Status.** Completed 2026-08-08. The versioned shared Journal record contract is enforced
+strictly on both surfaces, with 269 Swift tests / 0 failures and 48 Web tests / 0 failures;
+the Swift contract fixtures, Web decoders, and Xcode wiring are tracked and validated. The
+unsigned iOS Simulator build and `git diff --check` are clean. A2 is complete; execution now
+starts at B1.
+
 ---
 
 ## Phase B — Converge the iOS domain model
@@ -161,6 +167,14 @@ disclosure.
 
 **Risk.** Medium — this is the first milestone that rewrites existing user records. The
 `archived` split cannot be automated, so migration is interactive by design.
+
+**Status.** Completed 2026-08-09. Canonical Project lifecycle values, legacy decoding,
+explicit archived-status resolution, Trash markers, startup migration gating, Archive and
+Permanent Deletion flows, cadence-based Review outcomes, Product Health eligibility, CloudKit
+mapping, and the shared v1 contract/fixtures are implemented. Verification: `swift test` 278
+tests / 0 failures, `npm test` in `WebWorkspace` 48 tests / 0 failures, `npm run lint`,
+`swift build`, unsigned iOS Simulator build, and `git diff --check` all pass. B2 remains
+unimplemented and is the next milestone.
 
 ### B2. Learning Plan rename and explicit Plan Revisions
 

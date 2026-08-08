@@ -15,7 +15,7 @@
         "name": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
         "area": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
         "goal": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
-        "status": { "type": "enum", "required": true, "values": ["idea", "active", "low-frequency", "paused", "archived", "completed", "trash"] },
+        "status": { "type": "enum", "required": true, "values": ["idea", "active", "paused", "completed", "abandoned", "low-frequency", "archived", "trash"] },
         "currentNextStep": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
         "lastActionType": { "type": "enum", "required": true, "values": ["course", "practice", "output", "reading", "experiment", "review"] },
         "defaultDurationMinutes": { "type": "integer", "required": true, "minimum": 1 },
@@ -28,7 +28,17 @@
         "commitmentState": { "type": "enum", "required": true, "values": ["ready", "needsSetup"] },
         "activeEvidenceContractId": { "type": "uuid", "required": false },
         "completedAt": { "type": "date", "required": false },
-        "previousStatusBeforeTrash": { "type": "enum", "required": false, "values": ["idea", "active", "low-frequency", "paused", "archived", "completed", "trash"] }
+        "previousStatusBeforeTrash": { "type": "enum", "required": false, "values": ["idea", "active", "paused", "completed", "abandoned", "low-frequency", "archived", "trash"] },
+        "statusMigrationProvenance": {
+          "type": "object",
+          "required": false,
+          "objectFields": {
+            "sourceStatus": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+            "decision": { "type": "enum", "required": true, "values": ["idea", "active", "paused", "completed", "abandoned", "low-frequency", "archived", "trash"] },
+            "decidedAt": { "type": "date", "required": true },
+            "sourceArchivedAt": { "type": "date", "required": false }
+          }
+        }
       }
     },
     "session": {
@@ -103,7 +113,7 @@
         "facts": { "type": "stringArray", "required": true },
         "patterns": { "type": "stringArray", "required": true },
         "decisions": { "type": "stringArray", "required": true },
-        "projectRecommendations": { "type": "uuidEnumMap", "required": true, "values": ["idea", "active", "low-frequency", "paused", "archived", "completed", "trash"] },
+        "projectRecommendations": { "type": "uuidEnumMap", "required": true, "values": ["idea", "active", "paused", "completed", "abandoned", "low-frequency", "archived", "trash"] },
         "nextSteps": { "type": "uuidStringMap", "required": true },
         "aiSourceSummary": { "type": "stringArray", "required": true },
         "sourceReferences": { "type": "stringArrayDictionary", "required": true },
@@ -173,7 +183,7 @@
         "id": { "type": "uuid", "required": true },
         "reviewId": { "type": "uuid", "required": true },
         "projectId": { "type": "uuid", "required": true },
-        "kind": { "type": "enum", "required": true, "values": ["continueUnchanged", "changeNextStep", "reviseContract", "changeFrequency", "pause", "archive", "complete"] },
+        "kind": { "type": "enum", "required": true, "values": ["continueUnchanged", "changeNextStep", "reviseContract", "changeFrequency", "pause", "abandon", "archive", "complete"] },
         "nextStep": { "type": "string", "required": false, "trim": true },
         "contractId": { "type": "uuid", "required": false },
         "capstoneProofId": { "type": "uuid", "required": false },

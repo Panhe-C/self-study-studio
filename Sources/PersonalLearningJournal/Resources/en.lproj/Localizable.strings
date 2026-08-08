@@ -9,6 +9,7 @@
 "project.status.low_frequency" = "Low Frequency";
 "project.status.paused" = "Paused";
 "project.status.completed" = "Completed";
+"project.status.abandoned" = "Abandoned";
 "project.status.archived" = "Archived";
 "project.add" = "Add Project";
 "project.goal" = "Goal";
@@ -25,6 +26,7 @@
 "review.decision.revise_contract" = "Revise Contract";
 "review.decision.pause" = "Pause";
 "review.decision.archive" = "Archive";
+"review.decision.abandon" = "Abandon";
 "review.decision.complete" = "Complete";
 "migration.title" = "Migration Review";
 "migration.attach_evidence" = "Attach Evidence";

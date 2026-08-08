@@ -19,15 +19,17 @@ public struct ProjectsView: View {
                 .pickerStyle(.segmented)
 
                 Menu {
-                    Button("Low Frequency (\(count(for: .lowFrequency)))") { selectedStatus = .lowFrequency }
                     Button("Paused (\(count(for: .paused)))") { selectedStatus = .paused }
                     Button("Completed (\(count(for: .completed)))") { selectedStatus = .completed }
-                    Button("Archived (\(count(for: .archived)))") { selectedStatus = .archived }
-                    NavigationLink("Trash (\(count(for: .trash)))") {
+                    Button("Abandoned (\(count(for: .abandoned)))") { selectedStatus = .abandoned }
+                    NavigationLink("Archive") {
+                        ProjectArchiveView(viewModel: viewModel)
+                    }
+                    NavigationLink("Trash (\(viewModel.projects.filter(\.isTrashed).count))") {
                         TrashView(viewModel: viewModel)
                     }
                 } label: {
-                    Image(systemName: selectedStatus == .archived ? "archivebox" : "ellipsis.circle")
+                    Image(systemName: selectedStatus == .abandoned ? "archivebox" : "ellipsis.circle")
                         .frame(width: 36, height: 32)
                 }
                 .accessibilityLabel("More project statuses")
@@ -176,6 +178,45 @@ private struct CreateProjectView: View {
                 Button("OK") { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
+            }
+        }
+    }
+}
+
+public struct ProjectArchiveView: View {
+    @ObservedObject private var viewModel: JournalViewModel
+
+    public init(viewModel: JournalViewModel) {
+        self.viewModel = viewModel
+    }
+
+    public var body: some View {
+        List {
+            archiveSection(title: "Paused", status: .paused)
+            archiveSection(title: "Completed", status: .completed)
+            archiveSection(title: "Abandoned", status: .abandoned)
+        }
+        .navigationTitle("Project Archive")
+    }
+
+    @ViewBuilder
+    private func archiveSection(title: String, status: ProjectStatus) -> some View {
+        let projects = viewModel.projects.filter { $0.status == status && !$0.isTrashed }
+        Section(title) {
+            if projects.isEmpty {
+                Text("No projects")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(projects) { project in
+                    NavigationLink {
+                        ProjectDetailView(viewModel: viewModel, project: project)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(project.name).font(.headline)
+                            Text(project.goal).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
         }
     }

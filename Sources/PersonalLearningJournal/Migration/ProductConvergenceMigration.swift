@@ -4,6 +4,7 @@ public enum MigrationIssue: Equatable, Hashable, Sendable {
     case proofNeedsEvidence(UUID)
     case practiceNeedsProject(UUID)
     case projectNeedsSetup(UUID)
+    case projectNeedsStatusResolution(UUID)
 }
 
 public struct MigrationDryRun: Equatable, Sendable {
@@ -21,9 +22,24 @@ public enum PracticeMigrationResolution: Equatable, Sendable {
     case linkToProject(UUID)
 }
 
+public enum ProjectStatusMigrationResolution: Equatable, CaseIterable, Sendable {
+    case pause
+    case complete
+    case abandon
+
+    public var decision: ProjectStatusMigrationDecision {
+        switch self {
+        case .pause: .paused
+        case .complete: .completed
+        case .abandon: .abandoned
+        }
+    }
+}
+
 public enum MigrationResolution: Equatable, Sendable {
     case proof(UUID, ProofMigrationResolution)
     case practice(UUID, PracticeMigrationResolution)
+    case project(UUID, ProjectStatusMigrationResolution)
 }
 
 public struct MigrationValidationReport: Equatable, Sendable {
@@ -57,6 +73,7 @@ public enum ProductConvergenceMigrationError: Error, Equatable, Sendable {
 
 public struct ProductConvergenceMigration {
     public static let identifier = "evidence-first-product-convergence-v1"
+    public static let statusMigrationIdentifier = "project-status-convergence-v1"
 
     private let now: () -> Date
     public init(now: @escaping () -> Date = Date.init) { self.now = now }
@@ -74,8 +91,15 @@ public struct ProductConvergenceMigration {
         issues += snapshot.projects
             .filter {
                 $0.deletedAt == nil
+                    && $0.status == .archived
+            }
+            .map { .projectNeedsStatusResolution($0.id) }
+
+        issues += snapshot.projects
+            .filter {
+                $0.deletedAt == nil
                     && ($0.status == .active || $0.status == .lowFrequency)
-                    && ($0.commitmentState != .needsSetup || $0.activeEvidenceContractId == nil)
+                    && ($0.commitmentState == .needsSetup || $0.activeEvidenceContractId == nil)
             }
             .map { .projectNeedsSetup($0.id) }
         return MigrationDryRun(issues: issues.sorted(by: issueOrder))
@@ -98,8 +122,14 @@ public struct ProductConvergenceMigration {
             guard case let .practiceNeedsProject(id) = issue else { return nil }
             return id
         })
+        let projectResolutions = try projectResolutionMap(resolutions)
+        let requiredProjects: Set<UUID> = Set(report.issues.compactMap { issue -> UUID? in
+            guard case let .projectNeedsStatusResolution(id) = issue else { return nil }
+            return id
+        })
         guard Set(proofResolutions.keys) == requiredProofs,
-              Set(practiceResolutions.keys) == requiredRoutines else {
+              Set(practiceResolutions.keys) == requiredRoutines,
+              Set(projectResolutions.keys) == requiredProjects else {
             throw ProductConvergenceMigrationError.unresolvedIssues
         }
 
@@ -107,7 +137,8 @@ public struct ProductConvergenceMigration {
         let migrated = try transformed(
             snapshot: snapshot,
             proofResolutions: proofResolutions,
-            practiceResolutions: practiceResolutions
+            practiceResolutions: practiceResolutions,
+            projectResolutions: projectResolutions
         )
         let validation = try validate(migrated)
         let targetEntities = entities(in: migrated)
@@ -128,6 +159,12 @@ public struct ProductConvergenceMigration {
                 JournalTransaction(
                     origin: .migration,
                     completedMigrationIdentifier: Self.identifier
+                )
+            )
+            try repository.commit(
+                JournalTransaction(
+                    origin: .migration,
+                    completedMigrationIdentifier: Self.statusMigrationIdentifier
                 )
             )
             return MigrationValidationReport(
@@ -151,15 +188,55 @@ public struct ProductConvergenceMigration {
     private func transformed(
         snapshot: JournalSnapshot,
         proofResolutions: [UUID: ProofMigrationResolution],
-        practiceResolutions: [UUID: PracticeMigrationResolution]
+        practiceResolutions: [UUID: PracticeMigrationResolution],
+        projectResolutions: [UUID: ProjectStatusMigrationResolution]
     ) throws -> JournalSnapshot {
         var migrated = snapshot
         migrated.pendingFirstRecordProjectId = nil
-        for index in migrated.projects.indices where
-            migrated.projects[index].deletedAt == nil
-                && (migrated.projects[index].status == .active || migrated.projects[index].status == .lowFrequency) {
-            migrated.projects[index].commitmentState = .needsSetup
-            migrated.projects[index].activeEvidenceContractId = nil
+        for index in migrated.projects.indices {
+            var project = migrated.projects[index]
+
+            if project.isTrashed {
+                // Trash is a deletion marker, not a lifecycle status. Keep the
+                // original canonical status so restore remains lossless.
+                let previous = project.previousStatusBeforeTrash?.canonicalStatus ?? .idea
+                project.status = previous
+                project.previousStatusBeforeTrash = previous
+                if project.deletedAt == nil {
+                    project.deletedAt = now()
+                }
+                migrated.projects[index] = project
+                continue
+            }
+
+            if project.status == .lowFrequency {
+                project.status = .active
+            }
+
+            if project.status == .archived {
+                guard let resolution = projectResolutions[project.id] else {
+                    throw ProductConvergenceMigrationError.unresolvedIssues
+                }
+                let sourceArchivedAt = project.archivedAt
+                project.status = resolution.decision.status
+                project.statusMigrationProvenance = ProjectStatusMigrationProvenance(
+                    sourceStatus: ProjectStatus.archived.rawValue,
+                    decision: project.status,
+                    decidedAt: now(),
+                    sourceArchivedAt: sourceArchivedAt
+                )
+                if resolution == .complete {
+                    project.completedAt = project.completedAt ?? sourceArchivedAt ?? now()
+                }
+            }
+
+            if project.deletedAt == nil,
+               project.status == .active,
+               (project.commitmentState == .needsSetup || project.activeEvidenceContractId == nil) {
+                project.commitmentState = .needsSetup
+                project.activeEvidenceContractId = nil
+            }
+            migrated.projects[index] = project
         }
         for index in migrated.proofs.indices {
             guard let resolution = proofResolutions[migrated.proofs[index].id] else { continue }
@@ -310,10 +387,12 @@ public struct ProductConvergenceMigration {
     private func writeBackup(snapshot: JournalSnapshot, to directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try ExportService(now: now).exportJSON(snapshot: snapshot)
-        try data.write(
-            to: directory.appendingPathComponent("evidence-first-backup.json"),
-            options: [.atomic]
-        )
+        for filename in ["evidence-first-backup.json", "project-status-backup.json"] {
+            try data.write(
+                to: directory.appendingPathComponent(filename),
+                options: [.atomic]
+            )
+        }
     }
 
     private func proofResolutionMap(
@@ -335,6 +414,19 @@ public struct ProductConvergenceMigration {
         var values: [UUID: PracticeMigrationResolution] = [:]
         for resolution in resolutions {
             guard case let .practice(id, value) = resolution else { continue }
+            guard values.updateValue(value, forKey: id) == nil else {
+                throw ProductConvergenceMigrationError.invalidResolution
+            }
+        }
+        return values
+    }
+
+    private func projectResolutionMap(
+        _ resolutions: [MigrationResolution]
+    ) throws -> [UUID: ProjectStatusMigrationResolution] {
+        var values: [UUID: ProjectStatusMigrationResolution] = [:]
+        for resolution in resolutions {
+            guard case let .project(id, value) = resolution else { continue }
             guard values.updateValue(value, forKey: id) == nil else {
                 throw ProductConvergenceMigrationError.invalidResolution
             }

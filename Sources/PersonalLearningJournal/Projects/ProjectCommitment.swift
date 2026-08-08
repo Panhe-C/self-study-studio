@@ -13,10 +13,10 @@ public enum ProjectActivationIssue: String, Codable, Equatable, Sendable {
 
 public extension Project {
     var countsTowardAttentionBudget: Bool {
-        status == .active
+        (status == .active || status == .lowFrequency)
             && commitmentState == .ready
             && activeEvidenceContractId != nil
-            && deletedAt == nil
+            && !isTrashed
     }
 
     func activationIssues(contract: EvidenceContract?) -> [ProjectActivationIssue] {

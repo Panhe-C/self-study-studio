@@ -259,7 +259,7 @@ final class JournalViewModelTests: XCTestCase {
         try viewModel.updateProjectStatus(projectId: project.id, status: .lowFrequency)
 
         XCTAssertEqual(updated.name, "CS336 LM")
-        XCTAssertEqual(viewModel.projects.first?.status, .lowFrequency)
+        XCTAssertEqual(viewModel.projects.first?.status, .active)
         XCTAssertEqual(viewModel.sessionsForProject(project.id).map(\.id), [session.id])
         XCTAssertEqual(viewModel.proofsForProject(project.id).map(\.id), [proof.id])
         XCTAssertEqual(viewModel.proofsForSession(session.id).map(\.id), [proof.id])
@@ -391,7 +391,7 @@ final class JournalViewModelTests: XCTestCase {
         try viewModel.applyReviewRecommendation(reviewId: review.id, projectId: project.id)
         try viewModel.applyReviewNextStep(reviewId: review.id, projectId: project.id)
 
-        XCTAssertEqual(viewModel.projects.first?.status, .lowFrequency)
+        XCTAssertEqual(viewModel.projects.first?.status, .active)
         XCTAssertEqual(viewModel.projects.first?.currentNextStep, "录一段第一段练习")
     }
 

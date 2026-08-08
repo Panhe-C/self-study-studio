@@ -141,7 +141,7 @@ public final class JournalViewModel: ObservableObject {
     }
 
     public var shouldShowMainTabs: Bool {
-        projects.contains { $0.status != .trash && $0.deletedAt == nil }
+        projects.contains { !$0.isTrashed && $0.deletedAt == nil }
     }
 
     public var pendingFirstRecordProject: Project? {
@@ -315,6 +315,20 @@ public final class JournalViewModel: ObservableObject {
     public func restoreFromTrash(projectId: UUID) throws {
         try journalService.restoreFromTrash(projectId: projectId)
         refresh()
+    }
+
+    @discardableResult
+    public func permanentlyDelete(projectId: UUID) throws -> TrashPurgeImpact {
+        guard let repository = syncRepository else {
+            throw JournalArchiveError.invalidArchive
+        }
+        let impact = try JournalArchiveService().purge(
+            projectID: projectId,
+            snapshot: snapshot,
+            from: repository
+        )
+        refresh()
+        return impact
     }
 
     @discardableResult
@@ -779,7 +793,7 @@ public final class JournalViewModel: ObservableObject {
         weekdays: Set<Int>,
         reminderTime: PracticeReminderTime? = nil
     ) throws -> PracticeRoutine {
-        let projects = snapshot.projects.filter { $0.deletedAt == nil && $0.status != .trash }
+        let projects = snapshot.projects.filter { $0.deletedAt == nil && !$0.isTrashed }
         guard projects.count == 1 else { throw PracticeValidationError.missingProject }
         return try createPracticeRoutine(
             projectId: projects[0].id,

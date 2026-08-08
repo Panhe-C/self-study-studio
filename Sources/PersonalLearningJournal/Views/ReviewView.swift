@@ -93,7 +93,7 @@ public struct ReviewView: View {
             .union(currentReview.nextSteps.keys)
         let explicit = viewModel.projects.filter { ids.contains($0.id) }
         return explicit.isEmpty
-            ? viewModel.projects.filter { $0.deletedAt == nil && $0.status != .trash }
+            ? viewModel.projects.filter { $0.deletedAt == nil && !$0.isTrashed }
             : explicit
     }
 
@@ -149,7 +149,7 @@ public struct ReviewView: View {
         case .reviseContract: String(localized: "review.decision.revise_contract")
         case .changeFrequency: "Change frequency"
         case .pause: String(localized: "review.decision.pause")
-        case .archive: String(localized: "review.decision.archive")
+        case .abandon, .archive: String(localized: "review.decision.abandon")
         case .complete: String(localized: "review.decision.complete")
         }
     }

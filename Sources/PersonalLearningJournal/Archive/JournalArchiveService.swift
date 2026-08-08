@@ -233,7 +233,7 @@ public struct JournalArchiveService {
         snapshot: JournalSnapshot,
         from repository: any JournalRepository
     ) throws -> TrashPurgeImpact {
-        guard snapshot.projects.contains(where: { $0.id == projectID && $0.status == .trash }) else {
+        guard snapshot.projects.contains(where: { $0.id == projectID && $0.isTrashed }) else {
             throw JournalArchiveError.invalidArchive
         }
         let impact = purgeImpact(projectID: projectID, snapshot: snapshot)
@@ -248,7 +248,7 @@ public struct JournalArchiveService {
     ) -> Set<UUID> {
         let deadline = (now ?? self.now()).addingTimeInterval(-Double(retentionDays) * 86_400)
         return Set(snapshot.projects.compactMap { project in
-            guard project.status == .trash, let deletedAt = project.deletedAt, deletedAt <= deadline else { return nil }
+            guard project.isTrashed, let deletedAt = project.deletedAt, deletedAt <= deadline else { return nil }
             return project.id
         })
     }

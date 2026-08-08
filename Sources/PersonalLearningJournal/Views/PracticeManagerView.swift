@@ -322,7 +322,7 @@ private struct PracticeRoutineEditorView: View {
                 Section("Routine") {
                     Picker("Project", selection: $draft.projectId) {
                         Text("Choose a project").tag(Optional<UUID>.none)
-                        ForEach(viewModel.projects.filter { $0.deletedAt == nil && $0.status != .trash }) { project in
+                        ForEach(viewModel.projects.filter { $0.deletedAt == nil && !$0.isTrashed }) { project in
                             Text(project.name).tag(Optional(project.id))
                         }
                     }

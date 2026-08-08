@@ -17,11 +17,39 @@ public struct PersonalLearningJournalApp: App {
 
     public var body: some Scene {
         WindowGroup {
-            RootView(
-                viewModel: session.viewModel,
-                calendarViewModel: session.calendarViewModel
-            )
-            .id(ObjectIdentifier(session.viewModel))
+            Group {
+                if let pendingMigration = session.pendingMigration {
+                    NavigationStack {
+                        MigrationReviewView(
+                            dryRun: pendingMigration,
+                            onContinue: { session.continueMigration() },
+                            onStatusResolution: { projectID, resolution in
+                                session.resolveArchivedProject(
+                                    projectID: projectID,
+                                    resolution: resolution
+                                )
+                            }
+                        )
+                    }
+                    .alert(
+                        "Migration could not continue",
+                        isPresented: Binding(
+                            get: { session.migrationError != nil },
+                            set: { if !$0 { session.clearMigrationError() } }
+                        )
+                    ) {
+                        Button("OK") { session.clearMigrationError() }
+                    } message: {
+                        Text(session.migrationError ?? "")
+                    }
+                } else {
+                    RootView(
+                        viewModel: session.viewModel,
+                        calendarViewModel: session.calendarViewModel
+                    )
+                    .id(ObjectIdentifier(session.viewModel))
+                }
+            }
             .overlay {
                 if appLock.showsPrivacyCover || !appLock.isUnlocked {
                     ZStack {

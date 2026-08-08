@@ -217,7 +217,7 @@ public struct RuleBasedReviewProvider: AIReviewProvider {
                     let activitySource = "project \(project.id.uuidString.prefix(8)): no session or Proof recorded in this period"
                     let fact = "\(project.name): no sessions or Proofs in this period."
                     let pattern = "\(project.name) has gone quiet for at least 7 days."
-                    let decision = "\(project.name): Create one small Proof or lower to low-frequency."
+                    let decision = "\(project.name): Create one small Proof or reduce cadence/planned load for the week."
                     facts.append(fact)
                     patterns.append(pattern)
                     decisions.append(decision)
@@ -226,8 +226,11 @@ public struct RuleBasedReviewProvider: AIReviewProvider {
                     sourceReferences[pattern] = sourcesForProject
                     sourceReferences[decision] = sourcesForProject
                     sources.append(contentsOf: sourcesForProject)
-                    nextSteps[project.id] = "Choose one small Proof or lower this project for the week"
-                    recommendations[project.id] = .lowFrequency
+                    nextSteps[project.id] = "Choose one small Proof or reduce this project's cadence/planned load for the week"
+                    // Low frequency is no longer a lifecycle status. Keep the
+                    // recommendation status canonical and express the adjustment
+                    // in the decision/Next Step text above.
+                    recommendations[project.id] = .active
                 }
                 continue
             }
@@ -397,7 +400,7 @@ public final class HTTPAIReviewProvider: AIReviewProvider, @unchecked Sendable {
             patterns: response.patterns,
             decisions: [],
             projectRecommendations: response.projectRecommendations.compactMapKeys(UUID.init)
-                .compactMapValues(ProjectStatus.init(rawValue:)),
+                .compactMapValues { ProjectStatus(rawValue: $0)?.canonicalStatus ?? ProjectStatus(rawValue: $0) },
             nextSteps: response.nextSteps.compactMapKeys(UUID.init),
             sourceSummary: response.sourceSummary,
             sourceReferences: sourceReferences

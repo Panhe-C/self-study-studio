@@ -375,7 +375,7 @@ final class JournalServiceTests: XCTestCase {
         XCTAssertEqual(updated.name, "CS336 Language Modeling")
         XCTAssertEqual(updated.area, "LLM")
         XCTAssertEqual(updated.goal, "复现一个小训练 loop")
-        XCTAssertEqual(archived.status, .archived)
+        XCTAssertEqual(archived.status, .abandoned)
         XCTAssertNotNil(archived.archivedAt)
     }
 
@@ -691,7 +691,7 @@ final class JournalServiceTests: XCTestCase {
         XCTAssertTrue(events[0].detail.contains("看完 Lecture 1"))
         XCTAssertTrue(events[1].detail.contains("整理 perplexity"))
         XCTAssertTrue(events[2].detail.contains("复现了 bigram baseline"))
-        XCTAssertTrue(events[3].detail.contains("low-frequency"))
+        XCTAssertTrue(events[3].detail.contains("active"))
     }
 
     private func createActivatedProject(

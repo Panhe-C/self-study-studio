@@ -44,7 +44,7 @@ public final class PracticeService {
         weekdays: Set<Int>,
         reminderTime: PracticeReminderTime? = nil
     ) throws -> PracticeRoutine {
-        let projects = try repository.snapshot().projects.filter { $0.deletedAt == nil && $0.status != .trash }
+        let projects = try repository.snapshot().projects.filter { $0.deletedAt == nil && !$0.isTrashed }
         guard projects.count == 1 else { throw PracticeValidationError.missingProject }
         return try createRoutine(
             projectId: projects[0].id,

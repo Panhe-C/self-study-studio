@@ -7,11 +7,76 @@ public enum JournalSchema {
 public enum ProjectStatus: String, Codable, CaseIterable, Sendable {
     case idea
     case active
-    case lowFrequency = "low-frequency"
     case paused
-    case archived
     case completed
+    case abandoned
+
+    // These cases remain readable while older local and CloudKit records are migrated.
+    // They are deliberately excluded from `allCases` so new UI and writes use only the
+    // canonical lifecycle plus the pre-commitment `idea` state.
+    case lowFrequency = "low-frequency"
+    case archived
     case trash
+
+    public static var allCases: [ProjectStatus] {
+        [.idea, .active, .paused, .completed, .abandoned]
+    }
+
+    public var isLegacy: Bool {
+        switch self {
+        case .lowFrequency, .archived, .trash:
+            true
+        case .idea, .active, .paused, .completed, .abandoned:
+            false
+        }
+    }
+
+    /// Returns a lossless canonical mapping where the legacy value is unambiguous.
+    /// Archived requires a learner decision and Trash is represented by the deletion
+    /// marker, so neither can be mapped without an explicit migration choice.
+    public var canonicalStatus: ProjectStatus? {
+        switch self {
+        case .lowFrequency:
+            .active
+        case .idea, .active, .paused, .completed, .abandoned:
+            self
+        case .archived, .trash:
+            nil
+        }
+    }
+}
+
+public enum ProjectStatusMigrationDecision: String, Codable, CaseIterable, Sendable {
+    case paused
+    case completed
+    case abandoned
+
+    public var status: ProjectStatus {
+        switch self {
+        case .paused: .paused
+        case .completed: .completed
+        case .abandoned: .abandoned
+        }
+    }
+}
+
+public struct ProjectStatusMigrationProvenance: Codable, Equatable, Sendable {
+    public var sourceStatus: String
+    public var decision: ProjectStatus
+    public var decidedAt: Date
+    public var sourceArchivedAt: Date?
+
+    public init(
+        sourceStatus: String,
+        decision: ProjectStatus,
+        decidedAt: Date,
+        sourceArchivedAt: Date?
+    ) {
+        self.sourceStatus = sourceStatus
+        self.decision = decision
+        self.decidedAt = decidedAt
+        self.sourceArchivedAt = sourceArchivedAt
+    }
 }
 
 public enum ActionType: String, Codable, CaseIterable, Sendable {
@@ -134,6 +199,7 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
     public var activeEvidenceContractId: UUID?
     public var completedAt: Date?
     public var previousStatusBeforeTrash: ProjectStatus?
+    public var statusMigrationProvenance: ProjectStatusMigrationProvenance?
 
     public init(
         id: UUID = UUID(),
@@ -153,7 +219,8 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
         commitmentState: ProjectCommitmentState = .ready,
         activeEvidenceContractId: UUID? = nil,
         completedAt: Date? = nil,
-        previousStatusBeforeTrash: ProjectStatus? = nil
+        previousStatusBeforeTrash: ProjectStatus? = nil,
+        statusMigrationProvenance: ProjectStatusMigrationProvenance? = nil
     ) {
         self.id = id
         self.name = name
@@ -173,6 +240,7 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
         self.activeEvidenceContractId = activeEvidenceContractId
         self.completedAt = completedAt
         self.previousStatusBeforeTrash = previousStatusBeforeTrash
+        self.statusMigrationProvenance = statusMigrationProvenance
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -180,7 +248,7 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
         case defaultDurationMinutes, createdAt, updatedAt, archivedAt
         case deletedAt, schemaVersion, activeCoursePlanId
         case commitmentState, activeEvidenceContractId, completedAt
-        case previousStatusBeforeTrash
+        case previousStatusBeforeTrash, statusMigrationProvenance
     }
 
     public init(from decoder: Decoder) throws {
@@ -213,6 +281,14 @@ public struct Project: Codable, Equatable, Identifiable, Sendable {
             ProjectStatus.self,
             forKey: .previousStatusBeforeTrash
         )
+        statusMigrationProvenance = try container.decodeIfPresent(
+            ProjectStatusMigrationProvenance.self,
+            forKey: .statusMigrationProvenance
+        )
+    }
+
+    public var isTrashed: Bool {
+        status == .trash || (deletedAt != nil && previousStatusBeforeTrash != nil)
     }
 
     public var canContinue: Bool {

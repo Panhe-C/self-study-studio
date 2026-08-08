@@ -62,7 +62,8 @@ public struct ProductHealthService: Sendable {
 
     public func report(snapshot: JournalSnapshot, now: Date = Date()) -> ProductHealthReport {
         let eligible = snapshot.projects.filter {
-            $0.deletedAt == nil && [.active, .lowFrequency, .paused].contains($0.status)
+            guard $0.deletedAt == nil, let canonical = $0.status.canonicalStatus else { return false }
+            return canonical == .active || canonical == .paused
         }
         let contractsByProject = Dictionary(
             grouping: snapshot.evidenceContracts.filter { $0.deletedAt == nil },
@@ -122,7 +123,7 @@ public struct ProductHealthService: Sendable {
             $0.contractId == contract.id && $0.deletedAt == nil && $0.acceptedAt <= end
         }.count)
         let resolvingKinds: Set<ReviewDecisionKind> = [
-            .reviseContract, .changeFrequency, .pause, .archive, .complete
+            .reviseContract, .changeFrequency, .pause, .abandon, .archive, .complete
         ]
         let resolutions = snapshot.reviewDecisions.filter {
             $0.projectId == contract.projectId

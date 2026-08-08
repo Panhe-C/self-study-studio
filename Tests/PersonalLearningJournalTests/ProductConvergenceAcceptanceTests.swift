@@ -61,7 +61,8 @@ final class ProductConvergenceAcceptanceTests: XCTestCase {
         )
 
         try journal.moveToTrash(projectId: idea.id)
-        XCTAssertEqual(journal.project(id: idea.id)?.status, .trash)
+        XCTAssertEqual(journal.project(id: idea.id)?.status, .active)
+        XCTAssertTrue(journal.project(id: idea.id)?.isTrashed == true)
         try journal.restoreFromTrash(projectId: idea.id)
         XCTAssertEqual(journal.project(id: idea.id)?.status, .active)
 

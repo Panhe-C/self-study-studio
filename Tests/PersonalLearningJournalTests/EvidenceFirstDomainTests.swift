@@ -42,7 +42,7 @@ final class EvidenceFirstDomainTests: XCTestCase {
         XCTAssertTrue(project.canContinue)
     }
 
-    func testLowFrequencyProjectDoesNotCountTowardActiveBudget() throws {
+    func testLowFrequencyProjectKeepsActiveBudgetSemanticsUntilMigration() throws {
         let projectID = UUID()
         let contract = try EvidenceContract.weekly(
             projectId: projectID,
@@ -60,7 +60,7 @@ final class EvidenceFirstDomainTests: XCTestCase {
             activeEvidenceContractId: contract.id
         )
 
-        XCTAssertFalse(project.countsTowardAttentionBudget)
+        XCTAssertTrue(project.countsTowardAttentionBudget)
         XCTAssertEqual(project.activationIssues(contract: contract), [])
     }
 

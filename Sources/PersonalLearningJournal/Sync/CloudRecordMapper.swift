@@ -103,7 +103,7 @@ public struct CloudRecordMapper {
         record["name"] = value.name
         record["area"] = value.area
         record["goal"] = value.goal
-        record["status"] = value.status.rawValue
+        record["status"] = (value.status.canonicalStatus ?? value.status).rawValue
         record["currentNextStep"] = value.currentNextStep
         record["lastActionType"] = value.lastActionType.rawValue
         record["defaultDurationMinutes"] = value.defaultDurationMinutes
@@ -111,7 +111,13 @@ public struct CloudRecordMapper {
         record["commitmentState"] = value.commitmentState.rawValue
         record["activeEvidenceContractId"] = value.activeEvidenceContractId?.uuidString
         record["completedAt"] = value.completedAt
-        record["previousStatusBeforeTrash"] = value.previousStatusBeforeTrash?.rawValue
+        record["previousStatusBeforeTrash"] = value.previousStatusBeforeTrash
+            .flatMap { $0.canonicalStatus ?? $0 }
+            .map(\.rawValue)
+        record["statusMigrationSource"] = value.statusMigrationProvenance?.sourceStatus
+        record["statusMigrationDecision"] = value.statusMigrationProvenance?.decision.rawValue
+        record["statusMigrationDecidedAt"] = value.statusMigrationProvenance?.decidedAt
+        record["statusMigrationSourceArchivedAt"] = value.statusMigrationProvenance?.sourceArchivedAt
         encodeDates(value.createdAt, value.updatedAt, value.archivedAt, value.deletedAt, value.schemaVersion, into: record)
     }
 
@@ -317,7 +323,23 @@ public struct CloudRecordMapper {
             activeEvidenceContractId: try optionalUUID("activeEvidenceContractId", from: record),
             completedAt: optionalDate("completedAt", from: record),
             previousStatusBeforeTrash: optionalString("previousStatusBeforeTrash", from: record)
-                .flatMap(ProjectStatus.init(rawValue:))
+                .flatMap(ProjectStatus.init(rawValue:)),
+            statusMigrationProvenance: migrationProvenance(from: record)
+        )
+    }
+
+    private func migrationProvenance(from record: CKRecord) -> ProjectStatusMigrationProvenance? {
+        guard let source = optionalString("statusMigrationSource", from: record),
+              let decisionRaw = optionalString("statusMigrationDecision", from: record),
+              let decision = ProjectStatus(rawValue: decisionRaw),
+              let decidedAt = optionalDate("statusMigrationDecidedAt", from: record) else {
+            return nil
+        }
+        return ProjectStatusMigrationProvenance(
+            sourceStatus: source,
+            decision: decision,
+            decidedAt: decidedAt,
+            sourceArchivedAt: optionalDate("statusMigrationSourceArchivedAt", from: record)
         )
     }
 

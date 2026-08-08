@@ -6,8 +6,15 @@ public enum ReviewDecisionKind: String, Codable, CaseIterable, Sendable {
     case reviseContract
     case changeFrequency
     case pause
+    case abandon
+
+    // Legacy persisted review decisions remain decodable. New UI writes `.abandon`.
     case archive
     case complete
+
+    public static var allCases: [ReviewDecisionKind] {
+        [.continueUnchanged, .changeNextStep, .reviseContract, .changeFrequency, .pause, .abandon, .complete]
+    }
 }
 
 public struct ReviewDecision: Codable, Equatable, Identifiable, Sendable {
@@ -51,7 +58,7 @@ public struct ReviewDecision: Codable, Equatable, Identifiable, Sendable {
             contractId != nil
         case .complete:
             capstoneProofId != nil
-        case .continueUnchanged, .pause, .archive:
+        case .continueUnchanged, .pause, .abandon, .archive:
             true
         }
     }

@@ -70,7 +70,7 @@ public enum JournalEntity: Codable, Equatable, Sendable {
 
     var isDeleted: Bool {
         switch self {
-        case let .project(value): value.deletedAt != nil && value.status != .trash
+        case let .project(value): value.deletedAt != nil && !value.isTrashed
         case let .session(value): value.deletedAt != nil
         case let .proof(value): value.deletedAt != nil
         case let .review(value): value.deletedAt != nil
@@ -92,7 +92,13 @@ public enum JournalEntity: Codable, Equatable, Sendable {
     func deleting(at date: Date) -> JournalEntity {
         switch self {
         case var .project(value):
-            if value.status == .trash { value.status = .archived }
+            // A project in Trash is still visible until the purge flow explicitly
+            // deletes its dependency graph. Clear the marker here so that a purge
+            // produces a hidden tombstone without inventing a lifecycle status.
+            if value.isTrashed {
+                value.previousStatusBeforeTrash = nil
+                if value.status == .trash { value.status = .idea }
+            }
             value.deletedAt = date
             value.updatedAt = date
             return .project(value)

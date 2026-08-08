@@ -324,7 +324,7 @@ public final class JournalService {
         let idleInterval = TimeInterval(idleDays * 24 * 60 * 60)
 
         return state.projects
-            .filter { $0.status == .active }
+            .filter { ($0.status == .active || $0.status == .lowFrequency) && !$0.isTrashed }
             .filter { project in
                 let lastSessionDate = state.sessions
                     .filter { $0.projectId == project.id }
@@ -685,8 +685,8 @@ public final class JournalService {
             project.activeEvidenceContractId = contractID
         case .pause:
             project.status = .paused
-        case .archive:
-            project.status = .archived
+        case .abandon, .archive:
+            project.status = .abandoned
             project.archivedAt = changedAt
         case .complete:
             guard let proofID = decision.capstoneProofId,
@@ -728,8 +728,10 @@ public final class JournalService {
             throw JournalValidationError.missingProject
         }
         var project = state.projects[index]
-        project.previousStatusBeforeTrash = project.status
-        project.status = .trash
+        project.previousStatusBeforeTrash = project.status.canonicalStatus ?? .idea
+        // Trash is a deletion marker, not a lifecycle status. Keep a canonical
+        // status on the record so all non-Trash consumers can share one filter.
+        project.status = project.status.canonicalStatus ?? .idea
         let timestamp = now()
         project.deletedAt = timestamp
         project.updatedAt = timestamp
@@ -739,11 +741,11 @@ public final class JournalService {
 
     public func restoreFromTrash(projectId: UUID) throws {
         guard let index = state.projects.firstIndex(where: { $0.id == projectId }),
-              state.projects[index].status == .trash else {
+              state.projects[index].isTrashed else {
             throw JournalValidationError.missingProject
         }
         var project = state.projects[index]
-        project.status = project.previousStatusBeforeTrash ?? .idea
+        project.status = project.previousStatusBeforeTrash?.canonicalStatus ?? .idea
         project.previousStatusBeforeTrash = nil
         project.deletedAt = nil
         project.updatedAt = now()
@@ -758,9 +760,24 @@ public final class JournalService {
 
         let changedAt = now()
         let trailStartIndex = state.trailEvents.count
-        state.projects[index].status = status
+        let canonicalStatus: ProjectStatus
+        switch status {
+        case .lowFrequency:
+            canonicalStatus = .active
+        case .archived:
+            // The old Archive action was an explicit user decision. Preserve its
+            // intent as the canonical Abandoned lifecycle value; ambiguous stored
+            // records still go through ProductConvergenceMigration.
+            canonicalStatus = .abandoned
+        case .trash:
+            try moveToTrash(projectId: projectId)
+            return
+        default:
+            canonicalStatus = status
+        }
+        state.projects[index].status = canonicalStatus
         state.projects[index].updatedAt = changedAt
-        state.projects[index].archivedAt = status == .archived ? changedAt : nil
+        state.projects[index].archivedAt = canonicalStatus == .abandoned ? changedAt : nil
 
         appendTrailEvent(
             type: .statusChange,
@@ -768,7 +785,7 @@ public final class JournalService {
             sourceId: projectId,
             occurredAt: changedAt,
             title: "Status changed",
-            detail: "Project status changed to \(status.rawValue)"
+            detail: "Project status changed to \(canonicalStatus.rawValue)"
         )
         try persist(
             upserts: [.project(state.projects[index])]
