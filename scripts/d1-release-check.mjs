@@ -17,6 +17,12 @@ import { performance } from "node:perf_hooks";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const webRoot = join(repoRoot, "WebWorkspace");
+const swiftModuleCachePath = "/tmp/self-study-studio-d1-module-cache";
+mkdirSync(swiftModuleCachePath, { recursive: true });
+const swiftChildEnv = {
+  CLANG_MODULE_CACHE_PATH: swiftModuleCachePath,
+  SWIFTPM_MODULECACHE_OVERRIDE: swiftModuleCachePath,
+};
 const args = process.argv.slice(2);
 const jsonOutput = args.includes("--json");
 const allowBlocked = args.includes("--allow-blocked");
@@ -73,7 +79,7 @@ function commandCheck(id, command, commandArgs, options = {}) {
   const result = spawnSync(command, commandArgs, {
     cwd: options.cwd ?? repoRoot,
     encoding: "utf8",
-    env: process.env,
+    env: options.env ? { ...process.env, ...options.env } : process.env,
     maxBuffer: 32 * 1024 * 1024,
   });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
@@ -201,12 +207,14 @@ function withCounts(check, counts) {
 const checks = [];
 
 const swiftEnvironmentBlock = (output) =>
-  /ModuleCache.*Operation not permitted|unable to load standard library/.test(output);
+  /ModuleCache.*Operation not permitted|unable to load standard library|sandbox-exec: sandbox_apply: Operation not permitted/.test(output);
 const swiftTest = commandCheck("swift_test", "swift", ["test"], {
+  env: swiftChildEnv,
   blockedEnvironment: swiftEnvironmentBlock,
 });
 checks.push(withCounts(swiftTest, parseSwiftCounts(swiftTest.outputTail)));
 checks.push(commandCheck("swift_build", "swift", ["build"], {
+  env: swiftChildEnv,
   blockedEnvironment: swiftEnvironmentBlock,
 }));
 checks.push(commandCheck(
@@ -222,6 +230,7 @@ checks.push(commandCheck(
     "build",
   ],
   {
+    env: swiftChildEnv,
     blockedEnvironment(output) {
       return /CoreSimulatorService|Simulator services will no longer be available|Connection refused/.test(output);
     },
@@ -234,7 +243,7 @@ checks.push(commandCheck("web_lint", "npm", ["run", "lint"], { cwd: webRoot }));
 checks.push(commandCheck(
   "web_typecheck",
   "npm",
-  ["exec", "--", "tsc", "--noEmit"],
+  ["exec", "--", "tsc", "--noEmit", "--incremental", "false"],
   {
     cwd: webRoot,
     knownBaseline(output, exitCode) {
