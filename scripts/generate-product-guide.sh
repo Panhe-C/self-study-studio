@@ -11,7 +11,22 @@ PREVIEW_DIR="$SCRATCH_ROOT/preview"
 RUNTIME_ROOT="${CODEX_RUNTIME_ROOT:-$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies}"
 NODE_BIN="${NODE_BIN:-$RUNTIME_ROOT/node/bin/node}"
 PYTHON_BIN="${PYTHON_BIN:-$RUNTIME_ROOT/python/bin/python3}"
-PRESENTATIONS_SKILL_DIR="${PRESENTATIONS_SKILL_DIR:-$HOME/.codex/plugins/cache/openai-primary-runtime/presentations/26.709.11516/skills/presentations}"
+
+# Keep an explicit override for CI and alternate runtimes, but prefer the
+# installed presentation skill version instead of pinning a historical cache
+# directory that may have been garbage-collected.
+if [ -z "${PRESENTATIONS_SKILL_DIR:-}" ]; then
+  PRESENTATIONS_SKILL_DIR=""
+  for candidate in \
+    "$HOME/.codex/plugins/cache/openai-primary-runtime/presentations/26.805.11740/skills/presentations" \
+    "$HOME/.codex/plugins/cache/openai-primary-runtime/presentations/26.709.11516/skills/presentations" \
+    "$HOME/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime/plugins/presentations/skills/presentations"; do
+    if [ -f "$candidate/container_tools/setup_artifact_tool_workspace.mjs" ]; then
+      PRESENTATIONS_SKILL_DIR="$candidate"
+      break
+    fi
+  done
+fi
 SETUP_SCRIPT="$PRESENTATIONS_SKILL_DIR/container_tools/setup_artifact_tool_workspace.mjs"
 
 if [ ! -x "$NODE_BIN" ]; then

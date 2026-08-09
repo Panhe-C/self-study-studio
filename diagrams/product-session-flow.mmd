@@ -1,18 +1,21 @@
 flowchart TD
-  A[从 Today 或 Project Detail 开始] --> B{选择方式}
+  A[从 Today Agenda 或 Project Workspace 开始] --> B{选择方式}
   B -->|快速补记| C[Quick Log]
   B -->|现场学习| D[Timer]
+  B -->|按周计划执行| R[Guided Routine Player]
   C --> E[使用项目默认类型与时长]
   E --> F[填写一句记录和新的 Next Step]
   D --> G[开始计时]
+  R --> R1[按序执行 Practice Blocks<br/>支持跳过·重访·Segments]
   G --> H{学习过程}
   H -->|暂停| I[暂停计时]
   I -->|继续| G
   H -->|舍弃| J[不保存并退出]
   H -->|结束| K[计算实际活动时长]
+  R1 --> K
   F --> L[保存 Session]
   K --> L
-  L --> M[更新 Project 与 Trail]
+  L --> M[更新 Project 与 Trail<br/>必要时完成 Planned Session]
   M --> N{现在添加 Proof}
   N -->|是| O[进入 Add Proof]
-  N -->|否| P[返回原页面]
+  N -->|否| P[返回 Agenda / Project]

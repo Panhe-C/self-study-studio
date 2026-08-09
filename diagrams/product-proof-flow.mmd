@@ -16,4 +16,9 @@ flowchart TD
   L --> J
   K -->|是| M[保存附件与 Proof]
   M --> N[写入 Learning Trail]
-  N --> O[可在 Library 与 Proof Detail 查看]
+  N --> O[阶段 Review 需要时创建 Proof Revision]
+  O --> P{Evidence Contract 标准满足?}
+  P -->|否| Q[保留普通 Proof<br/>不能推进 Phase]
+  P -->|是| R[显式接受为 Qualifying Proof]
+  R --> S[Review Decision 原子发布]
+  S --> T[Library / Proof Detail / Trail 可回看]

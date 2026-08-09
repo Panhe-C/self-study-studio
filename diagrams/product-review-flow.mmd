@@ -1,19 +1,22 @@
 flowchart TD
-  A[活跃项目 7 天无记录<br/>或近期证据足够] --> B[Today 显示 Review 提醒]
-  B --> C[聚合本周期 Session 与 Proof]
-  C --> D[生成并保存 Review<br/>Facts·Patterns·Decisions·Next Steps]
-  D --> E{是否包含具体项目建议}
-  E -->|是| F[写入关联 Project Trail]
-  E -->|否| G[只保存 Review]
-  F --> H[显示内容与来源引用]
-  G --> H
+  A[Project 停滞·证据到期·Phase 到达边界] --> B[Today / Web 显示 Review Readiness]
+  B --> C[聚合本周期 Session·Proof·Plan Phase]
+  C --> D[生成并保存 Review Draft<br/>Facts·Patterns·Decisions·Next Steps]
+  D --> E{Weekly 还是 Stage Review?}
+  E -->|Weekly| W[可编辑周复盘]
+  E -->|Stage| S[锚定 Phase 的阶段复盘]
+  W --> H[显示内容与来源引用]
+  S --> H
   H --> I{是否编辑复盘内容}
   I -->|是| J[编辑并再次保存]
   I -->|否| K[保留生成内容]
   J --> L{是否应用项目建议}
   K --> L
-  L -->|应用状态| M[明确修改 active·low-frequency·paused]
-  L -->|应用 Next Step| N[明确更新唯一下一步]
-  L -->|暂不应用| O[只保留 Review 记录]
-  M --> P[状态变化写入 Trail]
-  N --> Q[Next Step 变化写入 Trail]
+  L -->|Next Step / cadence| M[显式更新 Project 或负载]
+  L -->|Phase transition| Q{是否有 Qualifying Proof?}
+  L -->|不应用| O[只保留 Review 记录]
+  Q -->|否| R[只能延长·修订·暂停·放弃]
+  Q -->|是| T[Evidence Contract + Proof Revision 验收]
+  T --> U[Review Decision + Plan Revision Guard]
+  M --> V[状态/Next Step/决定写入 Trail]
+  U --> V

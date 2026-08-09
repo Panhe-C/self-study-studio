@@ -441,9 +441,9 @@
           Proof 和学习者自己做出的复盘决定。
         </p>
         <dl class="facts">
-          <div class="fact"><dt>已发布形态</dt><dd>iPhone App</dd></div>
-          <div class="fact"><dt>Web Workspace</dt><dd>原型 · demo 数据</dd></div>
-          <div class="fact"><dt>测试基线</dt><dd>261 通过 · 0 失败</dd></div>
+          <div class="fact"><dt>已发布形态</dt><dd>iPhone App + Web Workspace</dd></div>
+          <div class="fact"><dt>Web Workspace</dt><dd>Demo / Real · C1/C2 guarded writes</dd></div>
+          <div class="fact"><dt>测试基线</dt><dd>Swift 446 · Web 63/63</dd></div>
           <div class="fact"><dt>产品决策</dt><dd>33 条 ADR</dd></div>
         </dl>
       </div>
@@ -472,7 +472,7 @@
   A -->|"应用建议"| N
   A -->|"降频或暂停"| P</pre>
           </div>
-          <figcaption>核心闭环。终点回到起点的 Next Step，形成可持续的循环。</figcaption>
+          <figcaption>核心闭环。Session、Proof、Trail 与 Review 共同支撑下一步决定；阶段推进还要经过 Qualifying Proof。</figcaption>
         </figure>
         <div class="note">
           <span class="label">关键立场</span>
@@ -500,16 +500,17 @@
   T -.-> QL["Quick Log"]
   T -.-> TM["Timer"]
   P -.-> PD["Project Detail<br/>Trail · Sessions · Proofs · Reviews"]
-  P -.-> CP["Course Plan 向导"]
+  P -.-> CP["Learning Plan 向导"]
+  P -.-> SR["Stage Review<br/>Qualifying Proof"]
   L -.-> EX["导出与归档"]
   RV -.-> ST["AI Review Settings"]</pre>
           </div>
           <figcaption>信息架构。Onboarding 未完成时主 Tab 不出现。</figcaption>
         </figure>
         <p>
-          Review、Course Plan、Cloud Sync、AI 设置都<strong>不是</strong>独立 Tab，
-          它们从需要它们的地方进入。首次设置要求至少为第一个项目存下一条记录，Today 才开放，
-          避免用户面对一个空壳应用。
+          Review、Learning Plan、Stage Review、Cloud Sync、AI 设置都<strong>不是</strong>独立 Tab，
+          它们从需要它们的地方进入。Web Workspace 另外提供明确标记的 Demo 与 Real 模式；
+          Real 读写必须经过 C1/C2 合约，不会静默回退到 Demo。首次设置要求至少为第一个项目存下一条记录，Today 才开放。
         </p>
       </section>
 
@@ -523,9 +524,9 @@
   PROJECT ||--o{ PROOF : "拥有"
   PROJECT ||--o{ TRAIL_EVENT : "累积"
   PROJECT ||--o{ REVIEW : "被复盘"
-  PROJECT ||--o| COURSE_PLAN : "至多一个活跃"
+  PROJECT ||--o| LEARNING_PLAN : "至多一个活跃"
   PROJECT ||--o| EVIDENCE_CONTRACT : "承诺时必须有"
-  COURSE_PLAN ||--o{ PLAN_PHASE : "有序阶段"
+  LEARNING_PLAN ||--o{ PLAN_PHASE : "有序阶段"
   PLAN_PHASE ||--o{ PLANNED_SESSION : "包含"
   PLANNED_SESSION ||--o| SESSION : "被完成"
   SESSION ||--o{ PROOF : "可附带"
@@ -552,21 +553,14 @@
         <figure>
           <div class="diagram">
             <pre class="mermaid">flowchart TD
-  S["扫描所有 active 项目"] --> F1{"用户手动置顶"}
-  F1 -->|"是"| R0["优先级 0"]
-  F1 -->|"否"| F2{"证据契约到期边界"}
-  F2 -->|"是"| R1["优先级 1"]
-  F2 -->|"否"| F3{"已确认排课的计划会话<br/>今天到期或逾期"}
-  F3 -->|"是"| R2["优先级 2"]
-  F3 -->|"否"| F4{"项目已停滞"}
-  F4 -->|"是"| R3["优先级 3"]
-  F4 -->|"否"| X["不进入推荐"]
-  R0 --> T["按优先级排序<br/>同级用到期日 → 创建时间 → UUID 打破平局"]
-  R1 --> T
-  R2 --> T
-  R3 --> T
-  T --> CAP["最多显示 3 条"]
-  CAP --> UI["主推荐 + 备选 + 练习"]</pre>
+  S["扫描 active 项目、PlannedSession、Practice Blocks"] --> A["生成 Today Agenda"]
+  A --> U["Up Next · Later Today · Optional"]
+  A --> C["逾期会话 → Carryover<br/>保留原始窗口"]
+  A --> O["日期内排序 override<br/>仅 ViewModel 内存"]
+  U --> R["确定性排序<br/>到期日 → 创建时间 → UUID"]
+  C --> R
+  O --> R
+  R --> UI["Today 展示：Next Step · PlannedSession · Practice"]</pre>
           </div>
           <figcaption>Today 推荐排序。四档优先级加稳定的平局打破规则。</figcaption>
         </figure>
@@ -652,7 +646,7 @@
             <pre class="mermaid">flowchart TD
   A["从 Project 进入计划向导"] --> B{"手动还是 AI 协助"}
   B -->|"手动"| C["自己填阶段与会话"]
-  B -->|"AI 协助"| D["发送课程输入 + 摘要化学习上下文"]
+  B -->|"AI 协助"| D["发送 Learning Plan 输入 + 摘要化学习上下文"]
   D --> N["绝不发送日历内容 · 联系人 · 位置"]
   D --> E["AI 返回结构"]
   E --> F["本地校验：日期 · 时长 · 预算 · 结构"]
@@ -683,7 +677,7 @@
           <div class="diagram">
             <pre class="mermaid">flowchart TD
   subgraph L1["边界一 · 计划"]
-    A["激活课程计划"] --> B["只创建内部计划会话"]
+    A["激活 Learning Plan"] --> B["只创建内部计划会话"]
   end
   subgraph L2["边界二 · 排课"]
     C["确定性排课<br/>可用时段 · 时长偏好 · 每日上限<br/>最小间隔 · 周末策略 · 截止日"] --> D["只创建可编辑 ScheduleDraft"]
@@ -727,7 +721,7 @@
   E --> H["结束并保存练习会话"]
   H --> I["统计 今日 · 本周 · 全部时长"]
   I --> J["同步到 iCloud"]
-  H -.->|"不影响"| K["课程计划完成度"]</pre>
+  H -.->|"不影响"| K["Learning Plan 阶段完成度"]</pre>
           </div>
           <figcaption>练习例程。崩溃恢复是本地能力，不依赖网络。</figcaption>
         </figure>
@@ -771,23 +765,27 @@
 
       <section id="sync">
         <h2><span class="idx">11</span>同步与冲突</h2>
-        <p class="kicker">本地先落地，网络是后续动作。</p>
+        <p class="kicker">本地先落地；Web Real 的远端写入必须经过 typed contract、Revision Guard 与冲突工作区。</p>
         <figure>
           <div class="diagram">
             <pre class="mermaid">flowchart TD
-  A["本地修改"] --> B["立即写入本地存储"]
+  A["iPhone 本地修改"] --> B["立即写入本地存储"]
   B --> C["进入可重试发件箱"]
   C --> D{"有网络和 Apple 账号"}
   D -->|"否"| E["排队等待<br/>飞行模式也不丢"]
   E --> D
   D -->|"是"| F["上传到私有 CloudKit"]
   F --> G{"和远端冲突了吗"}
-  G -->|"不同字段"| H["自动合并"]
-  G -->|"同字段"| I["生成冲突待人工审阅"]
+  G -->|"不同字段"| H["按规则合并"]
+  G -->|"同字段"| I["生成冲突工作区<br/>base · local · remote"]
   H --> J["可见的 iCloud 状态"]
   I --> J
   B --> K["附件先存本地目录"]
   K --> L["按需上传下载"]
+  W["Web Demo"] --> X["fixture-only<br/>不可写"]
+  R["Web Real"] --> Y["C1 reader/projector"]
+  Y --> Z["C2 typed guarded writer"]
+  Z --> Q["Revision Guard / conflict / recoverable draft"]
   M["切换 Apple 账号"] --> N["账号级隔离的本地存储<br/>不自动合并也不删除另一空间"]</pre>
           </div>
           <figcaption>同步模型。不同字段自动合并，同字段永远交给人判断。</figcaption>
@@ -816,47 +814,44 @@
 
       <section id="gap">
         <h2><span class="idx">13</span>已发布形态与目标模型的差距</h2>
-        <p class="kicker">诚实版本：产品决策已经跑在代码前面。</p>
+        <p class="kicker">当前版本：B1–B6 已进入 iPhone，C1/C2 已进入 Web 本地合约；D1 仍区分本地证据与 live gates。</p>
 
         <div class="legend">
           <div><span class="tag t-shipped">shipped</span> 已实现且可用</div>
           <div><span class="tag t-partial">partial</span> 有相关机制，约束未落地</div>
-          <div><span class="tag t-planned">planned</span> 已决定未实现</div>
+          <div><span class="tag t-planned">planned</span> 仅表示后续非目标或外部门禁</div>
         </div>
 
         <figure>
           <div class="diagram">
             <pre class="mermaid">flowchart TD
-  subgraph NOW["已发布 · iPhone"]
-    A1["Project 七种状态"]
-    A2["CoursePlan + 整数 revision"]
-    A3["扁平 PracticeRoutine<br/>只记总时长"]
-    A4["主推荐 + 备选 + 练习 三段式"]
-    A5["Weekly Review"]
-    A6["EvidenceContract 接受证据"]
+  subgraph NOW["已发布 · iPhone B1–B6"]
+    A1["Project lifecycle<br/>Idea · Active · Paused · Completed · Abandoned"]
+    A2["Learning Plan<br/>immutable Plan Revision + Revision Guard"]
+    A3["Practice Blocks<br/>Focus · Segments · runtime recovery"]
+    A4["Today Agenda<br/>Carryover + Daily Override"]
+    A5["Planning Window<br/>Capacity Check + DST"]
+    A6["Stage Review<br/>Qualifying Proof + Evidence Contract"]
   end
-  subgraph NEXT["已决定 · 未实现"]
-    B1["Active/Paused/Completed/Abandoned<br/>+ 独立的承诺前状态"]
-    B2["Learning Plan + 不可变 Plan Revision<br/>+ Revision Guard"]
-    B3["有序 Practice Block<br/>Focus · Segment · 分块时长"]
-    B4["派生 Today Agenda<br/>+ Carryover + 当日调序"]
-    B5["项目级 Stage Review<br/>锚定阶段"]
-    B6["Qualifying Proof<br/>无证据不能推进阶段"]
+  subgraph WEB["Web Workspace C1/C2"]
+    C1["Demo fixture-only<br/>Real reader/projector"]
+    C2["Typed guarded writes<br/>Next Step · Plan · Routine · Proof · Review"]
+    C3["Sync & Conflicts<br/>Recoverable Drafts · no hidden LWW"]
   end
-  subgraph WEB["Web Workspace"]
-    C1["界面与派生逻辑已写"]
-    C2["跑两个硬编码 demo"]
-    C3["CloudKit 只读诊断"]
+  subgraph D1["D1 release evidence"]
+    D0["Swift/Web local mappings PASS"]
+    D9["CloudKit · device · EventKit · browser visual/VoiceOver<br/>BLOCKED or NOT_RUN"]
   end
-  A1 --> B1
-  A2 --> B2
-  A3 --> B3
-  A4 --> B4
-  A5 --> B5
-  A6 --> B6
-  B1 --> C1
-  B3 --> C1
-  C2 -.->|"待替换"| C1</pre>
+  A1 --> C1
+  A2 --> C2
+  A3 --> C2
+  A4 --> C1
+  A5 --> C1
+  A6 --> C2
+  C1 --> D0
+  C2 --> C3
+  C3 --> D0
+  D0 -.-> D9</pre>
           </div>
           <figcaption>已发布形态、目标模型与 Web 现状之间的映射。</figcaption>
         </figure>
@@ -879,48 +874,48 @@
             </tr>
             <tr>
               <td>Project Status</td>
-              <td><span class="tag t-partial">partial</span></td>
-              <td>七种值而非四种；映射已由 ADR 0032 与 0033 定案</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>五个 canonical lifecycle 值；Archive/Trash 是独立动作</td>
             </tr>
             <tr>
               <td>Learning Plan</td>
-              <td><span class="tag t-partial">partial</span></td>
-              <td>类型与用户语言仍是 CoursePlan</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>Learning Plan 与 immutable Plan Revision；旧 CoursePlan 仅作兼容别名</td>
             </tr>
             <tr>
               <td>Practice Routine</td>
-              <td><span class="tag t-partial">partial</span></td>
-              <td>扁平结构，无 Block，一个项目可有多个活跃例程</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>Practice Blocks、Focus、Segments 与本地 runtime recovery</td>
             </tr>
             <tr>
               <td>Qualifying Proof</td>
-              <td><span class="tag t-partial">partial</span></td>
-              <td>证据接受挂在契约标准上，而非阶段成果；无阶段推进关卡</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>Evidence Contract + Proof Revision + Stage Review publication guard</td>
             </tr>
             <tr>
               <td>Practice Block</td>
-              <td><span class="tag t-planned">planned</span></td>
-              <td>Web 的练习视图已假设它存在</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>iPhone runtime 已覆盖；Web 配置/查看不承担现场计时</td>
             </tr>
             <tr>
               <td>Today Agenda</td>
-              <td><span class="tag t-planned">planned</span></td>
-              <td>当前是主推荐 + 备选 + 练习三段式</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>确定性 Agenda、Carryover 与日期内内存 override</td>
             </tr>
             <tr>
               <td>Carryover</td>
-              <td><span class="tag t-planned">planned</span></td>
-              <td>逾期会话会出现在 Today，但没有保留原窗口的解决动作</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>保留原始窗口，可 Do Today、Skip、Reschedule 或 Revise Plan</td>
             </tr>
             <tr>
               <td>Stage Review</td>
-              <td><span class="tag t-planned">planned</span></td>
-              <td>只有跨项目的 Weekly Review</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>按 Project/Phase 的 readiness、草稿与显式发布</td>
             </tr>
             <tr>
               <td>Revision Guard</td>
-              <td><span class="tag t-planned">planned</span></td>
-              <td>Web 写入路径的前置条件</td>
+              <td><span class="tag t-shipped">shipped</span></td>
+              <td>C2 writer 对 Next Step、Plan、Routine、Proof、Review 做 guarded writes</td>
             </tr>
           </tbody>
         </table>
@@ -928,16 +923,16 @@
         <div class="note">
           <span class="label">当前最大的一处不一致</span>
           <p>
-            Web 和 iPhone 还不在同一个领域模型上，所以 Web MVP 规格里的 12 条验收场景
-            目前没有一条能端到端跑通。收敛顺序写在仓库的跨端迁移路线图里，
-            分四个阶段十一个里程碑，每个里程碑都能独立验证。
+            Web 和 iPhone 已共享当前 contract fixtures 与 C1/C2 读写语义；D1 已把 12 条验收场景
+            映射到本地 Swift/Web 证据。CloudKit token/schema/origin、同账号双设备、EventKit、
+            浏览器视觉/VoiceOver 与人工无 AI loop 仍明确标为 BLOCKED 或 NOT_RUN，不能由本地测试替代。
           </p>
         </div>
       </section>
 
       <footer>
         <p>
-          Self Study Studio · 产品功能演示页。内容对应 2026-07-25 的仓库状态。
+          Self Study Studio · 产品功能演示页。内容对应 2026-08-09 的仓库状态（B1–B6、C1/C2、D1）。
           术语与实现状态见 <code>CONTEXT.md</code>，产品决策见 <code>docs/adr/</code>，
           收敛顺序见 <code>docs/cross-surface-migration-roadmap.md</code>。
         </p>

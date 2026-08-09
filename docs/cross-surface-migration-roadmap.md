@@ -8,18 +8,18 @@ Target product spec: `docs/web-workspace-mvp-spec.md`
 
 ## Why this document exists
 
-The product decisions for the iPhone + Web personal learning system are accepted, but the
-code has not followed all of them yet. The iOS app now uses the canonical Learning Plan
-domain (with a compatibility `CoursePlan` alias), while it still has the pre-decision model
-(flat `PracticeRoutine`, seven `ProjectStatus` values, a Primary/Alternatives
-recommendation split, Weekly-Review-only reflection). The Web Workspace keeps Demo mode
-explicit and now has a Real journal adapter/projector plus typed guarded writes over CloudKit;
-production schema, allowed-origin, token, and same-owner device acceptance remain separate evidence.
+The product decisions for the iPhone + Web personal learning system are now represented by the
+B1–B6 iPhone slices and the C1/C2 Web reader/writer contracts. The iOS app uses canonical
+Learning Plan, Project lifecycle, Practice Blocks, Today Agenda, Planning Window, and Stage
+Review/Qualifying Proof concepts (with compatibility aliases where required). The Web Workspace
+keeps Demo mode explicit and has a Real journal adapter/projector plus typed guarded writes,
+conflict review, and recoverable drafts. Production schema, allowed-origin, token, same-owner
+device, browser visual, and human-loop acceptance remain separate evidence gates.
 
-None of the twelve acceptance scenarios in `docs/web-workspace-mvp-spec.md` §12 can pass
-today, because the two surfaces do not yet share one domain model. This roadmap splits that
-gap into milestones that can each be verified on their own, so the app stays usable
-throughout and no milestone depends on a later one to be meaningful.
+The twelve acceptance scenarios in `docs/web-workspace-mvp-spec.md` §12 now have deterministic
+local mappings in D1. A live end-to-end pass still requires the external Apple and human gates
+listed below; this roadmap keeps those boundaries visible rather than treating local tests as
+production acceptance.
 
 ## Sequencing principles
 
@@ -345,8 +345,8 @@ Trail's meaning.
 project/phase-anchored draft Stage Reviews, explicit Qualifying Proof acceptance with Proof Revision
 and Evidence Contract linkage, Revision Guard publication, phase/project transitions, and guarded
 Plan Revision Drafts. Shared Swift/Web contract fixtures and decoder fallbacks cover the new canonical
-fields. Web still renders demo data; real Journal reads remain the C1 boundary, and physical-device /
-CloudKit convergence remains a release gate.
+fields. C1/C2 now provide the Web Real reader, typed guarded writes, conflict review, and recoverable
+drafts; physical-device / CloudKit convergence remains a release gate.
 
 ---
 
@@ -357,11 +357,11 @@ CloudKit convergence remains a release gate.
 **Current.** Demo mode still uses two hardcoded fixtures (`guitarDemo`, `cs336Demo`), while
 `lib/journal-reader.ts` fetches private-zone pages through CloudKit JS, decodes the shared A2
 contract (including legacy defaults), and `lib/journal-projector.ts` feeds the existing
-Dashboard/Project Workspace view models. Real mode is explicit, read-only, provenance-labeled,
-and never silently falls back to Demo.
+Dashboard/Project Workspace view models. Real mode is explicit, provenance-labeled, and never
+silently falls back to Demo; C2 owns the typed guarded write paths and conflict workspace.
 
-**Work.** Keep the reader/projector and explicit Demo/Real UI read-only until C2 owns Web writes.
-Complete the outstanding CloudKit JS validations from spec §13: a dedicated Web API token with
+**Work.** Keep the reader/projector and explicit Demo/Real UI, while routing all mutations through
+C2's guarded writer and conflict workspace. Complete the outstanding CloudKit JS validations from spec §13: a dedicated Web API token with
 allowed origins, provisioned schema/zone, verified change-tag and asset download behavior, and
 same-owner iPhone/Web data acceptance.
 

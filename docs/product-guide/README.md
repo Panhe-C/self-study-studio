@@ -2,12 +2,12 @@
 
 本目录提供同一份产品内容的四种输出：
 
-- `self-study-studio-product-tour.html`：单文件网页走查，13 张图讲清核心闭环、三道确认边界与目标模型差距。直接在浏览器打开即可，图表由 Mermaid CDN 渲染，首次打开需要网络；离网时自动降级显示图源码。
+- `self-study-studio-product-tour.html`：单文件网页走查，13 张图讲清 B1–B6、C1/C2 Web Demo/Real、冲突草稿与 D1 验收边界。直接在浏览器打开即可，图表由 Mermaid CDN 渲染，首次打开需要网络；离网时自动降级显示图源码。
 - `self-study-studio-product-deck.pptx`：16:9，20 页，适合产品演示、路演与评审。
 - `self-study-studio-product-guide-a4.pptx`：A4 纵向，28 页，适合在 Canva 中继续编辑手册。
 - `self-study-studio-product-guide-a4.pdf`：A4 纵向，适合直接阅读、发送与归档。
 
-HTML 走查独立于 Canva 生成链路，不需要运行 `scripts/generate-product-guide.sh`；它的图表源码内嵌在页面里，改完直接刷新浏览器即可。三个 PPTX/PDF 输出目前仍是 v1.0 内容，需按下方流程重新生成。
+HTML 走查独立于 Canva 生成链路，不需要运行 `scripts/generate-product-guide.sh`；它的图表源码内嵌在页面里，改完直接刷新浏览器即可。PPTX/PDF 与 Mermaid PNG/SVG 均从当前 `content.json` 和生成器重新导出；它们不会替代真实设备、CloudKit、EventKit 或浏览器视觉门禁。
 
 ## 导入 Canva
 
@@ -20,11 +20,11 @@ HTML 走查独立于 Canva 生成链路，不需要运行 `scripts/generate-prod
 
 - 产品事实：`../PRODUCT_GUIDE.md`
 - 共享结构化内容：`content.json`
-- 流程图：`../assets/product-guide/product-*.mmd` 及对应 PNG/SVG
+- 流程图：`../../diagrams/product-*.mmd` 及对应 PNG/SVG
 - 真实演示截图：`../assets/product-guide/demo-*.png`
 - 截图范围与限制：`../assets/product-guide/SCREENSHOTS.md`
 
-当前版本使用 10 张流程图和 9 张真实 iPhone Simulator 截图。Export 完成提示框没有稳定截取，因此使用可验证的导出流程图说明，不用虚构界面补位。
+当前版本使用 10 张流程图和 9 张真实 iPhone Simulator 截图，并在内容中明确 B1–B6 iPhone、本地 C1/C2 Web 证据、Demo/Real 与 Sync & Conflicts 的边界。Export 完成提示框没有稳定截取，因此使用可验证的导出流程图说明，不用虚构界面补位。
 
 ## 重新生成
 
@@ -41,5 +41,5 @@ scripts/generate-product-guide.sh
 1. 功能或产品规则变化时，先更新 `docs/PRODUCT_GUIDE.md` 与 `content.json`。
 2. 导航、判断条件或数据边界变化时，更新对应 Mermaid 源文件并重新渲染 PNG/SVG。
 3. 界面变化时，使用匿名演示数据重新采集真实 Simulator 截图，并同步更新 `SCREENSHOTS.md`。
-4. 运行生成脚本，逐页检查溢出、遮挡、图片拉伸、断开的流程连接和功能状态。
-5. 更新文档版本、核对日期与测试基线后提交。
+4. 运行生成脚本，逐页检查溢出、遮挡、图片拉伸、断开的流程连接和功能状态；把本地 PASS 与 live BLOCKED/NOT_RUN 分开记录。
+5. 更新文档版本、核对日期、测试基线和外部验收门槛后提交。

@@ -2,18 +2,18 @@
   "release": {
     "product": "Self Study Studio",
     "displayName": "Learning Journal",
-    "documentVersion": "1.0",
-    "verifiedOn": "2026-07-13",
-    "gitCommit": "0a605e9",
-    "productStage": "v0.1 learning loop",
-    "testBaseline": "50 tests executed, 49 passed, 1 known assertion failure"
+    "documentVersion": "1.3",
+    "verifiedOn": "2026-08-09",
+    "gitCommit": "d476f32",
+    "productStage": "v0.1 evidence-first loop + cross-surface C1/C2",
+    "testBaseline": "Swift 446 tests / 0 failures; Web npm test 63 / 63; build and lint pass; D1 local mappings pass while live gates remain blocked"
   },
   "positioning": {
-    "oneLiner": "一个帮助个人学习者把行动、证据和复盘串成下一步决定的本地优先学习日志。",
+    "oneLiner": "一个帮助个人学习者把行动、证据和复盘串成下一步决定的学习日志，并把同一份 Journal 连接到 iPhone 与 Web Workspace。",
     "audience": "同时推进多个自学项目、但不想被复杂知识管理系统拖慢的人。",
-    "problem": "学习过程容易留下零散记录，却很难回答这周做了什么、证据是什么、接下来该做什么。",
-    "promise": "用低摩擦 Session 记录行动，用 Proof 保存证据，再通过 Review 做出明确决定。",
-    "boundary": "不是课程平台、社交社区、排行榜或自动替用户学习的 Agent。"
+    "problem": "学习过程容易留下零散记录，却很难回答这周做了什么、证据是什么、接下来该做什么，以及不同设备上的修改是否安全。",
+    "promise": "用低摩擦 Session 记录行动，用 Proof 保存证据，用 Learning Plan 与 Stage Review 做出明确决定，并让 Web/ iPhone 共用一份受保护的 Journal。",
+    "boundary": "不是课程市场、社交社区、排行榜或自动替用户学习的 Agent；CloudKit 实时账户、真机与双设备收敛仍需 D1 外部验收。"
   },
   "deckSections": [
     {
@@ -23,203 +23,163 @@
     },
     {
       "id": "loop",
-      "title": "Session 与 Proof 把行动变成可复盘的轨迹",
-      "takeaway": "Quick Log 和 Timer 最终进入同一 Session 模型，Proof 与 Review 再把记录变成证据和决定。"
+      "title": "Session、Proof 与 Learning Plan 形成可复盘轨迹",
+      "takeaway": "Quick Log、Timer、Practice Routine 与 Today Agenda 支持行动；Proof、Stage Review 与 Plan Revision 把行动变成决定。"
     },
     {
       "id": "demo",
-      "title": "一次演示讲清完整学习闭环",
-      "takeaway": "从 Today 的 Next Step 开始，用一条 CS336 学习故事贯穿计时、证据、Trail 与周复盘。"
+      "title": "iPhone 行动与 Web 判断使用同一份 Journal",
+      "takeaway": "iPhone 负责现场执行与取证，Web Demo/Real 模式负责规划、审阅和受 Revision Guard 保护的写入。"
     },
     {
       "id": "status",
-      "title": "当前能力与规划能力保持清晰边界",
-      "takeaway": "v0.1 闭环可运行；CloudKit、课程规划和学习日历仍是已设计能力。"
+      "title": "本地证据充分，实时门槛单独标注",
+      "takeaway": "B1–B6、C1/C2 与 D1 本地自动化证据已就绪；真机、CloudKit schema/token/origin、EventKit 与双设备门禁仍未宣称通过。"
     }
   ],
   "concepts": [
     {
       "term": "Project",
-      "meaning": "一个持续学习目标及其当前状态。"
+      "meaning": "一个持续学习目标及其当前生命周期状态；Archive 与 Permanent Deletion 分开。"
     },
     {
       "term": "Next Step",
-      "meaning": "下一次打开 App 时可以直接执行的具体动作。"
+      "meaning": "下一次打开 iPhone 或 Web Workspace 时可以直接执行的具体动作。"
     },
     {
       "term": "Session",
-      "meaning": "一次已发生的学习行动，由 Quick Log 或 Timer 生成。"
+      "meaning": "一次已发生的学习行动，由 Quick Log、Timer 或 Guided Routine Player 生成。"
     },
     {
       "term": "Proof",
-      "meaning": "带有“这证明了什么”说明的图片、录音、文件或链接。"
+      "meaning": "带有“这证明了什么”说明的图片、录音、文件或链接；必要时可成为 Qualifying Proof。"
     },
     {
       "term": "Trail",
-      "meaning": "Session、Proof、Next Step、状态和 Review 组成的项目时间线。"
+      "meaning": "Session、Proof、Next Step、阶段与 Review Decision 组成的项目时间线。"
     },
     {
       "term": "Review",
-      "meaning": "把近期证据整理为 Facts、Patterns、Decisions 与 Next Steps 的阶段判断。"
+      "meaning": "把近期证据整理为 Facts、Patterns、Decisions 与 Next Steps 的 Weekly/Stage 判断。"
     }
   ],
   "diagrams": [
-    {
-      "id": "learning-loop",
-      "title": "学习轨迹核心闭环",
-      "path": "diagrams/product-learning-loop.png"
-    },
-    {
-      "id": "information-architecture",
-      "title": "当前信息架构",
-      "path": "diagrams/product-information-architecture.png"
-    },
-    {
-      "id": "functional-modules",
-      "title": "功能模块关系",
-      "path": "diagrams/product-functional-modules.png"
-    },
-    {
-      "id": "demo-storyboard",
-      "title": "标准 Demo 故事板",
-      "path": "diagrams/product-demo-storyboard.png"
-    },
-    {
-      "id": "onboarding",
-      "title": "首次使用流程",
-      "path": "diagrams/product-onboarding-flow.png"
-    },
-    {
-      "id": "session",
-      "title": "日常 Session 流程",
-      "path": "diagrams/product-session-flow.png"
-    },
-    {
-      "id": "proof",
-      "title": "Proof 学习证据流程",
-      "path": "diagrams/product-proof-flow.png"
-    },
-    {
-      "id": "review",
-      "title": "Weekly Review 流程",
-      "path": "diagrams/product-review-flow.png"
-    },
-    {
-      "id": "ai-fallback",
-      "title": "AI Review 降级流程",
-      "path": "diagrams/product-ai-fallback-flow.png"
-    },
-    {
-      "id": "export",
-      "title": "数据导出流程",
-      "path": "diagrams/product-export-flow.png"
-    }
+    { "id": "learning-loop", "title": "学习轨迹核心闭环", "path": "diagrams/product-learning-loop.png" },
+    { "id": "information-architecture", "title": "iPhone 与 Web 信息架构", "path": "diagrams/product-information-architecture.png" },
+    { "id": "functional-modules", "title": "功能模块与跨端边界", "path": "diagrams/product-functional-modules.png" },
+    { "id": "demo-storyboard", "title": "iPhone + Web Demo 故事板", "path": "diagrams/product-demo-storyboard.png" },
+    { "id": "onboarding", "title": "首次使用流程", "path": "diagrams/product-onboarding-flow.png" },
+    { "id": "session", "title": "日常 Session 与 Today 流程", "path": "diagrams/product-session-flow.png" },
+    { "id": "proof", "title": "Proof 与 Qualifying Proof 流程", "path": "diagrams/product-proof-flow.png" },
+    { "id": "review", "title": "Weekly/Stage Review 流程", "path": "diagrams/product-review-flow.png" },
+    { "id": "ai-fallback", "title": "AI Review 降级流程", "path": "diagrams/product-ai-fallback-flow.png" },
+    { "id": "export", "title": "数据导出流程", "path": "diagrams/product-export-flow.png" }
   ],
   "featureStatus": [
     {
-      "feature": "首次启动与 1-3 个 Project",
+      "feature": "Onboarding 与首条 Session",
       "status": "已实现",
-      "visibleResult": "两步 Onboarding 创建当前学习项目，并要求首条 Session。",
+      "visibleResult": "创建 1–3 个 Project 后完成首条记录，Today 才开放。",
       "evidence": "OnboardingView, JournalServiceTests",
-      "limit": "名称、目标和 Next Step 必填；Area 可留空。"
+      "limit": "Area 可空；名称、Goal 和 Next Step 必填。"
     },
     {
-      "feature": "Today Continue",
+      "feature": "Today Agenda、Carryover 与 Daily Override",
       "status": "已实现",
-      "visibleResult": "显示可继续项目、Next Step、最近 Session 与 Proof。",
-      "evidence": "TodayView, JournalServiceTests",
-      "limit": "只有 active 且有 Next Step 的 Project 出现。"
+      "visibleResult": "组合 Planned Session、Practice occurrence 与 Next Step，保留原窗口并支持当天展示调整。",
+      "evidence": "TodayAgendaServiceTests, CoursePlanningServiceTests",
+      "limit": "Daily Override 只在当前 iPhone ViewModel 内存中，不进入 Journal/CloudKit。"
     },
     {
-      "feature": "Project 管理",
+      "feature": "Project 生命周期与 Archive",
       "status": "已实现",
-      "visibleResult": "创建、编辑、切换状态并查看项目详情。",
-      "evidence": "ProjectsView, JournalViewModelTests",
-      "limit": "状态包含 active、low-frequency、paused、archived。"
+      "visibleResult": "Idea、Active、Paused、Completed、Abandoned 与独立 Trash/Archive 流程保持历史。",
+      "evidence": "ProjectStatusMigrationTests, JournalArchiveServiceTests",
+      "limit": "旧 archived/low-frequency/trash 值仍可读，歧义迁移需要显式选择。"
     },
     {
-      "feature": "Quick Log",
+      "feature": "Learning Plan 与 Plan Revision",
       "status": "已实现",
-      "visibleResult": "用预设或自定义时长补记 Session，并可更新 Next Step。",
-      "evidence": "QuickLogView, JournalServiceTests",
-      "limit": "备注和有效时长必填。"
+      "visibleResult": "结构性计划变化创建不可变 revision；执行层 Planned Session 仍可单独完成或改期。",
+      "evidence": "LearningPlanRevisionMigrationTests, PlanLifecycleGuardTests",
+      "limit": "本地/fake Revision Guard 已验证，真实 CloudKit conditional write 仍属 D1 gate。"
     },
     {
-      "feature": "Timer Session",
+      "feature": "Practice Blocks、Focus 与 Routine Player",
       "status": "已实现",
-      "visibleResult": "开始、暂停、继续、结束或舍弃现场学习计时。",
-      "evidence": "TimerSessionView, JournalServiceTests",
-      "limit": "暂停时间不计入活动时长，舍弃不保存。"
+      "visibleResult": "有序 Block、Focus、Segments、跳过/重访与崩溃恢复写入一个 Practice Session。",
+      "evidence": "PracticeBlocksTests, PracticeTimerRuntimeTests",
+      "limit": "Web 负责历史与配置，不承担现场计时；真机与实时同步仍需验收。"
     },
     {
-      "feature": "Proof",
+      "feature": "Stage Review 与 Qualifying Proof",
       "status": "已实现",
-      "visibleResult": "添加图片、录音、文件或链接，并查看对应预览。",
-      "evidence": "AddProofView, ProofPreviewTests",
-      "limit": "必须说明“这证明了什么”；附件能力受系统权限影响。"
+      "visibleResult": "阶段锚定的 Readiness、Proof Revision、Evidence Contract 验收和显式 Review Decision 可原子发布。",
+      "evidence": "StageReviewServiceTests, EvidenceFirstDomainTests",
+      "limit": "真实账户跨端发布与物理设备交互仍未验证。"
     },
     {
-      "feature": "Learning Trail",
+      "feature": "Planning Window 与 Capacity Check",
       "status": "已实现",
-      "visibleResult": "按项目回看 Session、Proof、状态、Next Step 和 Review。",
-      "evidence": "ProjectDetailView, JournalServiceTests",
-      "limit": "当前位于 Project Detail 内，不是独立主 Tab。"
+      "visibleResult": "按周/项目汇总计划与练习负载，支持 DST 安全的可用时间检查并要求确认。",
+      "evidence": "PlanningWindowCapacityServiceTests, CoursePlanningServiceTests",
+      "limit": "EventKit 写入仍需权限、预览和第二次确认。"
     },
     {
-      "feature": "Weekly Review",
+      "feature": "Quick Log、Timer 与 Proof",
       "status": "已实现",
-      "visibleResult": "生成、编辑并保存 Facts、Patterns、Decisions 和 Next Steps。",
-      "evidence": "ReviewView, ReviewServiceTests",
-      "limit": "状态与 Next Step 建议必须分别显式应用。"
+      "visibleResult": "快速补记、现场计时和图片/音频/文件/链接证据共享同一 Journal 语义。",
+      "evidence": "JournalServiceTests, PracticeTimerRuntimeTests, ProofPreviewTests",
+      "limit": "附件入口依赖设备权限与本地文件可用性。"
     },
     {
-      "feature": "本地规则 Review",
+      "feature": "Weekly Review 与本地 AI fallback",
       "status": "已实现",
-      "visibleResult": "没有 AI 配置或调用失败时仍可生成可编辑复盘。",
-      "evidence": "AdaptiveAIReviewProvider, ReviewServiceTests",
-      "limit": "表达能力由本地规则决定。"
+      "visibleResult": "无 AI 配置、网络失败或解析失败时仍可生成可编辑复盘，建议必须显式应用。",
+      "evidence": "ReviewServiceTests, AdaptiveAIReviewProvider",
+      "limit": "AI provider、endpoint/model/key 与网络兼容性是外部依赖。"
     },
     {
-      "feature": "OpenAI-compatible Review",
+      "feature": "iPhone CloudKit/iCloud",
+      "status": "已实现",
+      "visibleResult": "账号隔离、outbox、冲突审阅、重试上传与恢复路径已在本地/伪客户端测试覆盖。",
+      "evidence": "CloudSyncEndToEndTests, SyncMergeServiceTests",
+      "limit": "真实容器、schema、Push、网络和双设备收敛仍需 D1。"
+    },
+    {
+      "feature": "Web C1 Demo/Real Journal",
       "status": "部分实现",
-      "visibleResult": "配置 Endpoint、Model 与 API Key 后调用 Chat Completions。",
-      "evidence": "AIReviewSettingsView, OpenAICompatibleAIReviewProvider",
-      "limit": "50 个测试中有 1 个来源引用断言失败；网络和服务兼容性未覆盖全部供应商。"
+      "visibleResult": "Demo 是明确的非 canonical fixture；Real 模式读取同一私有 CloudKit zone，不静默回退。",
+      "evidence": "journal-reader-projector.test.mjs, cloudkit-contract.test.mjs",
+      "limit": "token、allowed origin、schema/zone、同账号数据和浏览器运行时仍待实证。"
     },
     {
-      "feature": "Library",
+      "feature": "Web C2 guarded writes",
+      "status": "部分实现",
+      "visibleResult": "Next Step、Learning Plan、Routine、Qualifying Proof 与 Stage Review 通过 typed atomic writer 和 change-tag guard。",
+      "evidence": "journal-write.test.mjs, journal-writer.ts",
+      "limit": "fake CloudKit/静态 UI 已验证；真实 conditional writes 与双端发布仍未通过。"
+    },
+    {
+      "feature": "Sync Conflicts 与 Recoverable Drafts",
+      "status": "部分实现",
+      "visibleResult": "三方合并展示 base/local/remote；同字段冲突必须选择，未完成草稿可在 IndexedDB/localStorage 恢复。",
+      "evidence": "sync-conflicts.ts, recoverable-drafts.ts, journal-write.test.mjs",
+      "limit": "无隐藏 LWW；跨设备 Audit/Trail 与浏览器辅助功能验收尚未运行。"
+    },
+    {
+      "feature": "Calendar 与 EventKit",
       "status": "已实现",
-      "visibleResult": "按时间、Project 或类型浏览 Proof。",
-      "evidence": "LibraryView",
-      "limit": "v0.1 不提供全文搜索。"
+      "visibleResult": "日/周/月排课草稿、冲突预览和第二次确认后才写入系统 Calendar。",
+      "evidence": "Calendar tests, EventKit reconciliation tests",
+      "limit": "真机权限、可写日历和外部事件对账仍需设备 gate。"
     },
     {
-      "feature": "完整 Bundle 导出",
-      "status": "已实现",
-      "visibleResult": "一次导出版本化 journal.json 与附件目录。",
-      "evidence": "LibraryView, ExportServiceTests",
-      "limit": "导出到本地 Documents/LearningJournal/Exports，不自动上传。"
-    },
-    {
-      "feature": "本地存储与旧 JSON 导入",
-      "status": "已实现",
-      "visibleResult": "正常使用 SwiftData；初始化失败时使用 JSON Store，并可一次性导入旧数据。",
-      "evidence": "JournalStoreFactory, JournalStoreTests",
-      "limit": "当前没有多设备冲突处理。"
-    },
-    {
-      "feature": "CloudKit/iCloud 私有同步",
-      "status": "已设计",
-      "visibleResult": "当前 App 不显示同步入口。",
-      "evidence": "设计与实施计划",
-      "limit": "尚未进入产品代码与验证。"
-    },
-    {
-      "feature": "AI 课程规划与学习日历",
-      "status": "已设计",
-      "visibleResult": "当前 App 不显示课程规划或 Calendar Tab。",
-      "evidence": "设计与实施计划",
-      "limit": "尚未进入产品代码与验证。"
+      "feature": "D1 本地自动化验收",
+      "status": "部分实现",
+      "visibleResult": "脚本映射 12 个 MVP 场景并运行 Swift/Web 本地检查，报告明确区分本地通过与 live gates。",
+      "evidence": "scripts/d1-release-check.mjs",
+      "limit": "物理设备、真实 CloudKit、EventKit、浏览器视觉/VoiceOver 和人工无 AI loop 仍 BLOCKED/NOT_RUN。"
     }
   ],
   "demoSteps": [
@@ -229,7 +189,7 @@
       "screenshot": "docs/assets/product-guide/demo-01-today.png",
       "action": "打开 Today，选择 CS336 的 Continue 卡片。",
       "talkTrack": "产品不先要求整理资料，而是把最小可执行动作放在首页。",
-      "expected": "看到 Start、Quick Log、最近 Session 和 Proof 上下文。",
+      "expected": "看到 Agenda、Start、Quick Log、最近 Session 和 Proof 上下文。",
       "fallback": "若无卡片，检查 Project 是否为 active 且有 Next Step。"
     },
     {
@@ -243,9 +203,9 @@
     },
     {
       "id": "timer",
-      "title": "Timer 只统计真正投入的学习时间",
+      "title": "Timer 与 Guided Routine 只统计真正投入的学习时间",
       "screenshot": "docs/assets/product-guide/demo-03-timer.png",
-      "action": "点击 Start，展示暂停、继续和结束。",
+      "action": "点击 Start，展示暂停、继续、Block 切换和结束。",
       "talkTrack": "暂停不累计活动时长，舍弃不会产生 Session。",
       "expected": "结束后进入保存信息并可更新 Next Step。",
       "fallback": "演示时间不足时展示计时界面后改用 Quick Log 完成闭环。"
@@ -279,11 +239,11 @@
     },
     {
       "id": "trail",
-      "title": "Trail 把行为、证据与决定放回同一条时间线",
+      "title": "Trail 把行为、证据和决定放回同一条时间线",
       "screenshot": "docs/assets/product-guide/demo-07-project-detail.png",
       "action": "进入 CS336 Project Detail，滚动到 Learning Trail。",
       "talkTrack": "这是判断项目是否前进的历史，而不是单纯的完成百分比。",
-      "expected": "看到 Session、Proof、Next Step、状态和 Review 事件。",
+      "expected": "看到 Session、Proof、Next Step、阶段与 Review Decision 事件。",
       "fallback": "若事件较少，先完成 Quick Log 和 Proof。"
     },
     {
@@ -316,24 +276,24 @@
   ],
   "limitations": [
     {
-      "category": "测试",
-      "detail": "2026-07-13 执行 50 个测试，49 个通过；OpenAI-compatible Review 解析测试的测试响应缺少 sourceReferences，但断言期望来源映射。"
+      "category": "本地验证",
+      "detail": "2026-08-09：swift test 446 个测试 0 失败，swift build、Web npm test 63/63、Web lint/build 通过；D1 脚本可映射 12 个本地场景。"
     },
     {
-      "category": "设备",
-      "detail": "模拟器构建和启动可验证；当前文档不把真机安装描述为已验证。"
+      "category": "实时门禁",
+      "detail": "真机签名安装、真实 CloudKit schema/token/origin/private zone、同账号 iPhone/Web 双端收敛和附件下载仍为 BLOCKED。"
     },
     {
-      "category": "同步",
-      "detail": "v0.1 为本地优先单设备数据，没有账号、CloudKit 或冲突解决。"
+      "category": "Web 边界",
+      "detail": "Demo fixture 永远 noncanonical 且禁止写入；Real 模式读取并通过 typed atomic writer 写入，但 conditional write 的生产行为尚未验证。"
     },
     {
-      "category": "AI",
-      "detail": "AI Review 是可选边界；未配置、请求失败或响应不可解析时使用本地规则。"
+      "category": "交互验收",
+      "detail": "EventKit 实际写入、浏览器视觉检查、VoiceOver/辅助技术和无 AI/Support Service 的人工完整闭环尚未运行。"
     },
     {
       "category": "范围",
-      "detail": "搜索、复杂日历、课程市场、社交、排行榜与全自动学习 Agent 不在当前版本。"
+      "detail": "搜索、社交、排行榜、课程市场、全自动学习 Agent 和桌面应用不在当前范围；AI 失败时走本地规则路径。"
     }
   ]
 }

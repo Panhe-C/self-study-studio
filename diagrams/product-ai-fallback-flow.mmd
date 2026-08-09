@@ -1,5 +1,5 @@
 flowchart TD
-  A[开始 Weekly Review] --> B{AI Endpoint·Model·API Key 是否齐全}
+  A[开始 Weekly / Stage Review] --> B{AI Endpoint·Model·API Key 是否齐全}
   B -->|否| C[使用本地规则复盘]
   B -->|是| D[请求 OpenAI-compatible Chat Completions]
   D --> E{请求与 JSON 解析是否成功}
@@ -9,3 +9,6 @@ flowchart TD
   F --> G
   G --> H[用户检查来源与结论]
   H --> I[保存或显式应用建议]
+  I --> J{结构性计划变化?}
+  J -->|是| K[创建 guarded Plan Revision Draft]
+  J -->|否| L[写入普通决定或 Next Step]

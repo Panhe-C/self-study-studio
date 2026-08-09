@@ -24,11 +24,12 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 
 ## What Is Implemented
 
-The list below describes the shipped iPhone model. Today Agenda, Carryover, and immutable plan
-revisions are implemented in the package and surfaced from Today/Project flows. Stage Review,
-readiness, and Qualifying Proof are implemented in the iPhone package; the Web Workspace now has
-explicit Demo and read-only Real Journal modes plus guarded C2 write seams. Live CloudKit and
-device convergence remain a separate D1 release gate.
+The list below describes the shipped iPhone model and the current Web Workspace boundary. Today
+Agenda, Carryover, immutable plan revisions, Practice Blocks, Planning Window, Stage Review
+readiness, and Qualifying Proof are implemented in the package and surfaced from Today/Project
+flows. The Web Workspace has explicit Demo and Real modes plus typed C2 guarded writes, conflict
+review, and recoverable drafts. Local tests and mappings pass; live CloudKit and device convergence
+remain separate D1 release gates.
 
 - Two-step onboarding for 1-3 current projects with `name`, `area`, `goal`, one `Next Step`, and a required first Session before Today opens
 - Project creation after onboarding, plus edit and status changes
@@ -39,7 +40,7 @@ device convergence remain a separate D1 release gate.
 - Review prompts for active projects that have gone quiet for 7 days or when recent evidence is ready to review
 - Quick Log sessions with project defaults, presets, custom duration stepping, and first-onboarding completion
 - Timer sessions with pause, resume, end, discard, and a live active-duration display
-- Recurring practice routines with weekday schedules, upward timing, local crash recovery, optional project association, synced completed sessions, and Today/week/all-time totals; practice remains separate from course-plan completion
+- Recurring practice routines with weekday schedules, upward timing, local crash recovery, optional project association, synced completed sessions, and Today/week/all-time totals; Practice Blocks remain separate from Learning Plan completion
 - Proof creation with a required "What does this prove?" statement
 - Proof entry points from Project, Session, Quick Log, Timer, and Library
 - Photo Proof from camera or photo library, audio recording, file import, and links
@@ -48,7 +49,7 @@ device convergence remain a separate D1 release gate.
 - Project-scoped Stage Review readiness and explicit draft-to-published decisions anchored to a Plan Phase
 - Qualifying Proof acceptance linked to an Evidence Contract, Proof Revision, Review Decision, and phase transition
 - Stage Review `extendPhase`/`revisePhase` decisions create guarded Plan Revision Drafts; missing Proof blocks phase advancement
-- Project status transitions: `active`, `low-frequency`, `paused`, `archived`
+- Project lifecycle transitions: `idea`, `active`, `paused`, `completed`, `abandoned`, with separate archive/Trash recovery and permanent deletion actions
 - Project detail actions for Start, Quick Log, Proof, Learning Trail, and historical Reviews
 - Async Weekly Review through an `AIReviewProvider` abstraction
 - OpenAI-compatible Chat Completions provider configurable in the app; endpoint/model live in preferences and API keys live in Keychain
@@ -88,7 +89,10 @@ This repository provides both a Swift Package and a minimal iOS app project:
 
 The Xcode app target compiles the same SwiftUI app core and includes generated Info.plist permission strings for camera, photo library, microphone, Calendar full access, and document sharing.
 
-Course planning and Calendar writing have separate confirmation boundaries. Activating a course plan creates only internal planned sessions. Scheduling creates only an editable `ScheduleDraft`. Reviewing changes still performs no EventKit writes. The app writes only after `Confirm Calendar Changes` is tapped.
+Learning Plan activation and Calendar writing have separate confirmation boundaries. Activating a
+Learning Plan creates only internal planned sessions. Scheduling creates only an editable
+`ScheduleDraft`. Reviewing changes still performs no EventKit writes. The app writes only after
+`Confirm Calendar Changes` is tapped.
 
 The internal Calendar remains usable without iCloud, AI configuration, network access, or Calendar permission. CloudKit keeps retryable local mutations queued; AI failures fall back to local/manual planning or review paths; denied Calendar access disables busy-time reading and EventKit writes without blocking local scheduling and learning records.
 
@@ -162,7 +166,8 @@ Per the PRD, these are intentionally not implemented yet:
 
 The Web Workspace is no longer excluded. `WebWorkspace/` contains a Next.js implementation of
 the Dashboard, Project Workspace, Plan, Practice, Proof, Learning Trail, Review Inbox, and
-read-only CloudKit Real Journal projection; Demo mode remains explicit and no Real-mode read
-silently falls back to fixtures. See
+CloudKit-backed Real Journal projection with typed guarded writes, Sync & Conflicts, and
+recoverable drafts; Demo mode remains explicit and no Real-mode read silently falls back to
+fixtures. See
 [跨端迁移路线图](docs/cross-surface-migration-roadmap.md) for the accepted sequence that connects
 it to the real Journal.

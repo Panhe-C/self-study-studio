@@ -1,17 +1,16 @@
 # Self Study Studio 产品功能手册
 
-文档版本：1.2<br>
+文档版本：1.3<br>
 最近核对：2026-08-09<br>
-产品阶段：v0.1 学习闭环（iPhone）；跨端模型迁移未开始<br>
-验证基线：`swift test` 446 个测试，0 失败（2026-08-09）
+产品阶段：v0.1 证据优先闭环（iPhone + Web C1/C2）；D1 本地验收已覆盖，实时门禁待完成<br>
+验证基线：`swift test` 446 个测试，0 失败；Web `npm test` 63/63（2026-08-09）
 
-> **本手册描述已发布的 iPhone 形态。** Today Agenda、Carryover、单个 PlannedSession
+> **本手册描述已发布的 iPhone 与 Web 形态。** B1–B6（Project 生命周期、Learning Plan Revision、Practice Blocks、Today Agenda、Planning Window、Stage Review/Qualifying Proof）、单个 PlannedSession
 > Reschedule、Plan Revision、Stage Review Readiness、Stage Review 和 Qualifying Proof 已进入当前实现；
-> Web Workspace 默认使用明确标记的 Demo 数据；Real journal 已接入 CloudKit 读写、Revision Guard、冲突工作区和可恢复草稿。真实 CloudKit/设备验收仍是发布门槛。
+> Web Workspace 默认使用明确标记的 Demo fixture；Real journal 已接入 CloudKit 读写、Revision Guard、冲突工作区和可恢复草稿。真实 CloudKit/设备验收仍是发布门槛。
 > Today 的日期内排序 override 只保存在当前 ViewModel 内存中，不进入 Journal、CloudKit 或导出。
 >
-> **配套物料待重新生成。** `docs/product-guide/` 下的 PPTX 与 A4 PDF 仍是 v1.0 内容，需按第 12
-> 节流程重新生成后才能对外使用；文档中的功能事实已按 2026-08-09 源码和测试重新核对。
+> 配套 PPTX、A4 PPTX、A4 PDF 与 10 张流程图已按本页事实重新生成；真实 CloudKit、真机、EventKit、浏览器视觉/VoiceOver 与双设备收敛仍不能由本地验证替代。
 
 > Self Study Studio 是一个本地优先的个人学习日志。它用 Project、Session、Proof、Trail 和 Review，把“我学了什么”转化为“下一步做什么”。
 
@@ -45,7 +44,7 @@
 
 ### 1.5 产品边界
 
-当前版本不是课程平台、社交社区、排行榜、连续打卡工具或全自动学习 Agent。CloudKit/iCloud 私有同步、AI 课程规划和学习日历已经进入产品流程；Web Workspace 默认展示 demo，也可在 Real journal 模式下使用受 Revision Guard 保护的 CloudKit 写入。
+当前版本不是课程市场、社交社区、排行榜、连续打卡工具或全自动学习 Agent。CloudKit/iCloud 私有同步、Learning Plan、Stage Review 和学习日历已经进入产品流程；Web Workspace 默认展示明确标记的 Demo，也可在 Real Journal 模式下读取并通过 Revision Guard 写入同一份私有 Journal。
 
 ## 2. 学习轨迹核心闭环
 
@@ -84,9 +83,9 @@
 - **Calendar**：日/周/月学习日历、排课草稿与 EventKit 确认。
 - **Library**：按时间、Project 或类型浏览 Proof，并导出数据。
 
-Review 与 AI Review Settings 只在 Today 或需要复盘的 Project Detail 中出现，不是独立 Tab。Course Plan 与 Cloud Sync 也不是独立 Tab：前者从 Project 进入，后者在设置中。
+Review 与 AI Review Settings 只在 Today 或需要复盘的 Project Detail 中出现，不是独立 Tab。Learning Plan 与 Cloud Sync 也不是独立 Tab：前者从 Project Workspace 进入，后者在设置或 Web Sync & Conflicts 中进入。
 
-上方的信息架构图仍是三入口版本，需按第 12 节流程重新生成。
+上方的信息架构图现在同时标出四个 iPhone Tab、Web Demo/Real 模式、Sync & Conflicts 与 Recoverable Drafts。
 
 ## 5. 功能模块关系
 
@@ -124,9 +123,9 @@ Today 同时展示 active Project 的一个 Next Step、当天或逾期的 Plann
 **用户目的**：管理目标、Next Step 和项目节奏。<br>
 **入口**：Projects Tab；右上角 Add Project。<br>
 **字段**：Project、Area、Goal、Next Step。<br>
-**状态**：`active`、`low-frequency`、`paused`、`archived`。<br>
+**状态**：`idea`、`active`、`paused`、`completed`、`abandoned`；归档与 Trash 是独立的生命周期动作。<br>
 **详情页**：集中提供 Start、Quick Log、Add Proof、状态、Sessions、Proofs、Reviews 与 Learning Trail。<br>
-**规则**：状态与 Next Step 变化会形成 Trail 事件；归档项目不会出现在 Today Continue。
+**规则**：状态与 Next Step 变化会形成 Trail 事件；Completed/Abandoned 项目可归档，Trash 中的项目可恢复或按保留策略永久删除，不会出现在 Today Continue。
 
 ### 6.4 Quick Log
 
@@ -229,7 +228,7 @@ Contract、Proof Revision 与 EvidenceAcceptance 一起原子提交。没有 Qua
 **正常路径**：SwiftData 保存 Projects、Sessions、Proofs、Reviews、Trail events 和 Onboarding 状态。<br>
 **降级路径**：SwiftData 初始化失败时使用 JSON Store。<br>
 **迁移规则**：新存储为空且检测到旧 `journal.json` 时执行一次性导入，旧文件保持不变。<br>
-**边界**：当前没有账号、多设备同步与冲突解决。
+**边界**：iPhone 的 canonical store、CloudKit outbox 与 Web Real Journal 仍不等于已完成实时双设备验收；D1 明确区分本地 fake/contract 证据与 live gate。
 
 ### 6.15 AI Review Settings
 
@@ -238,6 +237,18 @@ Contract、Proof Revision 与 EvidenceAcceptance 一起原子提交。没有 Qua
 **操作**：Save、Clear Saved API Key。<br>
 **校验**：Endpoint 必须是有效 URL；没有配置时界面说明会使用本地 fallback。<br>
 **安全边界**：API Key 不进入常规偏好设置或导出数据。
+
+### 6.16 Web Workspace：Demo、Real 与 Sync & Conflicts
+
+**Demo 模式**：使用明确标记的 deterministic fixture，只用于产品走查；Demo record 不属于 canonical Journal，写入适配器会直接拒绝。<br>
+**Real Journal 模式（C1）**：CloudKit JS 读取 Journal Owner 的私有 `LearningJournalZone`，保留 record change tag、合同解码与 provenance；配置、认证、schema 或 zone 失败会显示 blocked/signed-out/partial/error，不回退 Demo。<br>
+**受保护写入（C2）**：Web 只通过 typed writer 执行 Next Step、Learning Plan/Plan Revision、Practice Routine、Qualifying Proof 与 Stage Review 等批准操作；批次使用 `ifServerRecordUnchanged` 和 atomic custom-zone write，base/target Revision Guard 独立捕获。<br>
+**冲突**：不同字段可三方合并；同字段或结构性冲突展示 base/local/remote、时间与 affected records，必须显式 Keep Remote、Discard Local、Rebase 或合法 Fork，绝不自动 LWW。<br>
+**Recoverable Draft**：未完成的计划/例程/Review 草稿只写 IndexedDB（不可用时 localStorage），浏览器重启后可恢复；只有 CloudKit semantic commit 才清除草稿，离线不能变成 canonical record。
+
+### 6.17 D1 交叉表面验收边界
+
+`scripts/d1-release-check.mjs` 映射 12 个 Web Workspace MVP 场景并运行 Swift/Web 本地检查；本地脚本报告不把 Node fake、Simulator、静态 source manifest 或 unit tests 当成实时账户证据。当前真实 CloudKit schema/token/origin、已签名物理设备、EventKit 写入、附件跨设备下载、浏览器视觉/VoiceOver 与人工无 AI/Support Service loop 仍分别为 `BLOCKED` 或 `NOT_RUN`。
 
 ## 7. 端到端用户流程
 
@@ -351,24 +362,30 @@ Contract、Proof Revision 与 EvidenceAcceptance 一起原子提交。没有 Qua
 | Today Agenda 与 Carryover | 已实现 | PlannedSession、Practice cadence、Project Next Step 与逾期 Carryover | TodayAgendaService/CoursePlanningService tests | 日期内 override 仅在当前 ViewModel 内存中，不同步 |
 | 单个 PlannedSession Reschedule | 已实现 | 独立 sheet 选择新日期/窗口结束时间，只改选中 session 并写 scheduleChanged Trail | CoursePlanningService tests | 真机 Dynamic Type 与 CloudKit 并发仍需设备门禁 |
 | Learning Plan Revision | 已实现 | Plan detail/wizard 创建结构性 revision；不与单个 session 改期混用 | CoursePlanning/PlanLifecycle tests | 计划结构修改仍需 guarded activation |
+| Practice Blocks、Focus 与 Segments | 已实现 | Routine Player 支持有序 Block、跳过、重访、Segments 与崩溃恢复 | PracticeBlocks/PracticeTimerRuntime tests | Web 不承担现场计时；真机与实时同步仍需门禁 |
+| Planning Window 与 Capacity Check | 已实现 | 按周/项目汇总计划与练习负载，DST 周仍保持确定性 | PlanningWindowCapacity/CoursePlanning tests | EventKit 权限和实际日历写入仍需门禁 |
 | Quick Log 与 Timer | 已实现 | 两种入口生成统一 Session | Service/ViewModel tests | Timer 真机后台行为未验证 |
 | Proof 与预览 | 已实现 | 图片、音频、文件、链接证据 | Attachment/Preview tests | 受设备权限和本地文件可用性影响 |
 | Trail | 已实现 | 项目时间线串联关键事件 | Service tests | 只在 Project Detail 内 |
 | Weekly Review | 已实现 | 可编辑复盘与显式应用建议 | ReviewService/ViewModel tests | AI 不是必需条件 |
-| Stage Review Readiness / Stage Review | 部分实现 | 按 Phase 提示、打开草稿并显式发布阶段决定 | StageReviewService/StageReviewServiceTests | Web 仍是 demo；真机与 CloudKit 仍需门禁 |
-| Qualifying Proof | 部分实现 | 通过 Evidence Contract 与验收标准接受 Proof 后推进 Phase | StageReviewService/JournalRecordContract tests | 只在 Stage Review 发布路径生效 |
-| OpenAI-compatible Review | 部分实现 | 配置后调用 Chat Completions | Provider tests | 1 个来源引用断言失败 |
+| Stage Review Readiness / Stage Review | 已实现 | 按 Phase 提示、打开草稿并显式发布阶段决定 | StageReviewService/StageReviewServiceTests | 真实账户跨端发布与真机仍需门禁 |
+| Qualifying Proof | 已实现 | 通过 Evidence Contract、Proof Revision 与验收标准接受 Proof 后推进 Phase | StageReviewService/JournalRecordContract tests | 只在 Stage Review 发布路径生效 |
+| OpenAI-compatible Review | 部分实现 | 配置后调用 Chat Completions；失败回到本地规则 | Provider tests | Endpoint/model/key 与网络兼容性仍是外部依赖 |
 | Library 与完整导出 | 已实现 | Proof 分组浏览并导出 Bundle | Export tests | 只保存本地路径 |
 | SwiftData 与旧 JSON 导入 | 已实现 | 本地持久化和一次性迁移 | Store tests | 没有多设备冲突处理 |
 | CloudKit/iCloud | 已实现（需配置） | 私有同步、outbox、冲突与账号空间边界 | CloudSync/SwiftData tests | 真实账户、CloudKit schema、网络和双设备仍需设备门禁 |
-| AI 课程规划 | 已实现（可选） | 配置后生成 draft；本地校验与手动流程可独立运行 | Provider/CoursePlanning tests | Endpoint/model/key 与网络是外部依赖 |
+| Web C1 Demo/Real Journal | 部分实现 | Demo fixture 明确不可写；Real 读取私有 Journal 且不回退 Demo | journal-reader-projector/cloudkit-contract tests | token/schema/origin/同账号浏览器验证仍待完成 |
+| Web C2 guarded writes | 部分实现 | typed atomic writer 支持 Plan、Routine、Qualifying Proof、Stage Review 与 Next Step | journal-write tests | 生产 CloudKit conditional write 与双端发布仍待完成 |
+| Sync Conflicts 与 Recoverable Drafts | 部分实现 | 展示 base/local/remote，禁止隐藏 LWW；草稿可跨浏览器重启恢复 | sync-conflicts/recoverable-drafts tests | 浏览器视觉/辅助技术与跨设备 Audit/Trail 仍未运行 |
+| AI Learning Plan | 已实现（可选） | 配置后生成 draft；本地校验与手动流程可独立运行 | Provider/CoursePlanning tests | Endpoint/model/key 与网络是外部依赖 |
 | 学习日历 | 已实现（需权限） | 日/周/月排课草稿与 EventKit 二次确认 | Calendar tests | 真机权限、可写日历和外部事件仍需设备验证 |
+| D1 本地自动化验收 | 部分实现 | 12 个场景映射到 Swift/Web 本地证据，并单列 BLOCKED/NOT_RUN live gates | scripts/d1-release-check.mjs | 真实账户、物理设备、EventKit、视觉/VoiceOver 仍未完成 |
 
 ## 10. 当前限制与已知问题
 
 ### 10.1 测试
 
-2026-08-09 执行 `swift test` 共 446 个测试，0 失败，并通过 `swift build`。新增基线覆盖 Stage Review Readiness、Qualifying Proof 原子发布、Revision Guard 与 shared Web contract fixtures，同时保留 Today Agenda 的原始窗口、Carryover Reschedule 的 selected-only mutation 与 Trail audit。静态测试/build 不等同于 Dynamic Type、VoiceOver、物理设备、实时 CloudKit 或双设备收敛验收。
+2026-08-09 执行 `swift test` 共 446 个测试，0 失败，并通过 `swift build`；Web `npm test` 63/63，`npm run lint` 和 production build 通过。D1 脚本把 12 个场景映射到本地 Swift/Web 证据。静态测试/build 不等同于 Dynamic Type、VoiceOver、物理设备、实时 CloudKit 或双设备收敛验收。
 
 ### 10.2 设备与平台
 
@@ -380,20 +397,20 @@ Contract、Proof Revision 与 EvidenceAcceptance 一起原子提交。没有 Qua
 
 - 单人私有 iCloud 同步已实现；没有账号体系与多人协作。
 - 没有搜索、社交、排行榜和课程市场。
-- AI Review 与 AI 课程规划都是可选边界，不会阻断日常记录、本地规划和本地复盘。
-- Web Workspace 默认跑 demo；Real journal 已接入真实 Journal 的读取与受保护写入，token/schema/origin/同账号设备验收尚未完成。
+- AI Review 与 AI 辅助 Learning Plan 都是可选边界，不会阻断日常记录、本地规划和本地复盘。
+- Web Workspace 默认跑明确标记的 Demo；Real Journal 已接入真实 Journal 的读取与受保护写入，token/schema/origin/同账号设备验收尚未完成。
 
 ## 11. 路线图与非目标
 
 ### 已实现（v0.1 之后陆续加入）
 
 - CloudKit/iCloud 私有同步
-- AI 课程规划与本地降级
+- AI 辅助 Learning Plan 与本地降级
 - 学习日历与 EventKit 双重确认
 
-### 已决定但尚未实现
+### 已实现但仍有外部验收门槛
 
-见 [跨端迁移路线图](cross-surface-migration-roadmap.md)：Practice Block、Stage Review、Qualifying Proof、四态项目生命周期，以及 Web Workspace 接入真实 Journal。Today Agenda、Carryover 和 Plan Revision 已在当前 iPhone 包中实现。
+见 [跨端迁移路线图](cross-surface-migration-roadmap.md)：B1–B6 iPhone 能力、C1 Real/Demo Web 读取、C2 guarded writes/conflicts/drafts，以及 D1 本地自动化映射均已进入当前代码。真实 CloudKit、物理设备、EventKit、浏览器视觉/VoiceOver 与双设备收敛仍需单独 gate。
 
 ### 当前非目标
 
@@ -421,8 +438,8 @@ Contract、Proof Revision 与 EvidenceAcceptance 一起原子提交。没有 Qua
 ### 2026-08-08 · v1.1
 
 - 修正导航为四个主入口，补充 Calendar Tab。
-- 更新验证基线为 261 个测试 0 失败，移除已修复的既知失败用例。
-- 把 CloudKit 同步、AI 课程规划和学习日历从“已设计”改为“已实现”。
+- 记录早期测试基线；当前基线见文档头部的 446 个测试与 D1 本地映射。
+- 把 CloudKit 同步、AI 辅助 Learning Plan 和学习日历从“已设计”改为“已实现”。
 - 移除“桌面或 Web 版本”非目标，说明 Web Workspace 的 Demo/Real 双模式、冲突工作区和可恢复草稿边界。
 - 标注第 6 节功能说明与配套 PPTX/PDF 尚未重新核对生成。
 
@@ -432,10 +449,16 @@ Contract、Proof Revision 与 EvidenceAcceptance 一起原子提交。没有 Qua
 - 明确 Reschedule 与 Revise Plan 的边界：前者只改一个 session 并写 scheduleChanged Trail，后者进入结构性 revision wizard。
 - 更新 446 个 Swift 测试基线，并标注 Stage Review 的 Web/demo、内存中的日期排序 override、Dynamic Type/真机/CloudKit 验收边界。
 
+### 2026-08-09 · v1.3
+
+- 把 B1–B6、C1/C2 与 D1 本地验证统一进产品事实、状态矩阵和跨端说明。
+- 更新 Demo/Real Web、typed atomic writer、Revision Guard、Sync & Conflicts 与 Recoverable Draft 边界。
+- 重新生成 10 张流程图、20 页 16:9 PPTX、28 页 A4 PPTX 与 A4 PDF，并明确 live gates 未通过不等于产品已完成生产验收。
+
 ### 2026-07-13 · v1.0
 
 - 建立完整产品功能手册结构。
 - 接入 10 张现行产品流程图。
-- 明确当前能力、部分实现能力和已设计能力边界。
+- 建立当前能力、部分实现能力和历史设计边界；后续版本以 B1–B6/C1/C2/D1 状态矩阵为准。
 - 增加 5–10 分钟标准 Demo 脚本与真实截图位置。
 - 建立 PPTX、A4 PDF 和 Markdown 同步维护规则。

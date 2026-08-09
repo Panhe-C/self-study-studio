@@ -1,15 +1,23 @@
 flowchart LR
   P[选择学习项目] --> N[明确唯一 Next Step]
-  N --> C{选择记录方式}
+  N --> A[Today Agenda<br/>Up Next·Carryover]
+  A --> C{选择记录方式}
   C -->|30 秒补记| Q[Quick Log]
   C -->|专注学习| T[Timer]
+  C -->|按例程执行| R0[Practice Blocks<br/>Guided Routine]
   Q --> S[生成 Session]
   T --> S
+  R0 --> S
   S --> E{是否留下学习证据}
   E -->|是| F[添加 Proof<br/>图片·录音·文件·链接]
   E -->|暂不| L[写入 Learning Trail]
   F --> L
-  L --> R[Weekly Review<br/>Facts·Patterns·Decisions]
-  R --> A{用户明确确认}
-  A -->|应用建议| N
-  A -->|降频或暂停| P
+  L --> R[Weekly / Stage Review<br/>Facts·Patterns·Decisions]
+  R --> QF{需要 Qualifying Proof?}
+  QF -->|是| QA[验收 Evidence Contract<br/>Proof Revision]
+  QF -->|否| D[用户明确确认决定]
+  QA --> D
+  D -->|继续或更新 Next Step| N
+  D -->|结构性调整| PR[Plan Revision Draft<br/>Revision Guard]
+  PR --> N
+  D -->|暂停·完成·放弃| P

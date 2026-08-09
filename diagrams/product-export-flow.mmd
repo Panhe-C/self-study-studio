@@ -7,3 +7,4 @@ flowchart TD
   E --> F{导出是否成功}
   F -->|否| G[显示 Export Failed<br/>保留原始数据]
   F -->|是| H[显示 Export Ready<br/>告知本地保存路径和附件数量]
+  E --> I[不包含账号·CloudKit metadata<br/>不包含 drafts·outbox·conflicts·Calendar bindings]

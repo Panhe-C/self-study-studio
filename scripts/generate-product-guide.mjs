@@ -461,8 +461,8 @@ async function buildWideDeck(Presentation, content, assets) {
     addQuote(slide, "Session 负责事实，Proof 负责证据，Review 负责决定。", { left: 220, top: 520, width: 840, height: 80 }, { fontSize: 28 });
   }
 
-  await addWideDiagramSlide(presentation, "三个主入口覆盖完整 v0.1 路径", "INFORMATION ARCHITECTURE", assets.diagrams.get("information-architecture"), "当前 App 信息架构", 6, "AI Review Settings 是条件性入口；Calendar、Course Plan 和 Cloud Sync 不在当前导航。" );
-  await addWideDiagramSlide(presentation, "本地优先不等于封闭：数据和 AI 都有边界", "MODULES", assets.diagrams.get("functional-modules"), "当前功能模块关系", 7, "SwiftData 失败时降级到 JSON Store；Export 读取内存 Snapshot，不直接访问数据库。" );
+  await addWideDiagramSlide(presentation, "iPhone 与 Web 覆盖完整 v0.1 路径", "INFORMATION ARCHITECTURE", assets.diagrams.get("information-architecture"), "iPhone 与 Web 信息架构", 6, "iPhone 负责现场执行；Web Demo/Real Workspace 负责规划、审阅和受 guard 保护的写入。" );
+  await addWideDiagramSlide(presentation, "本地规则与跨端边界都保持可见", "MODULES", assets.diagrams.get("functional-modules"), "功能模块与跨端边界", 7, "SwiftData/JSON Store、CloudKit private zone、Web draft storage 与 Support/AI 边界彼此分开。" );
   await addWideDiagramSlide(presentation, "首次设置必须落下一条真实 Session", "ONBOARDING", assets.diagrams.get("onboarding"), "首次使用与首条记录流程", 8, "创建 1–3 个 Project 后，完成首条 Quick Log 才进入 Today。" );
 
   await addWideScreenshotSlide(presentation, "Today 直接给出可以执行的下一步", "DEMO · TODAY", assets.screenshots.get("today"), 9, {
@@ -544,20 +544,23 @@ async function buildWideDeck(Presentation, content, assets) {
     }, { fontSize: 20, bold: true, color: COLORS.violet });
   }
 
-  await addWideDiagramSlide(presentation, "一条 CS336 故事可以讲完完整产品闭环", "5–10 MIN DEMO", assets.diagrams.get("demo-storyboard"), "标准 Demo 故事板", 18, "Today → Timer/Quick Log → Proof → Trail → Weekly Review。" );
+  await addWideDiagramSlide(presentation, "一条 CS336 故事连接 iPhone 与 Web 判断", "5–10 MIN DEMO", assets.diagrams.get("demo-storyboard"), "iPhone + Web Demo 故事板", 18, "Today → Routine/Timer/Quick Log → Proof → Trail → Stage/Weekly Review → guarded Plan decision。" );
 
   {
     const slide = presentation.slides.add();
     slide.background.fill = COLORS.paper;
-    addWideChrome(slide, "v0.1 闭环可运行，规划能力不冒充已实现", "STATUS", 19);
+    addWideChrome(slide, "B1–B6 与 C1/C2 已有本地证据，D1 live gates 单独标注", "STATUS", 19);
     const rows = [
       content.featureStatus[1],
       content.featureStatus[3],
       content.featureStatus[4],
       content.featureStatus[5],
-      content.featureStatus[7],
+      content.featureStatus[6],
       content.featureStatus[9],
-      content.featureStatus[13],
+      content.featureStatus[10],
+      content.featureStatus[11],
+      content.featureStatus[12],
+      content.featureStatus[14],
     ];
     addStatusRows(slide, rows, { left: 74, top: 164, width: 1132, height: 470 });
   }
@@ -670,15 +673,15 @@ async function buildA4Guide(Presentation, content, assets) {
     height: 74,
   })));
 
-  await addA4DiagramPage(presentation, "三个 Tab 覆盖当前产品范围", "INFORMATION ARCHITECTURE", assets.diagrams.get("information-architecture"), "当前 App 信息架构", 7, "Review 和 AI Settings 是条件性入口；Calendar、Course Plan、Cloud Sync 尚未进入导航。" );
-  await addA4DiagramPage(presentation, "界面、业务规则与存储边界清晰分层", "MODULES", assets.diagrams.get("functional-modules"), "当前功能模块关系", 8, "SwiftData 正常持久化；JSON Store 是初始化失败时的降级。" );
+  await addA4DiagramPage(presentation, "四个 iPhone Tab 与 Web Workspace", "INFORMATION ARCHITECTURE", assets.diagrams.get("information-architecture"), "iPhone 与 Web 信息架构", 7, "Calendar 是第四个 iPhone Tab；Learning Plan、Cloud Sync 与 Web Sync & Conflicts 从上下文进入。" );
+  await addA4DiagramPage(presentation, "界面、业务规则与跨端存储边界清晰分层", "MODULES", assets.diagrams.get("functional-modules"), "功能模块与跨端边界", 8, "SwiftData/JSON Store、CloudKit private zone 与 Web recoverable draft storage 各自保持边界。" );
   await addA4DiagramPage(presentation, "首次设置以第一条真实 Session 收尾", "ONBOARDING", assets.diagrams.get("onboarding"), "首次使用流程", 9, "名称、Goal、Next Step 必填；Area 可选；创建 1–3 个 Project 后完成首条 Quick Log。" );
 
   await addA4ScreenshotPage(presentation, "Today 把可执行的 Next Step 放在首页", "DEMO · TODAY", assets.screenshots.get("today"), 10, "打开 App 后，用户先看到“下一步做什么”。", ["仅 active 且有 Next Step 的 Project 出现", "最近 Session 与 Proof 提供上下文", "Start 进入 Timer，Quick Log 用于补记"]);
 
   addA4TextPage(presentation, "Project 管理目标、节奏与状态", "PROJECTS", 11, "Project 不是文件夹，而是一个持续学习目标的当前状态。", [
     { title: "字段", body: "Project、Area、Goal、Next Step；名称、Goal、Next Step 必填。", height: 100 },
-    { title: "状态", body: "active、low-frequency、paused、archived。归档项目不进入 Today Continue。", height: 110 },
+    { title: "状态", body: "Idea、Active、Paused、Completed、Abandoned；Archive 与 Permanent Deletion 分离，旧值迁移需要显式选择。", height: 110 },
     { title: "详情页", body: "集中提供 Start、Quick Log、Add Proof、Sessions、Proofs、Reviews 与 Learning Trail。", height: 110 },
     { title: "Trail 规则", body: "状态和 Next Step 的变化会形成可回看的 Trail 事件。", height: 96 },
   ]);
@@ -697,7 +700,7 @@ async function buildA4Guide(Presentation, content, assets) {
   await addA4DiagramPage(presentation, "AI 失败不会阻断 Weekly Review", "AI FALLBACK", assets.diagrams.get("ai-fallback"), "AI Review 降级流程", 21, "未配置、请求失败或响应不可解析时使用本地证据规则；输出仍可编辑、保存和应用。" );
   await addA4ScreenshotPage(presentation, "Library 从证据角度回看所有项目", "DEMO · LIBRARY", assets.screenshots.get("library"), 22, "同一批 Proof 可以按 Time、Project 或 Type 重组。", ["每条显示 Project、Session、时间与附件", "可从 Library 选择 Project 新增 Proof", "v0.1 尚无全文搜索"]);
   await addA4DiagramPage(presentation, "一次 Export 生成完整本地 Bundle", "EXPORT", assets.diagrams.get("export"), "数据导出流程", 23, "输出版本化 journal.json 和附件目录，保存到 Documents/LearningJournal/Exports；失败不改动原始数据。" );
-  await addA4DiagramPage(presentation, "5–10 分钟讲完一条学习故事", "DEMO STORYBOARD", assets.diagrams.get("demo-storyboard"), "标准 Demo 故事板", 24, "建议用 CS336 贯穿 Today、Timer/Quick Log、Proof、Project Detail 和 Weekly Review。" );
+  await addA4DiagramPage(presentation, "5–10 分钟讲完一条 iPhone + Web 学习故事", "DEMO STORYBOARD", assets.diagrams.get("demo-storyboard"), "iPhone + Web Demo 故事板", 24, "建议用 CS336 贯穿 Today、Routine/Timer、Proof、Trail、Stage/Weekly Review 和 guarded Web plan decision。" );
 
   addA4TextPage(presentation, "标准 Demo 的讲解顺序", "DEMO SCRIPT", 25, "每一步都回答一个产品问题，不需要展示所有字段。", [
     { title: "1 · Today", body: "Next Step 为什么比任务清单更接近行动？", height: 70 },
@@ -710,12 +713,12 @@ async function buildA4Guide(Presentation, content, assets) {
   {
     const slide = presentation.slides.add();
     slide.background.fill = COLORS.paper;
-    addA4Chrome(slide, "当前能力与规划能力保持清晰边界", "STATUS", 26);
+    addA4Chrome(slide, "B1–B6 与 C1/C2 本地证据，D1 live gates 单独标注", "STATUS", 26);
     addStatusRows(slide, [
       content.featureStatus[0],
       content.featureStatus[3],
       content.featureStatus[5],
-      content.featureStatus[7],
+      content.featureStatus[6],
       content.featureStatus[9],
       content.featureStatus[11],
       content.featureStatus[13],

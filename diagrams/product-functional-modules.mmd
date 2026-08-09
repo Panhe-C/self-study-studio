@@ -1,45 +1,69 @@
 flowchart TD
-  subgraph UI[用户功能]
+  subgraph IOS[用户功能 · iPhone]
     O[Onboarding]
-    T[Today 与 Projects]
-    S[Quick Log 与 Timer]
-    P[Proof 与 Library]
-    R[Weekly Review]
+    T[Today Agenda]
+    P[Projects · Learning Plan]
+    S[Quick Log · Timer · Routine Player]
+    EVID[Proof · Library]
+    R[Weekly / Stage Review]
+    CAL[Calendar · Schedule Draft]
   end
 
-  subgraph CORE[应用协调与规则]
+  subgraph WEB[用户功能 · Web Workspace]
+    DEMO[Demo mode<br/>deterministic fixtures]
+    REAL[Real Journal mode<br/>read + guarded write]
+    SYNC[Sync & Conflicts]
+    RD[Recoverable Drafts]
+  end
+
+  subgraph CORE[共享契约与规则]
     VM[界面状态协调]
-    J[项目·Session·Proof·Trail 规则]
-    STORE[Journal Store]
-    RV[复盘生成与显式应用]
+    J[Project·Plan·Session·Proof·Trail 规则]
+    PLAN[Plan Revision · Revision Guard]
+    RV[Readiness · Review Decision · 显式应用]
+    MERGE[Sync Merge · no hidden LWW]
+    STORE[Journal Store / CloudKit mapper]
     A[附件管理]
-    E[完整 Bundle 导出]
+    EX[完整 Bundle 导出]
   end
 
-  subgraph DATA[本地数据与外部边界]
+  subgraph DATA[本地存储与外部边界]
     DB[(SwiftData 正常存储)]
     JSON[(JSON Store 降级)]
+    CK[(CloudKit private zone)]
     FILES[(本地附件)]
+    DRAFTDB[(IndexedDB / localStorage<br/>unfinished drafts only)]
     PREFS[(偏好设置与 Keychain)]
     EXPORTS[(Exports 目录)]
-    AI[可选 OpenAI-compatible 服务]
+    AI[可选 AI / Support Service]
   end
 
   O --> VM
   T --> VM
-  S --> VM
   P --> VM
+  S --> VM
+  EVID --> VM
   R --> VM
+  CAL --> VM
+  DEMO --> VM
+  REAL --> VM
   VM --> J
+  VM --> PLAN
   VM --> RV
   VM --> A
-  VM -->|传入当前 Snapshot| E
+  VM --> EX
+  REAL -->|read / atomic write| CK
+  REAL --> MERGE
+  MERGE --> SYNC
+  RD --> DRAFTDB
   J --> STORE
   STORE --> DB
   STORE -.初始化失败时.-> JSON
+  STORE -.private sync.-> CK
+  PLAN --> J
   RV --> J
   RV --> PREFS
   RV -.配置完整时.-> AI
   A --> FILES
-  E --> FILES
-  E --> EXPORTS
+  EX --> FILES
+  EX --> EXPORTS
