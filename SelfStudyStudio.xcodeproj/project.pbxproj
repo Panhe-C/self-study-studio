@@ -95,6 +95,15 @@
 		100000000000000000000159 /* JournalRecordContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025C /* JournalRecordContract.swift */; };
 		10000000000000000000015A /* contract-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025D /* contract-v1.json */; };
 		10000000000000000000015B /* fixtures-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000025E /* fixtures-v1.json */; };
+		100000000000000000000160 /* CapacityCheckService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000262 /* CapacityCheckService.swift */; };
+		100000000000000000000161 /* PlanningWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000263 /* PlanningWindow.swift */; };
+		100000000000000000000162 /* PracticeBlocksMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000264 /* PracticeBlocksMigration.swift */; };
+		100000000000000000000163 /* TodayAgendaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000265 /* TodayAgendaService.swift */; };
+		100000000000000000000164 /* StageReviewDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000266 /* StageReviewDomain.swift */; };
+		100000000000000000000165 /* StageReviewService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000267 /* StageReviewService.swift */; };
+		100000000000000000000166 /* SyncConflictRecoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000268 /* SyncConflictRecoveryService.swift */; };
+		100000000000000000000167 /* PracticeBlocksMigrationReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000269 /* PracticeBlocksMigrationReviewView.swift */; };
+		100000000000000000000168 /* StageReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000026A /* StageReviewView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -186,6 +195,15 @@
 		10000000000000000000025C /* JournalRecordContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Contracts/JournalRecordContract.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000025D /* contract-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Sources/PersonalLearningJournal/Resources/JournalContract/contract-v1.json; sourceTree = SOURCE_ROOT; };
 		10000000000000000000025E /* fixtures-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Sources/PersonalLearningJournal/Resources/JournalContract/fixtures-v1.json; sourceTree = SOURCE_ROOT; };
+		100000000000000000000262 /* CapacityCheckService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CapacityCheckService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000263 /* PlanningWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/PlanningWindow.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000264 /* PracticeBlocksMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Migration/PracticeBlocksMigration.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000265 /* TodayAgendaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Recommendations/TodayAgendaService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000266 /* StageReviewDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Reviews/StageReviewDomain.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000267 /* StageReviewService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Reviews/StageReviewService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000268 /* SyncConflictRecoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/SyncConflictRecoveryService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000269 /* PracticeBlocksMigrationReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/PracticeBlocksMigrationReviewView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000026A /* StageReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/StageReviewView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000258 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		100000000000000000000259 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -292,6 +310,15 @@
 				10000000000000000000025C /* JournalRecordContract.swift */,
 				10000000000000000000025D /* contract-v1.json */,
 				10000000000000000000025E /* fixtures-v1.json */,
+				100000000000000000000262 /* CapacityCheckService.swift */,
+				100000000000000000000263 /* PlanningWindow.swift */,
+				100000000000000000000264 /* PracticeBlocksMigration.swift */,
+				100000000000000000000265 /* TodayAgendaService.swift */,
+				100000000000000000000266 /* StageReviewDomain.swift */,
+				100000000000000000000267 /* StageReviewService.swift */,
+				100000000000000000000268 /* SyncConflictRecoveryService.swift */,
+				100000000000000000000269 /* PracticeBlocksMigrationReviewView.swift */,
+				10000000000000000000026A /* StageReviewView.swift */,
 				10000000000000000000025B /* Assets.xcassets */,
 				10000000000000000000025A /* Localizable.strings */,
 				10000000000000000000020B /* ProjectsView.swift */,
@@ -471,6 +498,15 @@
 				100000000000000000000156 /* AppLockController.swift in Sources */,
 				10000000000000000000015C /* TrashExportService.swift in Sources */,
 				100000000000000000000159 /* JournalRecordContract.swift in Sources */,
+				100000000000000000000160 /* CapacityCheckService.swift in Sources */,
+				100000000000000000000161 /* PlanningWindow.swift in Sources */,
+				100000000000000000000162 /* PracticeBlocksMigration.swift in Sources */,
+				100000000000000000000163 /* TodayAgendaService.swift in Sources */,
+				100000000000000000000164 /* StageReviewDomain.swift in Sources */,
+				100000000000000000000165 /* StageReviewService.swift in Sources */,
+				100000000000000000000166 /* SyncConflictRecoveryService.swift in Sources */,
+				100000000000000000000167 /* PracticeBlocksMigrationReviewView.swift in Sources */,
+				100000000000000000000168 /* StageReviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

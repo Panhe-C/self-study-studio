@@ -26,8 +26,9 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 
 The list below describes the shipped iPhone model. Today Agenda, Carryover, and immutable plan
 revisions are implemented in the package and surfaced from Today/Project flows. Stage Review,
-readiness, and Qualifying Proof are implemented in the iPhone package; the Web Workspace still
-uses demo data until the C1 real-Journal connection.
+readiness, and Qualifying Proof are implemented in the iPhone package; the Web Workspace now has
+explicit Demo and read-only Real Journal modes plus guarded C2 write seams. Live CloudKit and
+device convergence remain a separate D1 release gate.
 
 - Two-step onboarding for 1-3 current projects with `name`, `area`, `goal`, one `Next Step`, and a required first Session before Today opens
 - Project creation after onboarding, plus edit and status changes
@@ -105,6 +106,17 @@ Build the package:
 swift build
 ```
 
+Run the cross-surface D1 release gate and write a machine-readable report:
+
+```bash
+node scripts/d1-release-check.mjs --report /tmp/self-study-studio-d1-report.json
+```
+
+The report maps all twelve Web Workspace MVP acceptance scenarios to deterministic Swift/Web
+evidence and keeps physical-device, live CloudKit schema/token/origin, EventKit, browser visual,
+and VoiceOver gates explicitly `BLOCKED` or `NOT_RUN`. See
+[`docs/d1-acceptance-runbook.md`](docs/d1-acceptance-runbook.md).
+
 Build the iOS Simulator app target:
 
 ```bash
@@ -149,7 +161,8 @@ Per the PRD, these are intentionally not implemented yet:
 - Desktop app
 
 The Web Workspace is no longer excluded. `WebWorkspace/` contains a Next.js implementation of
-the Dashboard, Project Workspace, Plan, Practice, Proof, Learning Trail, and Review Inbox, but
-it renders demo data and reads CloudKit only for diagnostics. See
+the Dashboard, Project Workspace, Plan, Practice, Proof, Learning Trail, Review Inbox, and
+read-only CloudKit Real Journal projection; Demo mode remains explicit and no Real-mode read
+silently falls back to fixtures. See
 [跨端迁移路线图](docs/cross-surface-migration-roadmap.md) for the accepted sequence that connects
 it to the real Journal.

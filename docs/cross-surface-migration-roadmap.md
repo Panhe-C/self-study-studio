@@ -409,16 +409,21 @@ is enforced and B2/B6 guards exist.
 
 ### D1. Cross-surface acceptance suite and device gate
 
-**Work.** Turn all twelve scenarios in spec §12 into automated cross-surface tests where
-possible, and into a documented manual device matrix where Apple infrastructure is required.
-Extend the existing iCloud and Calendar device acceptance in `README.md` with the Web
-Workspace, and verify production CloudKit schema promotion and same-account iPhone/Web
-convergence.
+**Current.** `scripts/d1-release-check.mjs` maps all twelve §12 scenarios to the existing Swift
+canonical-store/migration/B1–B6 tests and Web contract/reader/projector/writer/conflict/draft
+tests. It runs the package and Web checks, emits a machine-readable report, and keeps local
+deterministic evidence separate from explicit `BLOCKED`/`NOT_RUN` Apple and human gates. See
+[`docs/d1-acceptance-runbook.md`](d1-acceptance-runbook.md).
 
-**Independent verification.** All twelve scenarios pass against one Journal Owner in one
-CloudKit environment, including scenario 12: the manual loop remains fully usable with the
-Support Service and every AI capability disabled. Update `docs/product-health-validation.md`
-with the result.
+**Work.** Run the release check on a machine with a provisioned Developer Team, signed device,
+CloudKit schema/token/origin, and writable Calendar. Extend the existing iCloud and Calendar
+device acceptance in `README.md` with the Web Workspace, then verify production schema promotion
+and same-account iPhone/Web convergence.
+
+**Independent verification.** The local report must show all twelve deterministic mappings
+passing, followed by a manual matrix showing the same Journal Owner in one CloudKit environment.
+Scenario 12 must be exercised with the Support Service and every AI capability disabled. Update
+`docs/product-health-validation.md` with the report path, commit, and separate live-gate results.
 
 **Risk.** Depends on a provisioned Developer Team, iCloud container, CloudKit schema, Push
 Notifications entitlement, and signed installation. Simulator success does not prove these.

@@ -1,20 +1,44 @@
 # Evidence-First Product Health Validation
 
-Last updated: 2026-07-15
+Last updated: 2026-08-09
 
-This record audits the convergence design against implementation evidence. Automated and Simulator evidence is complete. Signed physical-device and second-device evidence remains a separate release gate and is not inferred from Simulator success.
+This record audits the convergence design against implementation evidence. The D1 release runner
+(`scripts/d1-release-check.mjs`) now maps all twelve Web Workspace MVP scenarios to deterministic
+Swift/Web evidence and emits a machine-readable report. Signed physical-device, live CloudKit,
+EventKit, browser visual, VoiceOver, and second-device evidence remains a separate release gate
+and is not inferred from Simulator, fake CloudKit, static, or browser-independent tests.
 
 ## Current gate status
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Complete automated suite | Pass | `swift test`: 260 tests, 0 failures |
-| Package build | Pass | `swift build` |
-| Unsigned iOS Simulator build | Pass | `xcodebuild ... -sdk iphonesimulator ... CODE_SIGNING_ALLOWED=NO build`; `BUILD SUCCEEDED` |
-| Clean install and launch | Pass | App data uninstalled, current app installed and launched on iPhone 16 Pro Simulator; onboarding rendered after initial store startup |
-| End-to-end evidence loop | Pass | `ProductConvergenceAcceptanceTests`: Idea → Contract → Session → accepted Text Proof → Review Decision → Trash restore → encrypted archive restore → Product Health with no silent miss |
+| Complete automated suite | Pass (D1) | `swift test`: 446 tests, 0 failures |
+| Package build | Pass (D1) | `swift build` |
+| Unsigned iOS Simulator build | Pass (D1) | `xcodebuild ... -sdk iphonesimulator ... CODE_SIGNING_ALLOWED=NO build`; `BUILD SUCCEEDED` after app-target source parity repair |
+| Clean install and launch | Historical Pass; D1 not run | The 2026-07-15 Simulator snapshot remains historical evidence; D1 does not infer install/launch from a build |
+| End-to-end evidence loop | Pass (D1 package) | `ProductConvergenceAcceptanceTests` and the 446-test Swift suite cover Idea → Contract → Session → accepted Text Proof → Review Decision → Trash restore → encrypted archive restore → Product Health with no silent miss |
 | Signed physical device | Pending | Requires the Task 14 capability matrix below |
 | Second-space iCloud recovery | Pending | Requires a second Apple device or clean signed reinstall |
+| D1 deterministic scenario map | Pass with known baseline | `/tmp/self-study-studio-d1-report.json` at commit `52f141dc9eaef4c2353f4cd11f3af96130197557`; 12/12 local scenario mappings pass, TypeScript ambient errors remain known baseline |
+| D1 live cross-surface/device gate | Blocked | Requires the inputs in `docs/d1-acceptance-runbook.md` |
+
+## D1 local dry run — 2026-08-09
+
+Command:
+
+```bash
+node scripts/d1-release-check.mjs --allow-blocked --report /tmp/self-study-studio-d1-report.json
+```
+
+The report is intentionally kept in `/tmp` and is not a repository artifact. It records commit
+`52f141dc9eaef4c2353f4cd11f3af96130197557`, exact durations, sanitized command tails, the twelve
+scenario mappings, and the live-gate matrix. Automated summary: 10 checks, 9 `PASS`, 1
+`PASS_KNOWN_BASELINE` (Web `worker/index.ts` lacks `Fetcher` and `D1Database`), 0 environment
+blocks, and 0 failures. Swift completed 446 tests with 0 failures; Web completed 63 tests with
+63 passes and 0 failures; app-target source parity is 92/92 production Swift files with no Tests
+sources in the app target; the unsigned Simulator build succeeded. The release gate remains
+`BLOCKED` because physical-device, live CloudKit schema/token/origin, EventKit, cross-device
+attachments, browser visual/VoiceOver, and no-AI human gates are explicitly not run.
 
 ## Physical-device readiness inspection — 2026-07-15
 
