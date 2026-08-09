@@ -17,7 +17,7 @@ Statuses were checked against the repository on 2026-08-09. The sequence that cl
 **Web Workspace** `[partial]`:
 The browser-based surface for deliberate planning, analysis, learning-trail exploration, and stage review over the same personal learning journal used on iPhone.
 _Avoid_: Website backend, admin panel, separate web platform
-_Gap_: `WebWorkspace/` renders every surface from two hardcoded demos in `lib/journal.ts`; CloudKit access is read-only diagnostics.
+_Gap_: Demo mode still uses two hardcoded fixtures, while the explicit Real journal mode now has a read-only CloudKit adapter/projector. Same-owner production CloudKit, schema, origin, and cross-device acceptance remain unverified.
 
 **iPhone App** `[shipped]`:
 The mobile surface for carrying out learning, timing practice, making quick records, and capturing proof in the moment.
@@ -30,7 +30,7 @@ _Avoid_: Team workspace, organization, shared project
 **Project Workspace** `[partial]`:
 The primary Web context that brings one Project's Overview, Plan, Practice, Proof, Learning Trail, and Reviews together; global navigation is limited to cross-project orientation and Review entry points.
 _Avoid_: Feature dashboard, global practice manager, folder
-_Gap_: the Web tab structure exists on demo data; the iPhone equivalent is a Project detail screen with a different shape.
+_Gap_: the Web tab structure is fully projected from Demo fixtures or a Real CloudKit snapshot; real production parity and device acceptance remain a later gate.
 
 **Project Status** `[shipped]`:
 The learner's explicit lifecycle decision for a Project: Active, Paused, Completed, or Abandoned; status changes preserve the Project's Journal history.
@@ -121,12 +121,12 @@ _Avoid_: Background merge, last-write-wins, warning-only check
 **Online-First Workspace** `[partial]`:
 The Web Workspace operating mode in which canonical records are read and changed through a live connection; only unfinished drafts are locally recoverable, while complete offline execution remains an iPhone responsibility.
 _Avoid_: Offline-first web app, local replica, background sync queue
-_Gap_: Web has no local replica, but it also has no live canonical reads or recoverable drafts yet.
+_Gap_: Web has no local replica and no writes; Real mode has live read-only canonical access, while recoverable drafts and production CloudKit acceptance remain future work.
 
 **Direct Journal Access** `[partial]`:
 The Web Workspace reads and writes the Journal Owner's private CloudKit database through CloudKit JS rather than routing canonical records through an application-owned data service.
 _Avoid_: Web database, synchronization backend, server-owned journal
-_Gap_: `lib/cloudkit.ts` verifies authentication, private zone access, record types, and change tags; no read or write path feeds the product yet.
+_Gap_: `lib/journal-reader.ts` and `lib/journal-projector.ts` now feed the product with read-only canonical records and visible provenance; token/schema/origin provisioning and same-owner production verification remain outstanding.
 
 **Support Service** `[planned]`:
 A stateless or derived Web service used only for capabilities that should not run in the browser, such as protected AI calls or export rendering; it does not become a source of truth for Journal records.
@@ -158,7 +158,7 @@ _Avoid_: Offline workspace, synchronized record, published change
 **Active Plan** `[shipped]`:
 A published learning plan that guides upcoming learning sessions across the Web Workspace and iPhone App.
 _Avoid_: Approved mobile plan, final plan
-_Gap_: guides iPhone only; Web does not read it yet.
+_Gap_: Real Web mode can project active Learning Plans read-only; Web authoring/publication remains a later C2 responsibility and production data acceptance is unverified.
 
 **Plan Revision Draft** `[shipped]`:
 An editable proposal for structurally changing an Active Plan, including its Phase objectives, ordering, expected Proof, or Practice Routine structure; activation supersedes the prior published revision without erasing it.
@@ -182,7 +182,7 @@ _Avoid_: Chapter, sprint, section
 **Planning Window** `[partial]`:
 A flexible target day, week, or date range for a Phase or Planned Session that guides the Today Agenda without reserving an exact clock time.
 _Avoid_: Calendar event, deadline, exact appointment
-_Gap_: iOS now persists `PlanningWindow` on draft and Planned Session records and keeps exact calendar time separate; Web still reads demo data until C1.
+_Gap_: iOS persists `PlanningWindow` on draft and Planned Session records and keeps exact calendar time separate; Real Web mode projects it read-only, with production parity still unverified.
 
 **Practice Cadence** `[partial]`:
 The intended weekly frequency and optional preferred days for a Practice Routine, without requiring exact start times.
@@ -196,7 +196,7 @@ _Avoid_: Planning Window, automatic calendar sync, due date
 **Capacity Check** `[partial]`:
 A deterministic comparison of estimated Planned Session and Practice Cadence load against the learner's stated weekly availability, broken down by week and source Project.
 _Avoid_: Productivity score, hard schedule, AI estimate
-_Gap_: iOS `CapacityCheckService` now provides the week/Project breakdown, Practice load, DST-safe availability, and deterministic warnings; Web has no real-Journal projection yet.
+_Gap_: iOS `CapacityCheckService` provides the week/Project breakdown, Practice load, DST-safe availability, and deterministic warnings; Real Web mode has a read-only projection, while full DST/device parity remains a release gate.
 
 **Capacity Warning** `[partial]`:
 A visible, acknowledged warning that a proposed Plan exceeds stated availability; it offers adjustments but never edits the Plan automatically or prevents deliberate activation.

@@ -22,6 +22,7 @@ type PortfolioDashboardProps = {
   initialAsOf: string;
   initialTimeZone: string;
   snapshot?: DashboardSnapshot;
+  provenance?: string;
 };
 
 const periods: Array<{ id: DashboardPeriod; label: string }> = [
@@ -439,6 +440,7 @@ export function PortfolioDashboard({
   initialAsOf,
   initialTimeZone,
   snapshot,
+  provenance = "Demo data · deterministic fixture",
 }: PortfolioDashboardProps) {
   const [period, setPeriod] = useState<DashboardPeriod>("now");
   const currentSnapshot = useMemo(
@@ -457,13 +459,17 @@ export function PortfolioDashboard({
 
   if (model.loadState === "loading") {
     return (
-      <DashboardLoading asOf={model.asOf} timeZone={initialTimeZone} />
+      <div>
+        <div className="portfolio-provenance" role="status">{provenance}</div>
+        <DashboardLoading asOf={model.asOf} timeZone={initialTimeZone} />
+      </div>
     );
   }
 
   if (model.loadState === "error") {
     return (
       <div className="portfolio-dashboard page-stack">
+        <div className="portfolio-provenance" role="status">{provenance}</div>
         <DashboardHeader
           asOf={model.asOf}
           timeZone={initialTimeZone}
@@ -491,6 +497,7 @@ export function PortfolioDashboard({
 
   return (
     <div className="portfolio-dashboard page-stack">
+      <div className="portfolio-provenance" role="status">{provenance}</div>
       <DashboardHeader
         asOf={model.asOf}
         timeZone={initialTimeZone}

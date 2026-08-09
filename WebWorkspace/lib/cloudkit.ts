@@ -3,6 +3,7 @@ export const CLOUDKIT_SCRIPT_URL =
 
 export type CloudKitMode =
   | "demo"
+  | "blocked"
   | "ready"
   | "checking"
   | "signed-out"
@@ -19,7 +20,7 @@ export type CloudKitDiagnostic = {
   latestChangeTag?: string;
 };
 
-type CloudKitRecordField = { value?: unknown };
+export type CloudKitRecordField = { value?: unknown } | unknown;
 
 export type CloudKitRecord = {
   recordName: string;
@@ -29,25 +30,25 @@ export type CloudKitRecord = {
   fields?: Record<string, CloudKitRecordField>;
 };
 
-type CloudKitZoneChange = {
+export type CloudKitZoneChange = {
   records?: CloudKitRecord[];
   moreComing?: boolean;
   syncToken?: string;
   errors?: Array<{ reason?: string }>;
 };
 
-type CloudKitDatabase = {
+export type CloudKitDatabase = {
   fetchRecordZoneChanges(
     options: Record<string, unknown>,
   ): Promise<{ zones?: CloudKitZoneChange[] }>;
 };
 
-type CloudKitContainer = {
+export type CloudKitContainer = {
   privateCloudDatabase: CloudKitDatabase;
   setUpAuth(): Promise<{ userRecordName?: string } | null>;
 };
 
-type CloudKitNamespace = {
+export type CloudKitNamespace = {
   DEVELOPMENT_ENVIRONMENT: string;
   PRODUCTION_ENVIRONMENT: string;
   configure(config: Record<string, unknown>): void;
@@ -60,7 +61,14 @@ declare global {
   }
 }
 
-export const cloudKitConfig = {
+export type CloudKitConfig = {
+  containerIdentifier: string;
+  apiToken: string;
+  environment: "development" | "production";
+  zoneName: string;
+};
+
+export const cloudKitConfig: CloudKitConfig = {
   containerIdentifier:
     process.env.NEXT_PUBLIC_CLOUDKIT_CONTAINER_IDENTIFIER ??
     "iCloud.com.local.selfstudystudio",
@@ -81,10 +89,14 @@ export function cloudKitFieldValue<T>(
   record: CloudKitRecord,
   key: string,
 ): T | undefined {
-  return record.fields?.[key]?.value as T | undefined;
+  const field = record.fields?.[key];
+  if (field && typeof field === "object" && Object.hasOwn(field, "value")) {
+    return (field as { value?: unknown }).value as T | undefined;
+  }
+  return field as T | undefined;
 }
 
-async function waitForCloudKit(): Promise<CloudKitNamespace> {
+export async function waitForCloudKit(): Promise<CloudKitNamespace> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     if (window.CloudKit) return window.CloudKit;
     await new Promise((resolve) => window.setTimeout(resolve, 100));
@@ -92,18 +104,21 @@ async function waitForCloudKit(): Promise<CloudKitNamespace> {
   throw new Error("Apple CloudKit JS did not load.");
 }
 
-function configureCloudKit(cloudKit: CloudKitNamespace) {
+export function configureCloudKit(
+  cloudKit: CloudKitNamespace,
+  config: CloudKitConfig = cloudKitConfig,
+) {
   const environment =
-    cloudKitConfig.environment === "production"
+    config.environment === "production"
       ? cloudKit.PRODUCTION_ENVIRONMENT
       : cloudKit.DEVELOPMENT_ENVIRONMENT;
 
   cloudKit.configure({
     containers: [
       {
-        containerIdentifier: cloudKitConfig.containerIdentifier,
+        containerIdentifier: config.containerIdentifier,
         apiTokenAuth: {
-          apiToken: cloudKitConfig.apiToken,
+          apiToken: config.apiToken,
           persist: true,
         },
         environment,

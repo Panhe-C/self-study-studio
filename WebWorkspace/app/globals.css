@@ -75,6 +75,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .topbar h1 { margin: 3px 0 0; font-size: 21px; letter-spacing: -0.035em; }
 .eyebrow, .mini-label { color: #91959c; font-size: 11.5px; font-weight: 760; letter-spacing: 0.09em; text-transform: uppercase; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
+.mode-switch { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line-strong); border-radius: 10px; background: rgba(255,255,255,0.78); }
+.mode-switch button { min-height: 30px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 750; cursor: pointer; }
+.mode-switch button.active { background: var(--ink); color: white; }
+.workspace-provenance { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 32px; padding: 7px 32px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,0.72); color: #666d76; font-size: 11px; }
+.workspace-provenance.real { color: #285dc1; }
+.workspace-provenance small { color: var(--muted); }
+.sidebar-empty { margin: 8px 10px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.portfolio-provenance { color: #666d76; font-size: 11px; letter-spacing: 0.01em; }
 .search-button { min-width: 205px; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 9px; background: rgba(255, 255, 255, 0.75); color: #858991; font-size: 13px; cursor: pointer; }
 .search-button span:first-child { font-size: 18px; }
 .search-button kbd { margin-left: auto; padding: 2px 5px; border: 1px solid #dddfe4; border-radius: 5px; background: #f5f6f8; font-size: 11.5px; }

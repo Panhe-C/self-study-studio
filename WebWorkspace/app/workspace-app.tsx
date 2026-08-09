@@ -8,7 +8,15 @@ import {
   type CloudKitDiagnostic,
 } from "../lib/cloudkit";
 import {
-  getProjectDemo,
+  readCloudKitJournal,
+  type JournalReadResult,
+} from "../lib/journal-reader";
+import {
+  projectJournalRecords,
+  type JournalProjection,
+} from "../lib/journal-projector";
+import { createDashboardSnapshot, type DashboardSnapshot } from "../lib/dashboard";
+import {
   projectDemos,
   projects,
   type ProjectDemo,
@@ -60,14 +68,14 @@ const projectTabIds: ProjectTab[] = [
   "reviews",
 ];
 
-function parseUrlState(search: string): {
+function parseUrlState(search: string, availableProjectIds = projects.map((project) => project.id)): {
   section: WorkspaceSection;
   projectId: string;
   tab: ProjectTab;
 } {
   const fallback = {
     section: "dashboard" as WorkspaceSection,
-    projectId: projects[0].id,
+    projectId: availableProjectIds[0] ?? projects[0]?.id ?? "",
     tab: "overview" as ProjectTab,
   };
   const params = new URLSearchParams(search);
@@ -78,11 +86,40 @@ function parseUrlState(search: string): {
     section:
       section && workspaceSections.includes(section) ? section : fallback.section,
     projectId:
-      projectId && projects.some((project) => project.id === projectId)
+      projectId && availableProjectIds.includes(projectId)
         ? projectId
         : fallback.projectId,
     tab: tab && projectTabIds.includes(tab) ? tab : fallback.tab,
   };
+}
+
+function diagnosticFromJournalRead(result: JournalReadResult): CloudKitDiagnostic {
+  switch (result.status) {
+    case "blocked":
+      return { mode: "blocked", message: result.message };
+    case "signed-out":
+      return { mode: "signed-out", message: result.message };
+    case "ready":
+    case "empty":
+      return {
+        mode: "connected",
+        message: result.message,
+        userRecordName: result.userRecordName,
+        recordCount: result.recordCount,
+        latestChangeTag: result.latestChangeTag,
+      };
+    case "partial":
+      return {
+        mode: "partial",
+        message: result.message,
+        userRecordName: result.userRecordName,
+        recordCount: result.recordCount,
+        latestChangeTag: result.latestChangeTag,
+      };
+    case "error":
+    default:
+      return { mode: "error", message: result.message };
+  }
 }
 
 function subscribeToUrl(callback: () => void) {
@@ -111,12 +148,28 @@ export function WorkspaceApp({
     () => window.location.search,
     () => "",
   );
-  const urlState = parseUrlState(search);
+  const [dataMode, setDataMode] = useState<"demo" | "real">("demo");
+  const [realProjection, setRealProjection] = useState<JournalProjection | null>(null);
+  const [realRead, setRealRead] = useState<JournalReadResult | null>(null);
+  const [realDashboardSnapshot, setRealDashboardSnapshot] =
+    useState<DashboardSnapshot>(() =>
+      createDashboardSnapshot({ asOf: initialAsOf, state: "loading" }),
+    );
+  const availableDemos = useMemo(
+    () => (dataMode === "real" ? realProjection?.demos ?? [] : projectDemos),
+    [dataMode, realProjection],
+  );
+  const urlState = parseUrlState(search, availableDemos.map((demo) => demo.project.id));
   const [localState, setLocalState] =
     useState<WorkspaceNavigationState | null>(null);
 
   const section = localState?.section ?? urlState.section;
-  const selectedProjectId = localState?.projectId ?? urlState.projectId;
+  const requestedProjectId = localState?.projectId ?? urlState.projectId;
+  const selectedDemo = useMemo(
+    () => availableDemos.find((demo) => demo.project.id === requestedProjectId) ?? availableDemos[0],
+    [availableDemos, requestedProjectId],
+  );
+  const selectedProjectId = selectedDemo?.project.id ?? requestedProjectId;
   const projectTab = localState?.tab ?? urlState.tab;
   const setSection = (next: WorkspaceSection) =>
     setLocalState({ section: next, projectId: selectedProjectId, tab: projectTab });
@@ -144,27 +197,79 @@ export function WorkspaceApp({
     );
   }, [localState]);
 
-  const selectedDemo = useMemo(
-    () => getProjectDemo(selectedProjectId),
-    [selectedProjectId],
-  );
-
   function openProject(projectId: string, tab: ProjectTab = "overview") {
     setLocalState(projectNavigationState(projectId, tab));
   }
 
-  async function runCloudKitCheck() {
+  async function loadRealJournal() {
     setIsCheckingCloud(true);
     setDiagnostic({ mode: "checking", message: "Checking the private journal…" });
-    const result = await inspectCloudKitJournal();
-    setDiagnostic(result);
-    setIsCheckingCloud(false);
+    setRealDashboardSnapshot(
+      createDashboardSnapshot({ asOf: initialAsOf, state: "loading" }),
+    );
+    try {
+      const result = await readCloudKitJournal();
+      setRealRead(result);
+      setDiagnostic(diagnosticFromJournalRead(result));
+      if (["ready", "empty", "partial"].includes(result.status)) {
+        const projection = projectJournalRecords(result.records, { asOf: initialAsOf });
+        setRealProjection(projection);
+        setRealDashboardSnapshot(
+          createDashboardSnapshot({
+            asOf: initialAsOf,
+            demos: projection.demos,
+            unavailableSections: projection.unavailableSections,
+          }),
+        );
+      } else {
+        setRealProjection(null);
+        setRealDashboardSnapshot(
+          createDashboardSnapshot({ asOf: initialAsOf, state: "error", message: result.message }),
+        );
+      }
+    } finally {
+      setIsCheckingCloud(false);
+    }
+  }
+
+  function switchDataMode(nextMode: "demo" | "real") {
+    setDataMode(nextMode);
+    setShowDraft(false);
+    if (nextMode === "demo") {
+      setRealRead(null);
+      setRealProjection(null);
+      setDiagnostic(initialDiagnostic);
+      return;
+    }
+    void loadRealJournal();
+  }
+
+  async function runCloudKitCheck() {
+    if (dataMode === "real") {
+      await loadRealJournal();
+      return;
+    }
+    setIsCheckingCloud(true);
+    setDiagnostic({ mode: "checking", message: "Checking the private journal…" });
+    try {
+      setDiagnostic(await inspectCloudKitJournal());
+    } finally {
+      setIsCheckingCloud(false);
+    }
   }
 
   const sectionTitle =
     section === "project"
-      ? selectedDemo.project.name
+      ? selectedDemo?.project.name ?? (dataMode === "real" ? "Real journal" : "Project")
       : navigation.find((item) => item.id === section)?.label ?? "Dashboard";
+
+  const provenanceLabel = dataMode === "real"
+    ? realRead?.status === "blocked"
+      ? "Real journal · configuration blocked"
+      : realRead?.status === "signed-out"
+        ? "Real journal · sign-in required"
+        : "Real journal · CloudKit private database · read-only"
+    : "Demo data · deterministic fixture";
 
   return (
     <div className="workspace-shell">
@@ -201,10 +306,12 @@ export function WorkspaceApp({
 
         <div className="sidebar-projects">
           <div className="sidebar-label">
-            <span>Active projects</span>
+            <span>{dataMode === "real" ? "Journal projects" : "Active projects"}</span>
             <button aria-label="Add project">+</button>
           </div>
-          {projects.map((project) => (
+          {availableDemos.map((demo) => {
+            const project = demo.project;
+            return (
             <button
               key={project.id}
               className={
@@ -224,7 +331,11 @@ export function WorkspaceApp({
                 <small>{project.phase}</small>
               </span>
             </button>
-          ))}
+            );
+          })}
+          {dataMode === "real" && availableDemos.length === 0 && (
+            <p className="sidebar-empty">No canonical Projects loaded.</p>
+          )}
         </div>
 
         <div className="sidebar-footer">
@@ -244,6 +355,22 @@ export function WorkspaceApp({
             <h1>{sectionTitle}</h1>
           </div>
           <div className="topbar-actions">
+            <div className="mode-switch" role="group" aria-label="Workspace data mode">
+              <button
+                className={dataMode === "demo" ? "active" : ""}
+                aria-pressed={dataMode === "demo"}
+                onClick={() => switchDataMode("demo")}
+              >
+                Demo
+              </button>
+              <button
+                className={dataMode === "real" ? "active" : ""}
+                aria-pressed={dataMode === "real"}
+                onClick={() => switchDataMode("real")}
+              >
+                Real journal
+              </button>
+            </div>
             <button className="search-button" aria-label="Search">
               <span aria-hidden="true">⌕</span>
               <span>Search</span>
@@ -254,10 +381,21 @@ export function WorkspaceApp({
               onClick={() => setSection("sync")}
             >
               <span className="sync-dot" aria-hidden="true" />
-              {diagnostic.mode === "connected" ? "iCloud connected" : "Demo workspace"}
+              {dataMode === "demo"
+                ? "Demo workspace"
+                : diagnostic.mode === "connected"
+                  ? "Real journal connected"
+                  : "Real journal status"}
             </button>
           </div>
         </header>
+
+        <div className={`workspace-provenance ${dataMode}`} role="status">
+          <span>{provenanceLabel}</span>
+          {dataMode === "real" && realRead?.recordCount !== undefined && (
+            <small>{realRead.recordCount} canonical records · no Web writes</small>
+          )}
+        </div>
 
         <div className="content-scroll">
           {section === "dashboard" && (
@@ -268,46 +406,62 @@ export function WorkspaceApp({
               openProjects={() => setSection("projects")}
               openReviews={() => setSection("reviews")}
               openSync={() => setSection("sync")}
+              snapshot={dataMode === "real" ? realDashboardSnapshot : undefined}
+              provenance={provenanceLabel}
             />
           )}
-          {section === "projects" && <Projects openProject={openProject} />}
+          {section === "projects" && <Projects demos={availableDemos} openProject={openProject} dataMode={dataMode} />}
           {section === "project" && (
-            <ProjectWorkspace
-              demo={selectedDemo}
-              tab={projectTab}
-              setTab={setProjectTab}
-              showDraft={() => setShowDraft(true)}
-            />
+            selectedDemo ? (
+              <ProjectWorkspace
+                demo={selectedDemo}
+                tab={projectTab}
+                setTab={setProjectTab}
+                showDraft={() => setShowDraft(true)}
+              />
+            ) : (
+              <RealJournalEmptyState mode={dataMode} />
+            )
           )}
-          {section === "reviews" && <Reviews openProject={openProject} />}
+          {section === "reviews" && <Reviews demos={availableDemos} openProject={openProject} dataMode={dataMode} />}
           {section === "sync" && (
             <SyncDiagnostics
               diagnostic={diagnostic}
               isChecking={isCheckingCloud}
               runCheck={runCloudKitCheck}
+              dataMode={dataMode}
             />
           )}
         </div>
       </main>
 
-      {showDraft && <PlanDraftSheet demo={selectedDemo} close={() => setShowDraft(false)} />}
+      {showDraft && selectedDemo && <PlanDraftSheet demo={selectedDemo} close={() => setShowDraft(false)} />}
     </div>
   );
 }
 
-function Projects({ openProject }: { openProject: (id: string) => void }) {
+function Projects({
+  demos,
+  openProject,
+  dataMode,
+}: {
+  demos: ProjectDemo[];
+  openProject: (id: string) => void;
+  dataMode: "demo" | "real";
+}) {
+  const projectItems = demos.map((demo) => demo.project);
   return (
     <div className="page-stack narrow-page">
       <div className="section-heading page-heading">
         <div>
-          <span className="mini-label">2 active · 0 paused</span>
+          <span className="mini-label">{projectItems.filter((project) => project.status === "Active").length} active · {projectItems.filter((project) => project.status === "Paused").length} paused</span>
           <h2>Projects</h2>
-          <p>Each project keeps its plan, practice, proof, trail, and reviews together.</p>
+          <p>{dataMode === "real" ? "Read-only projection from the canonical CloudKit journal." : "Each project keeps its plan, practice, proof, trail, and reviews together."}</p>
         </div>
-        <button className="primary-button">New project</button>
+        <button className="primary-button" disabled={dataMode === "real"}>New project</button>
       </div>
       <div className="project-list">
-        {projects.map((project) => (
+        {projectItems.map((project) => (
           <button className="project-list-card" key={project.id} onClick={() => openProject(project.id)}>
             <span className="project-list-accent" style={{ background: project.accent }} />
             <div className="project-list-main">
@@ -327,6 +481,9 @@ function Projects({ openProject }: { openProject: (id: string) => void }) {
             <span className="chevron" aria-hidden="true">›</span>
           </button>
         ))}
+        {projectItems.length === 0 && (
+          <section className="empty-history"><span>□</span><h3>No canonical Projects loaded</h3><p>Switch to Demo or configure Real journal access.</p></section>
+        )}
       </div>
     </div>
   );
@@ -617,13 +774,21 @@ function ProjectReviews({ demo }: { demo: ProjectDemo }) {
   );
 }
 
-function Reviews({ openProject }: { openProject: (id: string, tab?: ProjectTab) => void }) {
-  const readyReviews = projectDemos.filter((demo) => demo.review.ready);
+function Reviews({
+  demos,
+  openProject,
+  dataMode,
+}: {
+  demos: ProjectDemo[];
+  openProject: (id: string, tab?: ProjectTab) => void;
+  dataMode: "demo" | "real";
+}) {
+  const readyReviews = demos.filter((demo) => demo.review.ready);
   return (
     <div className="page-stack narrow-page">
       <div className="section-heading page-heading">
-        <div><span className="mini-label">{readyReviews.length} decision waiting</span><h2>Review inbox</h2><p>Evidence first, interpretation second, publication always explicit.</p></div>
-        <button className="secondary-button">Start weekly review</button>
+        <div><span className="mini-label">{readyReviews.length} decision waiting</span><h2>Review inbox</h2><p>{dataMode === "real" ? "Read-only Reviews projected from the canonical journal." : "Evidence first, interpretation second, publication always explicit."}</p></div>
+        <button className="secondary-button" disabled={dataMode === "real"}>Start weekly review</button>
       </div>
       {readyReviews.map((demo) => (
         <article className="review-inbox-card" key={demo.project.id}>
@@ -644,14 +809,28 @@ function Reviews({ openProject }: { openProject: (id: string, tab?: ProjectTab) 
   );
 }
 
+function RealJournalEmptyState({ mode }: { mode: "demo" | "real" }) {
+  return (
+    <div className="page-stack narrow-page">
+      <section className="card portfolio-error-state" role="status">
+        <span className="mini-label">{mode === "real" ? "Real journal" : "Project"}</span>
+        <h3>{mode === "real" ? "No canonical Project selected" : "No Project selected"}</h3>
+        <p>{mode === "real" ? "CloudKit returned no readable Project for this route. Demo data is not substituted." : "Choose a Project from the sidebar."}</p>
+      </section>
+    </div>
+  );
+}
+
 function SyncDiagnostics({
   diagnostic,
   isChecking,
   runCheck,
+  dataMode,
 }: {
   diagnostic: CloudKitDiagnostic;
   isChecking: boolean;
   runCheck: () => void;
+  dataMode: "demo" | "real";
 }) {
   const recordTypes = Object.entries(diagnostic.recordTypes ?? {}).sort((a, b) => b[1] - a[1]);
   return (
@@ -660,9 +839,9 @@ function SyncDiagnostics({
         <div>
           <span className="mini-label">Direct journal access</span>
           <h2>Sync & conflicts</h2>
-          <p>Validate the same private CloudKit zone used by the iPhone App.</p>
+          <p>{dataMode === "real" ? "Real mode reads the same private CloudKit zone used by the iPhone App. Web writes remain disabled." : "Run a read-only diagnostic before switching to Real journal mode."}</p>
         </div>
-        <button className="primary-button" onClick={runCheck} disabled={isChecking || !hasCloudKitConfiguration()}>
+        <button className="primary-button" onClick={runCheck} disabled={isChecking}>
           {isChecking ? "Checking…" : "Run CloudKit check"}
         </button>
       </div>
@@ -672,7 +851,7 @@ function SyncDiagnostics({
           <div className={`large-status-dot ${diagnostic.mode}`} />
           <div>
             <span className="mini-label">Connection status</span>
-            <h3>{diagnostic.mode === "connected" ? "Private journal connected" : diagnostic.mode === "demo" ? "Demo mode" : diagnostic.mode.replace("-", " ")}</h3>
+            <h3>{diagnostic.mode === "connected" ? "Private journal connected" : diagnostic.mode === "demo" ? "Demo mode" : diagnostic.mode === "blocked" ? "Real mode blocked" : diagnostic.mode.replace("-", " ")}</h3>
             <p>{diagnostic.message}</p>
           </div>
           <div id="apple-sign-in-button" className="apple-auth-slot" />
@@ -716,7 +895,7 @@ function SyncDiagnostics({
 
       <section className="card conflict-empty-state">
         <span className="conflict-icon">↻</span>
-        <div><h3>No Web conflicts loaded</h3><p>Same-field and structural collisions will appear here. Last-write-wins is never applied silently.</p></div>
+        <div><h3>{dataMode === "real" ? "Real journal read is read-only" : "No Web conflicts loaded"}</h3><p>{dataMode === "real" ? "No Web writes or silent demo fallback occur in this mode. Same-field and structural collisions require a later explicit decision flow." : "Same-field and structural collisions will appear here. Last-write-wins is never applied silently."}</p></div>
       </section>
     </div>
   );

@@ -1,6 +1,6 @@
 # Cross-Surface Migration Roadmap
 
-Status: B5 iOS slice complete; B6 is next
+Status: C1 read-only Web slice implemented; real CloudKit/device acceptance remains unverified
 
 Product decisions: `docs/adr/0001` through `docs/adr/0033`
 Target domain language: `CONTEXT.md`
@@ -12,9 +12,9 @@ The product decisions for the iPhone + Web personal learning system are accepted
 code has not followed all of them yet. The iOS app now uses the canonical Learning Plan
 domain (with a compatibility `CoursePlan` alias), while it still has the pre-decision model
 (flat `PracticeRoutine`, seven `ProjectStatus` values, a Primary/Alternatives
-recommendation split, Weekly-Review-only reflection). The Web Workspace renders the target
-information architecture from two hardcoded demo Projects and reads CloudKit only for
-diagnostics.
+recommendation split, Weekly-Review-only reflection). The Web Workspace keeps Demo mode
+explicit and now has a read-only Real journal adapter/projector over CloudKit; production
+schema, allowed-origin, token, and same-owner device acceptance remain separate evidence.
 
 None of the twelve acceptance scenarios in `docs/web-workspace-mvp-spec.md` §12 can pass
 today, because the two surfaces do not yet share one domain model. This roadmap splits that
@@ -354,17 +354,16 @@ CloudKit convergence remains a release gate.
 
 ### C1. Web reads the real Journal
 
-**Current.** `WebWorkspace/lib/journal.ts` exports two hardcoded demos (`guitarDemo`,
-`cs336Demo`); `lib/dashboard.ts` derives the whole portfolio view from them. `lib/cloudkit.ts`
-is deliberately read-only and only verifies authentication, private custom-zone access, record
-types, and change tags.
+**Current.** Demo mode still uses two hardcoded fixtures (`guitarDemo`, `cs336Demo`), while
+`lib/journal-reader.ts` fetches private-zone pages through CloudKit JS, decodes the shared A2
+contract (including legacy defaults), and `lib/journal-projector.ts` feeds the existing
+Dashboard/Project Workspace view models. Real mode is explicit, read-only, provenance-labeled,
+and never silently falls back to Demo.
 
-**Work.** Replace the demo source with real records fetched through CloudKit JS, decoded
-against the A2 contract. Keep the derivation modules unchanged where possible so the existing
-39 tests keep their value; the demos become fixtures rather than the product data source. Ship
-the visible sync state surface and record-zone change fetching. Complete the outstanding
-CloudKit JS validations from spec §13: a dedicated Web API token with allowed origins, and
-verified change-tag and asset download behavior.
+**Work.** Keep the reader/projector and explicit Demo/Real UI read-only until C2 owns Web writes.
+Complete the outstanding CloudKit JS validations from spec §13: a dedicated Web API token with
+allowed origins, provisioned schema/zone, verified change-tag and asset download behavior, and
+same-owner iPhone/Web data acceptance.
 
 **Independent verification.** A record created on iPhone appears in the Web Dashboard and
 Project Workspace for the same Journal Owner in the same CloudKit environment, with no
