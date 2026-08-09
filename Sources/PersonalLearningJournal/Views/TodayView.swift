@@ -28,25 +28,11 @@ public struct TodayView: View {
         viewModel.shouldShowReviewPrompt()
     }
 
-    private var todaysPlan: [PlannedSessionContext] {
-        viewModel.todayPlannedSessions()
-    }
-
-    private var overduePlan: [PlannedSessionContext] {
-        viewModel.overduePlannedSessions()
-    }
-
-    private var recommendations: [TodayRecommendation] {
-        viewModel.todayRecommendations(now: practiceTimer.lastRefreshDate)
-    }
-
-    private var primaryRecommendation: TodayRecommendation? {
-        recommendations.first
-    }
-
-    private var primaryProject: Project? {
-        guard let projectID = primaryRecommendation?.projectId else { return nil }
-        return viewModel.projects.first { $0.id == projectID }
+    private var todayAgenda: TodayAgenda {
+        viewModel.todayAgenda(
+            now: practiceTimer.lastRefreshDate,
+            calendar: .current
+        )
     }
 
     private var weekRhythm: [StudioWeekDay] {
@@ -56,17 +42,12 @@ public struct TodayView: View {
         )
     }
 
-    private var alternativeRecommendations: [TodayRecommendation] {
-        Array(recommendations.dropFirst())
-    }
-
     public var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: StudioTheme.sectionSpacing) {
                 todayHeader
                 rhythmSection
-                focusSection
-                practiceSection
+                agendaSection
 
             if let conflicts = calendarViewModel.scheduleDraft?.conflicts, !conflicts.isEmpty {
                 Section("Schedule Conflicts") {
@@ -97,22 +78,6 @@ public struct TodayView: View {
                 }
             }
 
-            if !todaysPlan.isEmpty {
-                Section("Planned Today") {
-                    ForEach(todaysPlan) { context in
-                        plannedSessionRow(context)
-                    }
-                }
-            }
-
-            if !overduePlan.isEmpty {
-                Section("Overdue") {
-                    ForEach(overduePlan) { context in
-                        plannedSessionRow(context)
-                    }
-                }
-            }
-
             let plansWithUnscheduledWork = viewModel.learningPlans.filter {
                 $0.status == .active && viewModel.unscheduledPlannedSessionCount(for: $0.id) > 0
             }
@@ -130,58 +95,6 @@ public struct TodayView: View {
                             }
                         }
                     }
-                }
-            }
-
-            if primaryRecommendation == nil || !alternativeRecommendations.isEmpty {
-                Section("Alternatives") {
-                if primaryRecommendation == nil && alternativeRecommendations.isEmpty {
-                    ContentUnavailableView(
-                        "No Active Next Step",
-                        systemImage: "figure.walk",
-                        description: Text("Add a Next Step to an active project.")
-                    )
-                } else {
-                    ForEach(alternativeRecommendations) { recommendation in
-                        if let project = viewModel.projects.first(where: { $0.id == recommendation.projectId }) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(project.name)
-                                .font(.headline)
-                            Label(reasonText(recommendation.reason), systemImage: "info.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(project.currentNextStep)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            if let session = latestSession(for: project) {
-                                Text("Last: \(session.durationMinutes) min · \(session.actionType.rawValue)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if let proof = latestProof(for: project) {
-                                Text("Proof: \(proof.title)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            HStack {
-                                Button {
-                                    timerProject = project
-                                } label: {
-                                    Label("Start", systemImage: "timer")
-                                }
-                                Spacer()
-                                Button {
-                                    quickLogProject = project
-                                } label: {
-                                    Label("Quick Log", systemImage: "square.and.pencil")
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                        }
-                        .padding(.vertical, 6)
-                        }
-                    }
-                }
                 }
             }
 
@@ -345,62 +258,43 @@ public struct TodayView: View {
     }
 
     @ViewBuilder
-    private var focusSection: some View {
-        if let recommendation = primaryRecommendation, let project = primaryProject {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("PRIMARY RECOMMENDATION")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(project.name)
-                    .font(.title2.bold())
-                Label(reasonText(recommendation.reason), systemImage: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(project.currentNextStep)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 14) {
-                    Button {
-                        timerProject = project
-                    } label: {
-                        Label("Start \(project.defaultDurationMinutes) min", systemImage: "play.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(StudioTheme.accent)
-
-                    Button {
-                        quickLogProject = project
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityLabel("Quick Log")
-                }
-            }
-            .padding(16)
-            .background(.background, in: RoundedRectangle(cornerRadius: 8))
-        }
-    }
-
-    private var practiceSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            StudioSectionHeader(title: "Practice", actionTitle: "Manage") {
-                showingPracticeManager = true
-            }
-
-            if practiceCards.isEmpty {
-                Button {
-                    showingPracticeManager = true
-                } label: {
-                    Label("Add Practice", systemImage: "plus")
-                }
-                .buttonStyle(.bordered)
+    private var agendaSection: some View {
+        Section {
+            if todayAgenda.isEmpty {
+                ContentUnavailableView(
+                    "Nothing queued",
+                    systemImage: "checkmark.circle",
+                    description: Text("No planned session, practice occurrence, or Next Step is queued for today.")
+                )
+                .frame(maxWidth: .infinity)
             } else {
-                ForEach(practiceCards) { card in
-                    PracticeRoutineCard(card: card) {
-                        openPractice(card.routine)
-                    }
+                ForEach(todayAgenda.items) { item in
+                    agendaItemRow(item)
                 }
+
+                if !todayAgenda.cadenceSignals.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Practice cadence", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.subheadline.weight(.semibold))
+                        ForEach(todayAgenda.cadenceSignals) { signal in
+                            Label(
+                                "Missed \(signal.title) on \(signal.occurrenceDate.formatted(date: .abbreviated, time: .omitted))",
+                                systemImage: "clock.badge.exclamationmark"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Missed practice cadence: \(signal.title)")
+                        }
+                        Text("This is a cadence signal, not an overdue task.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+        } header: {
+            StudioSectionHeader(title: "Today Agenda", actionTitle: "Manage Practice") {
+                showingPracticeManager = true
             }
         }
     }
@@ -410,6 +304,288 @@ public struct TodayView: View {
             now: practiceTimer.lastRefreshDate,
             calendar: .current
         )
+    }
+
+    @ViewBuilder
+    private func agendaItemRow(_ item: TodayAgendaItem) -> some View {
+        switch item.source {
+        case .plannedSession:
+            if let context = plannedSessionContext(for: item) {
+                plannedAgendaRow(item, context: context)
+            } else {
+                agendaFallbackRow(item)
+            }
+        case .practiceRoutine:
+            if let routine = viewModel.practiceRoutines.first(where: { $0.id == item.sourceID }) {
+                practiceAgendaRow(item, routine: routine)
+            } else {
+                agendaFallbackRow(item)
+            }
+        case .nextStep:
+            if let project = viewModel.projects.first(where: { $0.id == item.projectID }) {
+                nextStepAgendaRow(item, project: project)
+            } else {
+                agendaFallbackRow(item)
+            }
+        }
+    }
+
+    private func plannedSessionContext(for item: TodayAgendaItem) -> PlannedSessionContext? {
+        guard let session = viewModel.plannedSessions.first(where: { $0.id == item.sourceID }),
+              let project = viewModel.projects.first(where: { $0.id == session.projectId }) else {
+            return nil
+        }
+        return PlannedSessionContext(
+            session: session,
+            project: project,
+            phase: viewModel.planPhases.first(where: { $0.id == session.phaseId })
+        )
+    }
+
+    private func agendaCard<Content: View>(
+        _ item: TodayAgendaItem,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(positionTitle(item.position), systemImage: positionIcon(item.position))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(positionColor(item.position))
+                Spacer(minLength: 8)
+                agendaOverrideMenu(for: item)
+            }
+            content()
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func plannedAgendaRow(
+        _ item: TodayAgendaItem,
+        context: PlannedSessionContext
+    ) -> some View {
+        agendaCard(item) {
+            Text(context.session.title)
+                .font(.headline)
+            Text("\(context.project.name) · \(context.phase?.title ?? "Plan") · \(context.session.durationMinutes) min")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let expectedProof = context.session.expectedProof, !expectedProof.isEmpty {
+                Label(expectedProof, systemImage: "paperclip")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let carryover = item.carryover {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Carryover: planning window passed", systemImage: "arrow.uturn.forward.circle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(StudioTheme.notice)
+                    if let deadline = carryover.originalDeadline {
+                        Text("Original deadline: \(deadline.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 8) {
+                        Button("Do Today") {
+                            setAgendaPosition(.upNext, for: item)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(StudioTheme.accent)
+                        .accessibilityLabel("Do carryover today")
+                        if let plan = viewModel.activeLearningPlan(for: context.project.id) {
+                            NavigationLink("Reschedule") {
+                                CoursePlanDetailView(viewModel: viewModel, project: context.project, plan: plan)
+                            }
+                            .accessibilityLabel("Reschedule carryover")
+                        }
+                        Button("Skip", role: .destructive) {
+                            try? viewModel.skipPlannedSession(context.session.id)
+                        }
+                        .accessibilityLabel("Skip carryover")
+                        if let plan = viewModel.activeLearningPlan(for: context.project.id) {
+                            NavigationLink("Revise Plan") {
+                                CoursePlanDetailView(viewModel: viewModel, project: context.project, plan: plan)
+                            }
+                            .accessibilityLabel("Revise plan for carryover")
+                        }
+                    }
+                    .font(.caption.weight(.semibold))
+                }
+            }
+            HStack {
+                Button {
+                    timerPlan = context
+                } label: {
+                    Label("Start", systemImage: "timer")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Start \(context.session.title)")
+
+                Button {
+                    quickLogPlan = context
+                } label: {
+                    Label("Quick Log", systemImage: "square.and.pencil")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Quick log \(context.session.title)")
+
+                Spacer()
+
+                if item.carryover == nil {
+                    Button(role: .destructive) {
+                        try? viewModel.skipPlannedSession(context.session.id)
+                    } label: {
+                        Image(systemName: "forward.end")
+                    }
+                    .accessibilityLabel("Skip planned session")
+                }
+
+                if context.session.status == .scheduled {
+                    Button {
+                        try? viewModel.unschedulePlannedSession(context.session.id)
+                    } label: {
+                        Image(systemName: "calendar.badge.minus")
+                    }
+                    .accessibilityLabel("Make unscheduled")
+                }
+            }
+        }
+    }
+
+    private func practiceAgendaRow(
+        _ item: TodayAgendaItem,
+        routine: PracticeRoutine
+    ) -> some View {
+        agendaCard(item) {
+            Text(routine.name)
+                .font(.headline)
+            Text(item.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button {
+                openPractice(routine)
+            } label: {
+                Label("Start practice", systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(StudioTheme.practiceColor(routine.color))
+            .accessibilityLabel("Start practice \(routine.name)")
+        }
+    }
+
+    private func nextStepAgendaRow(
+        _ item: TodayAgendaItem,
+        project: Project
+    ) -> some View {
+        agendaCard(item) {
+            Text(project.name)
+                .font(.headline)
+            Text(project.currentNextStep)
+                .font(.body)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 14) {
+                Button {
+                    timerProject = project
+                } label: {
+                    Label("Start \(project.defaultDurationMinutes) min", systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(StudioTheme.accent)
+                .accessibilityLabel("Start next step for \(project.name)")
+
+                Button {
+                    quickLogProject = project
+                } label: {
+                    Label("Quick Log", systemImage: "square.and.pencil")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Quick log next step for \(project.name)")
+            }
+        }
+    }
+
+    private func agendaFallbackRow(_ item: TodayAgendaItem) -> some View {
+        agendaCard(item) {
+            Text(item.title)
+                .font(.headline)
+            if !item.detail.isEmpty {
+                Text(item.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text("The source record is no longer available.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func agendaOverrideMenu(for item: TodayAgendaItem) -> some View {
+        Menu {
+            if item.position != .upNext {
+                Button("Make Up Next") { setAgendaPosition(.upNext, for: item) }
+            }
+            if item.position != .laterToday {
+                Button("Later Today") { setAgendaPosition(.laterToday, for: item) }
+            }
+            if item.position != .optional {
+                Button("Optional") { setAgendaPosition(.optional, for: item) }
+            }
+            if item.position != .skipToday {
+                Button("Skip Today") { setAgendaPosition(.skipToday, for: item) }
+            } else {
+                Button("Restore to Optional") { setAgendaPosition(.optional, for: item) }
+            }
+            Button("Clear Daily Override") {
+                viewModel.clearTodayAgendaOverride(
+                    day: practiceTimer.lastRefreshDate,
+                    source: item.source,
+                    sourceID: item.sourceID
+                )
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .frame(width: 32, height: 32)
+        }
+        .accessibilityLabel("Change agenda position for \(item.title)")
+    }
+
+    private func setAgendaPosition(_ position: TodayAgendaPosition, for item: TodayAgendaItem) {
+        viewModel.applyTodayAgendaOverride(
+            TodayAgendaOverride(
+                day: practiceTimer.lastRefreshDate,
+                source: item.source,
+                sourceID: item.sourceID,
+                position: position
+            )
+        )
+    }
+
+    private func positionTitle(_ position: TodayAgendaPosition) -> String {
+        switch position {
+        case .upNext: "Up Next"
+        case .laterToday: "Later Today"
+        case .optional: "Optional"
+        case .skipToday: "Skipped Today"
+        }
+    }
+
+    private func positionIcon(_ position: TodayAgendaPosition) -> String {
+        switch position {
+        case .upNext: "arrow.right.circle.fill"
+        case .laterToday: "clock"
+        case .optional: "bookmark"
+        case .skipToday: "minus.circle"
+        }
+    }
+
+    private func positionColor(_ position: TodayAgendaPosition) -> Color {
+        switch position {
+        case .upNext: StudioTheme.accent
+        case .laterToday: .secondary
+        case .optional: .secondary
+        case .skipToday: Color.secondary.opacity(0.6)
+        }
     }
 
     private var practiceErrorPresented: Binding<Bool> {

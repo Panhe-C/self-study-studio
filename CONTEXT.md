@@ -75,24 +75,24 @@ Evidence-linked information about movement toward a Project or Phase outcome; ti
 _Avoid_: Hours logged, streak, productivity score
 _Gap_: `ProductHealthService` produces deterministic facts and the Web Dashboard treats counts as explanatory, but signals are not yet anchored to Plan Phase outcomes.
 
-**Today Agenda** `[planned]`:
-A derived, ordered view of the learner's executable commitments for one day, combining due Planned Sessions, scheduled Practice Routines, and selected Next Steps without turning them into a new canonical plan.
+**Today Agenda** `[partial]`:
+A deterministic, derived, ordered view of the learner's executable commitments for one day, combining due Planned Sessions, scheduled Practice Routine occurrences, and selected Next Steps without turning them into a new canonical plan. The iPhone `TodayAgendaService` and Today surface implement this projection; Web does not read it yet.
 _Avoid_: Daily plan, recommendation card, task list
-_Gap_: Today currently shows a primary recommendation, separate alternatives, and practice as three sections.
+_Gap_: Today Agenda overrides are currently local to the running iOS process; durable preference storage and cross-surface parity remain intentionally unspecified.
 
-**Agenda Item** `[planned]`:
+**Agenda Item** `[partial]`:
 A presentation of one existing Planned Session, Practice Routine occurrence, or selected Next Step inside the Today Agenda; its source type and completion semantics remain unchanged.
 _Avoid_: Copied task, generic activity, merged session
 
-**Up Next** `[planned]`:
+**Up Next** `[partial]`:
 The first recommended Agenda Item, expressed as a position in the Today Agenda rather than a separate kind of recommendation.
 _Avoid_: Primary Recommendation, required task, active project
-_Gap_: `TodayRecommendationService` produces exactly the Primary Recommendation this term replaces.
+_Gap_: `TodayRecommendationService` remains for compatibility, while Today now derives `Up Next` from the Agenda service.
 
-**Daily Override** `[planned]`:
+**Daily Override** `[partial]`:
 A learner choice that repositions an Agenda Item as Up Next, Later Today, or Skip Today without changing its source Plan, Routine, completion state, or longer-term schedule.
 _Avoid_: Reschedule, plan revision, completion, recommendation feedback
-_Gap_: a `userPinned` recommendation reason exists; Later Today and Skip Today do not.
+_Gap_: the iPhone stores the override only as a day-scoped in-memory presentation choice; it is not a Journal record and is lost on process restart.
 
 **Learning Trail** `[shipped]`:
 A readable, chronological account of meaningful learning activity, evidence, phase transitions, published plan changes, and Review Decisions.
@@ -207,10 +207,10 @@ _Gap_: the existing warning is non-blocking text with no acknowledgement step an
 A concrete future learning action within a Plan Phase, with an expected duration and optional expected Proof.
 _Avoid_: Task, calendar event, Practice Routine
 
-**Carryover** `[planned]`:
+**Carryover** `[partial]`:
 An unresolved Planned Session whose Planning Window has passed; its original timing remains visible until the learner does it, reschedules it, skips it, or revises the Plan.
 _Avoid_: Automatically rescheduled session, overdue task, failed session
-_Gap_: overdue planned sessions appear in Today, but there is no Carryover state and no `Do Today` / `Reschedule` / `Skip` / `Revise Plan` resolution.
+_Gap_: the iPhone derives Carryover and presents all four resolutions; durable carryover metadata and Web parity remain future work.
 
 **Skipped Session** `[shipped]`:
 A Planned Session explicitly resolved as intentionally not performed, preserving the decision without treating it as completed learning.

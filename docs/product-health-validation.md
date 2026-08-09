@@ -35,7 +35,7 @@ Therefore the signed install, device capability matrix, second-space recovery, a
 | Qualifying Proof semantics | `Evidence/ProofEvidence.swift`, `AddProofView`, `ProofPreview` | `ProofAttachmentDraftTests`, `ProofPreviewTests` |
 | Text, Link, attachment, and revision behavior | `JournalService.reviseProof`, `ProofDetailView`, local attachment store | proof and attachment suites; revision assertions in `JournalServiceTests` |
 | Default Library qualification and local search | `Search/ProofSearchIndex.swift`, `LibraryView` | `ProofSearchIndexTests` |
-| Today prioritization and canonical Next Step | `Recommendations/TodayRecommendationService.swift`, `TodayView` | `TodayRecommendationServiceTests`, `StudioPresentationTests` |
+| Today Agenda, canonical Next Step, and cadence signals | `Recommendations/TodayAgendaService.swift`, `TodayView`, `JournalViewModel` | `TodayAgendaServiceTests`, `TodayRecommendationServiceTests`, `StudioPresentationTests` |
 | One-sentence Session capture | `QuickLogView`, `TimerSessionView`, `JournalService` | `QuickLogViewTests`, `JournalServiceTests` |
 | Practice remains Project-bound | `PracticeDomain`, `PracticeService` | practice domain/service/end-to-end suites |
 | Explicit Review Decision and Product Health | `ReviewDecision`, `ReviewView`, `ProductHealthService` | review tests, health tests, acceptance test |

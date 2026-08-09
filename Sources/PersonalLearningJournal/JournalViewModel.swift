@@ -27,6 +27,10 @@ public final class JournalViewModel: ObservableObject {
             .flatMap(\.paths)
     }
     @Published private var rememberedCoursePlanningInputs: [UUID: CoursePlanningInput]
+    /// Day-scoped Today presentation choices. These are intentionally kept
+    /// outside Journal persistence: the derived agenda is never a second
+    /// source of truth for plans, routines, completions, or Trail history.
+    @Published private var todayAgendaOverrides: [TodayAgendaOverride]
 
     private let journalService: JournalService
     private let reviewService: ReviewService
@@ -84,6 +88,7 @@ public final class JournalViewModel: ObservableObject {
         self.attachmentCleanupQueueError = nil
         self.attachmentCleanupQueueQuarantineURL = nil
         self.rememberedCoursePlanningInputs = [:]
+        self.todayAgendaOverrides = []
         loadAttachmentCleanupQueue()
     }
 
@@ -261,6 +266,43 @@ public final class JournalViewModel: ObservableObject {
     ) -> [TodayRecommendation] {
         TodayRecommendationService(pinnedProjectIDs: pinnedProjectIDs)
             .recommendations(snapshot: snapshot, now: now)
+    }
+
+    /// Returns the deterministic Today projection for the current Journal
+    /// snapshot. The service never writes the computed agenda back to Journal.
+    public func todayAgenda(
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> TodayAgenda {
+        TodayAgendaService(calendar: calendar).agenda(
+            snapshot: snapshot,
+            day: now,
+            now: now,
+            overrides: todayAgendaOverrides
+        )
+    }
+
+    /// Applies a local, day-scoped ordering choice. Source records and Trail
+    /// remain unchanged; explicit source actions still go through Journal APIs.
+    public func applyTodayAgendaOverride(_ override: TodayAgendaOverride) {
+        todayAgendaOverrides.removeAll {
+            Calendar.current.isDate($0.day, inSameDayAs: override.day) &&
+                $0.source == override.source &&
+                $0.sourceID == override.sourceID
+        }
+        todayAgendaOverrides.append(override)
+    }
+
+    public func clearTodayAgendaOverride(
+        day: Date,
+        source: TodayAgendaSource,
+        sourceID: UUID
+    ) {
+        todayAgendaOverrides.removeAll {
+            Calendar.current.isDate($0.day, inSameDayAs: day) &&
+                $0.source == source &&
+                $0.sourceID == sourceID
+        }
     }
 
     public func productHealth(now: Date = Date()) -> ProductHealthReport {

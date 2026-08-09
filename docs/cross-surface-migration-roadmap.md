@@ -1,6 +1,6 @@
 # Cross-Surface Migration Roadmap
 
-Status: B3 iOS slice complete; B4 is next
+Status: B4 iOS slice complete; B5 is next
 
 Product decisions: `docs/adr/0001` through `docs/adr/0033`
 Target domain language: `CONTEXT.md`
@@ -255,24 +255,33 @@ assumes. Local crash recovery must keep working for in-progress sessions across 
 
 ### B4. Today Agenda, Carryover, and Daily Override
 
-**Current.** `TodayRecommendationService` produces a ranked primary recommendation with
-reasons (`userPinned`, `contractBoundary`, `confirmedSchedule`, `staleProject`) plus separate
-alternatives and practice presentation. The target is one derived Today Agenda over existing
-records (`docs/adr/0024`–`0025`, `0028`).
+**Status (2026-08-09, complete for the iOS slice).** `TodayAgendaService` now derives a
+deterministic projection from the canonical Journal snapshot. JournalViewModel and TodayView use
+that projection as the single Today surface; Web remains a later read/write milestone.
 
-**Work.** Replace the three-section presentation with a derived Agenda whose Items are
+**Current.** The Agenda combines executable Planned Sessions, scheduled operational Practice
+Routine occurrences, and one selected Next Step per active Project. It marks the first item `Up
+Next`, then `Later Today` or `Optional`, and exposes a local, day-scoped Daily Override without
+persisting computed Agenda records. `TodayRecommendationService` remains available for older
+callers but is no longer the Today presentation source.
+
+**Delivered.** The three-section presentation is replaced by a derived Agenda whose Items are
 presentations of existing Planned Sessions, Practice Routine occurrences, and selected Next
-Steps, preserving each source's completion semantics. The first Item is `Up Next`. Add Daily
-Override (Up Next / Later Today / Skip Today) that changes nothing about the source Plan,
-Routine, completion state, or longer-term schedule, and that stays out of the Learning Trail.
-Add Carryover for Planned Sessions whose window has passed, preserving the original timing and
-offering `Do Today`, `Reschedule`, `Skip`, or `Revise Plan`. Missed Practice occurrences remain
-cadence signals and must not become overdue task records.
+Steps, preserving each source's completion semantics. Daily Override (Up Next / Later Today /
+Skip Today) changes only the in-memory day projection and stays out of the Learning Trail.
+Carryover preserves the original timing and offers `Do Today`, `Reschedule`, `Skip`, or `Revise
+Plan`; the latter two source actions use the existing Journal/Plan flows. Missed Practice
+occurrences remain cadence signals and never become overdue task records. Overrides are currently
+local to the running iOS process; durable preferences and Web parity are intentionally deferred
+until their owning surface/storage contract is specified.
 
 **Independent verification.** This is spec §12.5: a missed Planned Session becomes Carryover
 with its original window unchanged. Applying a Daily Override produces no change to any source
-record and no Trail event. The Agenda stores nothing; deriving it twice from the same Journal
-gives the same result.
+record and no Trail event. Missed Practice is emitted as a cadence signal only, never as an
+overdue task or fabricated completion. The Agenda stores nothing; deriving it twice from the same
+Journal gives the same result. Targeted service tests cover deterministic composition, Carryover,
+Daily Override immutability, cadence signals, and the explicit empty state. Full-suite, simulator,
+physical-device, and real CloudKit checks remain separate release evidence.
 
 **Risk.** Medium. Mostly a projection change, but it is the most visible daily surface, so
 regressions are immediately felt.
