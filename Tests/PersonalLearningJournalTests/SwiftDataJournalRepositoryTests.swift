@@ -298,6 +298,170 @@ final class SwiftDataJournalRepositoryTests: XCTestCase {
         )
     }
 
+    func testSwiftDataInFlightPlanningAckPreservesActivationGuard() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = try SwiftDataJournalRepository(
+            url: root.appendingPathComponent("planning-guard-lineage.store")
+        )
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_060)
+        let plan = try LearningPlan(
+            projectId: UUID(),
+            revision: 1,
+            status: .draft,
+            courseURL: nil,
+            courseTitle: "Plan",
+            courseOutline: "",
+            goal: "Learn",
+            expectedOutcome: "Notes",
+            startsOn: timestamp,
+            deadline: nil,
+            weeklyBudgetMinutes: 60,
+            summary: "Summary",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        try repository.commit(
+            JournalTransaction(upserts: [.coursePlan(plan)], origin: .user)
+        )
+        let baseMutation = try XCTUnwrap(
+            repository.pendingMutations(limit: 100)
+                .first(where: { $0.entity == plan.reference })
+        )
+        let activationExpectation = RevisionGuardExpectation.existing(
+            baseRevisionID: UUID(),
+            recordChangeTag: "base-v1"
+        )
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.coursePlan(plan)],
+                origin: .user,
+                transactionID: baseMutation.transactionID,
+                revisionExpectations: [plan.reference: activationExpectation]
+            )
+        )
+        let replacement = try XCTUnwrap(
+            repository.pendingMutations(limit: 100)
+                .first(where: { $0.entity == plan.reference })
+        )
+        XCTAssertNotEqual(replacement.id, baseMutation.id)
+        XCTAssertEqual(replacement.revisionExpectation, activationExpectation)
+
+        try repository.acknowledge(
+            [baseMutation.id],
+            metadata: [
+                SyncRecordMetadata(
+                    entity: plan.reference,
+                    zoneName: CloudSyncCoordinator.zoneName,
+                    recordName: plan.id.uuidString,
+                    recordChangeTag: "server-v2",
+                    state: .synced
+                )
+            ]
+        )
+
+        let afterAck = try XCTUnwrap(
+            repository.pendingMutations(limit: 100)
+                .first(where: { $0.entity == plan.reference })
+        )
+        XCTAssertEqual(afterAck.id, replacement.id)
+        XCTAssertEqual(afterAck.revisionExpectation, activationExpectation)
+    }
+
+    func testSwiftDataTerminalFailureFollowsPracticeReplacementAcrossRestart() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("practice-terminal-lineage.store")
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_100)
+        let project = Project(
+            name: "Practice Project",
+            area: "Learning",
+            goal: "Improve",
+            currentNextStep: "Keep going",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let routine = PracticeRoutine(
+            projectId: project.id,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let sessionID = UUID()
+        let sessionReference = JournalEntityReference(.practiceSession, sessionID)
+        let startedAt = timestamp
+        let endedAt = timestamp.addingTimeInterval(120)
+        let baseMutation: PendingMutation
+        let replacementID: UUID
+        let transactionID: UUID
+        do {
+            let repository = try SwiftDataJournalRepository(url: url)
+            try repository.commit(
+                JournalTransaction(
+                    upserts: [.project(project), .practiceRoutine(routine)],
+                    origin: .remote
+                )
+            )
+            let service = PracticeService(
+                repository: repository,
+                now: { timestamp.addingTimeInterval(1) }
+            )
+            _ = try service.saveSession(
+                sessionId: sessionID,
+                routineId: routine.id,
+                linkedProjectId: routine.projectId,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                activeDurationSeconds: 120,
+                note: nil
+            )
+            baseMutation = try XCTUnwrap(
+                repository.pendingMutations(limit: 100)
+                    .first(where: { $0.entity == sessionReference })
+            )
+            _ = try service.updateSessionReflection(
+                sessionId: sessionID,
+                routineId: routine.id,
+                linkedProjectId: routine.projectId,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                activeDurationSeconds: 120,
+                note: "Enriched terminal reflection"
+            )
+            let replacement = try XCTUnwrap(
+                repository.pendingMutations(limit: 100)
+                    .first(where: { $0.entity == sessionReference })
+            )
+            replacementID = replacement.id
+            transactionID = replacement.transactionID
+            XCTAssertTrue(replacement.supersededMutationIDs.contains(baseMutation.id))
+        }
+
+        let reopened = try SwiftDataJournalRepository(url: url)
+        try reopened.recordSyncFailures(
+            retryable: [:],
+            terminal: [baseMutation.id: "stale server tag"]
+        )
+
+        XCTAssertTrue(try reopened.pendingMutations(limit: 100).isEmpty)
+        let terminal = try reopened.terminalMutations(limit: 100)
+        XCTAssertFalse(terminal.isEmpty)
+        XCTAssertTrue(terminal.allSatisfy { $0.transactionID == transactionID })
+        let terminalReplacement = try XCTUnwrap(
+            terminal.first(where: { $0.entity == sessionReference })
+        )
+        XCTAssertEqual(terminalReplacement.id, replacementID)
+        XCTAssertEqual(terminalReplacement.lastError, "stale server tag")
+        XCTAssertEqual(
+            try reopened.snapshot().practiceSessions.first?.note,
+            "Enriched terminal reflection"
+        )
+    }
+
     func testSwiftDataRepositoryRoundTripsEntityAndOutboxAcrossInstances() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

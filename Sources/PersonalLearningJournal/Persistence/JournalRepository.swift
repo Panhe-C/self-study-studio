@@ -332,7 +332,8 @@ public final class InMemoryJournalRepository: JournalRepository {
             outbox.removeAll { mutationIDs.contains($0.id) }
             for value in metadata {
                 recordMetadata[value.entity] = value
-                guard !mutationIDs.isEmpty,
+                guard value.entity.kind == .practiceSession,
+                      !mutationIDs.isEmpty,
                       let recordChangeTag = value.recordChangeTag else {
                     continue
                 }
@@ -346,6 +347,9 @@ public final class InMemoryJournalRepository: JournalRepository {
                 )
                 for index in outbox.indices where
                     !outbox[index].isTerminal && outbox[index].entity == value.entity {
+                    guard !outbox[index].supersededMutationIDs.isDisjoint(with: mutationIDs) else {
+                        continue
+                    }
                     outbox[index].revisionExpectation = expectation
                 }
             }
@@ -400,13 +404,37 @@ public final class InMemoryJournalRepository: JournalRepository {
         terminal: [UUID: String]
     ) throws {
         withLock {
+            let terminalIDs = Set(terminal.keys)
+            var terminalTransactionIDs: Set<UUID> = []
+            var propagatedErrors: [UUID: String] = [:]
+            for mutation in outbox {
+                if let message = terminal[mutation.id] {
+                    terminalTransactionIDs.insert(mutation.transactionID)
+                    propagatedErrors[mutation.transactionID] = message
+                } else if let supersededID = mutation.supersededMutationIDs.first(
+                    where: { terminalIDs.contains($0) }
+                ), let message = terminal[supersededID] {
+                    terminalTransactionIDs.insert(mutation.transactionID)
+                    propagatedErrors[mutation.transactionID] = message
+                }
+            }
             for index in outbox.indices {
-                if let message = retryable[outbox[index].id] {
-                    outbox[index].retryCount += 1
-                    outbox[index].lastError = message
-                } else if let message = terminal[outbox[index].id] {
+                let mutation = outbox[index]
+                if let message = terminal[mutation.id] {
                     outbox[index].lastError = message
                     outbox[index].isTerminal = true
+                } else if let supersededID = mutation.supersededMutationIDs.first(
+                    where: { terminalIDs.contains($0) }
+                ), let message = terminal[supersededID] {
+                    outbox[index].lastError = message
+                    outbox[index].isTerminal = true
+                } else if let message = propagatedErrors[mutation.transactionID],
+                          terminalTransactionIDs.contains(mutation.transactionID) {
+                    outbox[index].lastError = message
+                    outbox[index].isTerminal = true
+                } else if let message = retryable[mutation.id] {
+                    outbox[index].retryCount += 1
+                    outbox[index].lastError = message
                 }
             }
         }
@@ -469,6 +497,7 @@ public final class InMemoryJournalRepository: JournalRepository {
             : nil
         let effectiveTransactionID = pendingBase?.transactionID ?? transactionID
         let effectiveRevisionExpectation = pendingBase.map(\.revisionExpectation) ?? revisionExpectation
+        var supersededMutationIDs: Set<UUID> = []
         // Planning drafts and activation are separate local transactions but
         // represent one final payload per planning record. Practice base and
         // reflection writes have the same latest-payload requirement. Other
@@ -479,6 +508,8 @@ public final class InMemoryJournalRepository: JournalRepository {
            let index = outbox.lastIndex(where: {
                $0.entity == entity && !$0.isTerminal
            }) {
+            supersededMutationIDs = outbox[index].supersededMutationIDs
+            supersededMutationIDs.insert(outbox[index].id)
             outbox.remove(at: index)
         }
         outbox.append(
@@ -487,7 +518,8 @@ public final class InMemoryJournalRepository: JournalRepository {
                 entity: entity,
                 operation: operation,
                 revisionExpectation: effectiveRevisionExpectation,
-                enqueuedAt: now()
+                enqueuedAt: now(),
+                supersededMutationIDs: supersededMutationIDs
             )
         )
     }

@@ -223,7 +223,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
                 } else {
                     context.insert(StoredSyncMetadataV2(key: key, payload: payload))
                 }
-                guard !mutationIDs.isEmpty,
+                guard value.entity.kind == .practiceSession,
+                      !mutationIDs.isEmpty,
                       let recordChangeTag = value.recordChangeTag else {
                     continue
                 }
@@ -242,7 +243,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
                     pending.entityKindRaw == value.entity.kind.rawValue &&
                     pending.entityID == value.entity.id &&
                     !pending.isTerminal &&
-                    !mutationIDs.contains(pending.id) {
+                    !mutationIDs.contains(pending.id) &&
+                    !pending.supersededMutationIDs.isDisjoint(with: mutationIDs) {
                     pending.revisionExpectationPayload = encodedExpectation
                 }
             }
@@ -331,13 +333,36 @@ public final class SwiftDataJournalRepository: JournalRepository {
     ) throws {
         do {
             let records = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+            let terminalIDs = Set(terminal.keys)
+            var terminalTransactionIDs: Set<UUID> = []
+            var propagatedErrors: [UUID: String] = [:]
             for record in records {
-                if let message = retryable[record.id] {
-                    record.retryCount += 1
-                    record.lastError = message
-                } else if let message = terminal[record.id] {
+                if let message = terminal[record.id] {
+                    terminalTransactionIDs.insert(record.transactionID)
+                    propagatedErrors[record.transactionID] = message
+                } else if let supersededID = record.supersededMutationIDs.first(
+                    where: { terminalIDs.contains($0) }
+                ), let message = terminal[supersededID] {
+                    terminalTransactionIDs.insert(record.transactionID)
+                    propagatedErrors[record.transactionID] = message
+                }
+            }
+            for record in records {
+                if let message = terminal[record.id] {
                     record.lastError = message
                     record.isTerminal = true
+                } else if let supersededID = record.supersededMutationIDs.first(
+                    where: { terminalIDs.contains($0) }
+                ), let message = terminal[supersededID] {
+                    record.lastError = message
+                    record.isTerminal = true
+                } else if let message = propagatedErrors[record.transactionID],
+                          terminalTransactionIDs.contains(record.transactionID) {
+                    record.lastError = message
+                    record.isTerminal = true
+                } else if let message = retryable[record.id] {
+                    record.retryCount += 1
+                    record.lastError = message
                 }
             }
             try context.save()
@@ -684,6 +709,7 @@ public final class SwiftDataJournalRepository: JournalRepository {
         } else {
             effectiveRevisionExpectation = revisionExpectation
         }
+        var supersededMutationIDs: Set<UUID> = []
         if Self.shouldCoalesce(entity.kind) {
             let existing = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
                 .first {
@@ -692,6 +718,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
                     !$0.isTerminal
                 }
             if let existing {
+                supersededMutationIDs = existing.supersededMutationIDs
+                supersededMutationIDs.insert(existing.id)
                 context.delete(existing)
             }
         }
@@ -704,7 +732,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
                 operationRaw: operation.rawValue,
                 revisionExpectation: effectiveRevisionExpectation,
                 enqueuedAt: now(),
-                retryCount: 0
+                retryCount: 0,
+                supersededMutationIDs: supersededMutationIDs
             )
         )
     }
@@ -1020,6 +1049,7 @@ private protocol StoredEntityV2: PersistentModel {
     var retryCount: Int
     var lastError: String?
     var isTerminal: Bool
+    var supersededMutationIDsPayload: Data?
 
     init(
         id: UUID,
@@ -1031,7 +1061,8 @@ private protocol StoredEntityV2: PersistentModel {
         enqueuedAt: Date,
         retryCount: Int,
         lastError: String? = nil,
-        isTerminal: Bool = false
+        isTerminal: Bool = false,
+        supersededMutationIDs: Set<UUID> = []
     ) {
         self.id = id
         self.transactionID = transactionID
@@ -1043,6 +1074,13 @@ private protocol StoredEntityV2: PersistentModel {
         self.retryCount = retryCount
         self.lastError = lastError
         self.isTerminal = isTerminal
+        self.supersededMutationIDsPayload = try? JSONEncoder.journal.encode(supersededMutationIDs)
+    }
+
+    var supersededMutationIDs: Set<UUID> {
+        supersededMutationIDsPayload.flatMap {
+            try? JSONDecoder.journal.decode(Set<UUID>.self, from: $0)
+        } ?? []
     }
 
     func domain() throws -> PendingMutation {
@@ -1061,7 +1099,8 @@ private protocol StoredEntityV2: PersistentModel {
             enqueuedAt: enqueuedAt,
             retryCount: retryCount,
             lastError: lastError,
-            isTerminal: isTerminal
+            isTerminal: isTerminal,
+            supersededMutationIDs: supersededMutationIDs
         )
     }
 }

@@ -281,6 +281,92 @@ final class CloudSyncEndToEndTests: XCTestCase {
             1
         )
     }
+
+    func testInFlightBaseTerminalResultPropagatesToReflectionReplacement() async throws {
+        let timestamp = Date(timeIntervalSince1970: 30_000)
+        let project = Project(
+            name: "Practice Project",
+            area: "Learning",
+            goal: "Improve",
+            currentNextStep: "Keep going",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let routine = PracticeRoutine(
+            projectId: project.id,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository()
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.project(project), .practiceRoutine(routine)],
+                origin: .remote
+            )
+        )
+        let service = PracticeService(
+            repository: repository,
+            now: { timestamp.addingTimeInterval(1) }
+        )
+        let sessionID = UUID()
+        let sessionReference = JournalEntityReference(.practiceSession, sessionID)
+        let startedAt = timestamp
+        let endedAt = timestamp.addingTimeInterval(120)
+        _ = try service.saveSession(
+            sessionId: sessionID,
+            routineId: routine.id,
+            linkedProjectId: routine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 120,
+            note: nil
+        )
+        let baseMutation = try XCTUnwrap(
+            repository.pendingMutations(limit: 100)
+                .first(where: { $0.entity == sessionReference })
+        )
+
+        let cloud = InFlightPracticeCloudClient(terminalizeFirstSend: true)
+        let coordinator = CloudSyncCoordinator(repository: repository, client: cloud)
+        let syncTask = Task { try await coordinator.syncNow() }
+        await cloud.waitUntilFirstSendStarted()
+
+        _ = try service.updateSessionReflection(
+            sessionId: sessionID,
+            routineId: routine.id,
+            linkedProjectId: routine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 120,
+            note: "Enriched reflection"
+        )
+        let replacement = try XCTUnwrap(
+            repository.pendingMutations(limit: 100)
+                .first(where: { $0.entity == sessionReference })
+        )
+        XCTAssertNotEqual(replacement.id, baseMutation.id)
+        XCTAssertTrue(replacement.supersededMutationIDs.contains(baseMutation.id))
+
+        await cloud.releaseFirstSend()
+        try await syncTask.value
+
+        XCTAssertTrue(try repository.pendingMutations(limit: 100).isEmpty)
+        let terminal = try repository.terminalMutations(limit: 100)
+        let transactionIDs = Set(terminal.map(\.transactionID))
+        XCTAssertEqual(transactionIDs.count, 1)
+        XCTAssertTrue(terminal.allSatisfy { $0.transactionID == replacement.transactionID })
+        let terminalReplacement = try XCTUnwrap(
+            terminal.first(where: { $0.entity == sessionReference })
+        )
+        XCTAssertEqual(terminalReplacement.id, replacement.id)
+        XCTAssertEqual(terminalReplacement.lastError, "stale server tag")
+        XCTAssertTrue(terminalReplacement.isTerminal)
+    }
 }
 
 private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
@@ -361,6 +447,7 @@ private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
 }
 
 private actor InFlightPracticeCloudClient: CloudDatabaseClient {
+    private let terminalizeFirstSend: Bool
     private let mapper = CloudRecordMapper()
     private let zoneID = CKRecordZone.ID(
         zoneName: CloudSyncCoordinator.zoneName,
@@ -375,6 +462,10 @@ private actor InFlightPracticeCloudClient: CloudDatabaseClient {
     private var sendReleaseContinuation: CheckedContinuation<Void, Never>?
     private var fetchTokenIssued = false
 
+    init(terminalizeFirstSend: Bool = false) {
+        self.terminalizeFirstSend = terminalizeFirstSend
+    }
+
     func ensureZone(named: String) async throws {}
 
     func send(_ mutations: [CloudMutation]) async throws -> CloudSendResult {
@@ -388,8 +479,11 @@ private actor InFlightPracticeCloudClient: CloudDatabaseClient {
         var acknowledged: Set<UUID> = []
         var metadata: [SyncRecordMetadata] = []
         var terminalErrors: [UUID: String] = [:]
+        let shouldTerminalize = terminalizeFirstSend && !didPauseFirstSend
         for mutation in mutations {
-            guard case let .save(mutationID, entity) = mutation else {
+            guard case let .save(mutationID, entity) = mutation else { continue }
+            if shouldTerminalize {
+                terminalErrors[mutationID] = "stale server tag"
                 continue
             }
             let currentTag = serverTags[entity.reference]

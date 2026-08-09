@@ -222,6 +222,63 @@ final class PlanLifecycleGuardTests: XCTestCase {
         XCTAssertEqual(mutation.revisionExpectation?.targetRecordState, .existingRecord)
     }
 
+    func testInFlightPlanningAckDoesNotReplaceActivationGuard() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_050)
+        let project = Project(
+            name: "Draft",
+            area: "AI",
+            goal: "Learn",
+            currentNextStep: "Read",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = CoursePlanningService(repository: repository, now: { timestamp })
+        let plan = try service.saveDraft(input: planningInput(project.id), draft: planningDraft)
+        let baseMutation = try XCTUnwrap(
+            repository.pendingMutations(limit: 100)
+                .first(where: { $0.entity == plan.reference })
+        )
+        let activationExpectation = RevisionGuardExpectation.existing(
+            baseRevisionID: UUID(),
+            recordChangeTag: "base-v1"
+        )
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.coursePlan(plan)],
+                origin: .user,
+                transactionID: baseMutation.transactionID,
+                revisionExpectations: [plan.reference: activationExpectation]
+            )
+        )
+        let replacement = try XCTUnwrap(
+            repository.pendingMutations(limit: 100)
+                .first(where: { $0.entity == plan.reference })
+        )
+        XCTAssertNotEqual(replacement.id, baseMutation.id)
+        XCTAssertEqual(replacement.revisionExpectation, activationExpectation)
+
+        try repository.acknowledge(
+            [baseMutation.id],
+            metadata: [
+                SyncRecordMetadata(
+                    entity: plan.reference,
+                    zoneName: CloudSyncCoordinator.zoneName,
+                    recordName: plan.id.uuidString,
+                    recordChangeTag: "server-v2",
+                    state: .synced
+                )
+            ]
+        )
+
+        let afterAck = try XCTUnwrap(
+            repository.pendingMutations(limit: 100)
+                .first(where: { $0.entity == plan.reference })
+        )
+        XCTAssertEqual(afterAck.id, replacement.id)
+        XCTAssertEqual(afterAck.revisionExpectation, activationExpectation)
+    }
+
     func testSyncedRevisionDraftActivationRetainsCapturedTargetExpectation() throws {
         let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
         let project = Project(name: "Revision", area: "AI", goal: "Learn", currentNextStep: "Read", createdAt: timestamp, updatedAt: timestamp)

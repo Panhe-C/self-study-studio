@@ -35,6 +35,10 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
     /// automatic sync attempts. This bit is persisted so a restart cannot
     /// resurrect a stale write into the retry queue.
     public var isTerminal: Bool
+    /// IDs of outbox mutations that this entry replaced while it was still
+    /// pending. The lineage is persisted so a network result for an older
+    /// snapshot can still resolve the current replacement after a restart.
+    public var supersededMutationIDs: Set<UUID>
 
     public init(
         id: UUID = UUID(),
@@ -45,7 +49,8 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
         enqueuedAt: Date = Date(),
         retryCount: Int = 0,
         lastError: String? = nil,
-        isTerminal: Bool = false
+        isTerminal: Bool = false,
+        supersededMutationIDs: Set<UUID> = []
     ) {
         self.id = id
         self.transactionID = transactionID ?? id
@@ -56,6 +61,7 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
         self.retryCount = retryCount
         self.lastError = lastError
         self.isTerminal = isTerminal
+        self.supersededMutationIDs = supersededMutationIDs
     }
 
     public var expectedChangeTag: String? {
@@ -64,7 +70,7 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, transactionID, entity, operation, revisionExpectation
-        case enqueuedAt, retryCount, lastError, isTerminal
+        case enqueuedAt, retryCount, lastError, isTerminal, supersededMutationIDs
     }
 
     public init(from decoder: Decoder) throws {
@@ -82,7 +88,11 @@ public struct PendingMutation: Codable, Equatable, Identifiable, Sendable {
             enqueuedAt: container.decode(Date.self, forKey: .enqueuedAt),
             retryCount: container.decodeIfPresent(Int.self, forKey: .retryCount) ?? 0,
             lastError: container.decodeIfPresent(String.self, forKey: .lastError),
-            isTerminal: container.decodeIfPresent(Bool.self, forKey: .isTerminal) ?? false
+            isTerminal: container.decodeIfPresent(Bool.self, forKey: .isTerminal) ?? false,
+            supersededMutationIDs: container.decodeIfPresent(
+                Set<UUID>.self,
+                forKey: .supersededMutationIDs
+            ) ?? []
         )
     }
 }
