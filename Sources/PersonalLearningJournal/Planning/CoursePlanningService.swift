@@ -4,17 +4,20 @@ public final class CoursePlanningService {
     private let repository: any JournalRepository
     private let validator: CoursePlanValidator
     private let provider: any CoursePlanningProvider
+    private let capacityCheckService: CapacityCheckService
     private let now: () -> Date
 
     public init(
         repository: any JournalRepository,
         validator: CoursePlanValidator = CoursePlanValidator(),
         provider: any CoursePlanningProvider = AdaptiveCoursePlanningProvider(),
+        capacityCheckService: CapacityCheckService = CapacityCheckService(),
         now: @escaping () -> Date = Date.init
     ) {
         self.repository = repository
         self.validator = validator
         self.provider = provider
+        self.capacityCheckService = capacityCheckService
         self.now = now
     }
 
@@ -76,6 +79,7 @@ public final class CoursePlanningService {
         )
 
         var phaseIDs: [String: UUID] = [:]
+        let draftPhasesByID = Dictionary(uniqueKeysWithValues: draft.phases.map { ($0.id, $0) })
         var phases: [PlanPhase] = []
         for draftPhase in draft.phases.sorted(by: { $0.ordinal < $1.ordinal }) {
             let phase = try PlanPhase(
@@ -108,6 +112,14 @@ public final class CoursePlanningService {
                 actionType: draftSession.actionType,
                 expectedProof: draftSession.expectedProof,
                 durationMinutes: draftSession.durationMinutes,
+                planningWindow: draftSession.planningWindow
+                    ?? draftPhasesByID[draftSession.phaseID].flatMap {
+                        try? PlanningWindow(
+                            start: $0.targetStart,
+                            end: $0.targetEnd,
+                            granularity: .dateRange
+                        )
+                    },
                 deadline: draftSession.deadline,
                 createdAt: createdAt,
                 updatedAt: createdAt
@@ -153,7 +165,8 @@ public final class CoursePlanningService {
     @discardableResult
     public func activate(
         draftPlanID: UUID,
-        expectation: RevisionGuardExpectation
+        expectation: RevisionGuardExpectation,
+        capacityAcknowledged: Bool = false
     ) throws -> CanonicalNextStepProposal? {
         let snapshot = try repository.snapshot()
         guard let planIndex = snapshot.coursePlans.firstIndex(where: { $0.id == draftPlanID }) else {
@@ -182,6 +195,17 @@ public final class CoursePlanningService {
                 phases: snapshot.planPhases,
                 reason: "First session in the activated learning plan"
             )
+        }
+
+        let capacityResult = capacityCheckService.check(
+            plan: existingPlan,
+            phases: snapshot.planPhases.filter { $0.planId == existingPlan.id },
+            sessions: snapshot.plannedSessions.filter { $0.planId == existingPlan.id },
+            practiceRoutines: capacityRoutines(for: existingPlan, snapshot: snapshot),
+            availabilityRules: snapshot.availabilityRules.filter { $0.deletedAt == nil }
+        )
+        guard capacityAcknowledged || !capacityResult.requiresAcknowledgement else {
+            throw CoursePlanningError.capacityAcknowledgementRequired
         }
 
         var activatedPlan = existingPlan
@@ -318,10 +342,27 @@ public final class CoursePlanningService {
     /// Compatibility overload for existing callers. It still captures a
     /// concrete expectation from the repository before entering activation.
     @discardableResult
-    public func activate(draftPlanID: UUID) throws -> CanonicalNextStepProposal? {
+    public func activate(
+        draftPlanID: UUID,
+        capacityAcknowledged: Bool = false
+    ) throws -> CanonicalNextStepProposal? {
         try activate(
             draftPlanID: draftPlanID,
-            expectation: try revisionGuardExpectation(for: draftPlanID)
+            expectation: try revisionGuardExpectation(for: draftPlanID),
+            capacityAcknowledged: capacityAcknowledged
+        )
+    }
+
+    private func capacityRoutines(
+        for plan: LearningPlan,
+        snapshot: JournalSnapshot
+    ) -> [PracticeRoutine] {
+        let operational = snapshot.operationalPracticeRoutines
+        let revisionRoutines = snapshot.practiceRoutines.filter {
+            $0.planRevisionID == plan.revisionID && $0.deletedAt == nil
+        }
+        return Array(
+            Dictionary(uniqueKeysWithValues: (operational + revisionRoutines).map { ($0.id, $0) }).values
         )
     }
 
@@ -436,7 +477,8 @@ public final class CoursePlanningService {
     @discardableResult
     public func reschedule(
         plannedSessionID: UUID,
-        newDeadline: Date
+        newDeadline: Date,
+        capacityAcknowledged: Bool = false
     ) throws -> PlannedSession {
         let snapshot = try repository.snapshot()
         guard let index = snapshot.plannedSessions.firstIndex(where: { $0.id == plannedSessionID }) else {
@@ -444,6 +486,25 @@ public final class CoursePlanningService {
         }
         var session = snapshot.plannedSessions[index]
         guard session.status != .completed else { return session }
+
+        if let plan = snapshot.coursePlans.first(where: { $0.id == session.planId }) {
+            var candidate = session
+            candidate.deadline = newDeadline
+            var candidateSessions = snapshot.plannedSessions.filter { $0.planId == plan.id }
+            if let candidateIndex = candidateSessions.firstIndex(where: { $0.id == plannedSessionID }) {
+                candidateSessions[candidateIndex] = candidate
+            }
+            let capacityResult = capacityCheckService.check(
+                plan: plan,
+                phases: snapshot.planPhases.filter { $0.planId == plan.id },
+                sessions: candidateSessions,
+                practiceRoutines: capacityRoutines(for: plan, snapshot: snapshot),
+                availabilityRules: snapshot.availabilityRules.filter { $0.deletedAt == nil }
+            )
+            guard capacityAcknowledged || !capacityResult.requiresAcknowledgement else {
+                throw CoursePlanningError.capacityAcknowledgementRequired
+            }
+        }
 
         let phase = snapshot.planPhases.first(where: { $0.id == session.phaseId })
         let originalWindowStart = phase?.targetStart ?? session.createdAt

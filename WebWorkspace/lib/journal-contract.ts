@@ -446,6 +446,17 @@ function validateCrossFieldRules(
     case "planPhase":
       if (!(date("targetEnd") >= date("targetStart"))) fail("targetEnd");
       break;
+    case "plannedSession":
+      if (isObject(payload.planningWindow)) {
+        const start = typeof payload.planningWindow.start === "string" && isISO8601(payload.planningWindow.start, contract)
+          ? Date.parse(payload.planningWindow.start)
+          : Number.NaN;
+        const end = typeof payload.planningWindow.end === "string" && isISO8601(payload.planningWindow.end, contract)
+          ? Date.parse(payload.planningWindow.end)
+          : Number.NaN;
+        if (!(end >= start)) fail("planningWindow.end");
+      }
+      break;
     case "availabilityRule":
       if (!(integer("endMinute") > integer("startMinute"))) fail("endMinute");
       if (integer("endMinute") - integer("startMinute") < integer("minimumSessionMinutes")) fail("endMinute");

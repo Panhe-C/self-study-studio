@@ -179,10 +179,10 @@ _Gap_: Web has not yet switched from demo data to the real Journal; the iPhone k
 A coherent stage of a Learning Plan with its own objective, expected Proof, and target time range.
 _Avoid_: Chapter, sprint, section
 
-**Planning Window** `[planned]`:
+**Planning Window** `[partial]`:
 A flexible target day, week, or date range for a Phase or Planned Session that guides the Today Agenda without reserving an exact clock time.
 _Avoid_: Calendar event, deadline, exact appointment
-_Gap_: `PlannedSession` carries a single optional `deadline`, which is the concept this term replaces.
+_Gap_: iOS now persists `PlanningWindow` on draft and Planned Session records and keeps exact calendar time separate; Web still reads demo data until C1.
 
 **Practice Cadence** `[partial]`:
 The intended weekly frequency and optional preferred days for a Practice Routine, without requiring exact start times.
@@ -196,15 +196,15 @@ _Avoid_: Planning Window, automatic calendar sync, due date
 **Capacity Check** `[partial]`:
 A deterministic comparison of estimated Planned Session and Practice Cadence load against the learner's stated weekly availability, broken down by week and source Project.
 _Avoid_: Productivity score, hard schedule, AI estimate
-_Gap_: `CoursePlanValidator` compares one plan's weekly budget against supplied availability; there is no per-week, per-Project breakdown and Practice load is excluded.
+_Gap_: iOS `CapacityCheckService` now provides the week/Project breakdown, Practice load, DST-safe availability, and deterministic warnings; Web has no real-Journal projection yet.
 
 **Capacity Warning** `[partial]`:
 A visible, acknowledged warning that a proposed Plan exceeds stated availability; it offers adjustments but never edits the Plan automatically or prevents deliberate activation.
 _Avoid_: Validation error, activation failure, automatic optimization
-_Gap_: the existing warning is non-blocking text with no acknowledgement step and no suggested adjustments.
+_Gap_: iOS wizard and activation/reschedule services now require explicit acknowledgement without writing completion or Trail data; suggested reductions/deferrals and Web parity remain future work.
 
 **Planned Session** `[shipped]`:
-A concrete future learning action within a Plan Phase, with an expected duration and optional expected Proof.
+A concrete future learning action within a Plan Phase, with an expected duration, optional expected Proof, and optional Planning Window.
 _Avoid_: Task, calendar event, Practice Routine
 
 **Carryover** `[partial]`:

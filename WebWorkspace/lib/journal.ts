@@ -81,12 +81,20 @@ export type TrailItem = {
   kind: "practice" | "proof" | "plan" | "review";
 };
 
+export type PlanningWindow = {
+  start: string;
+  end: string;
+  granularity: "day" | "week" | "dateRange";
+};
+
 export type PlanSession = {
   id: string;
   title: string;
   window: string;
   duration: number;
   status: "Done" | "Planned" | "Carryover";
+  /** Legacy demo records omit this until C1 reads the canonical Journal. */
+  planningWindow?: PlanningWindow;
   attentionAt?: string;
 };
 

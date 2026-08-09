@@ -85,7 +85,7 @@ public struct SyncMergeService {
                    server: server,
                    structuralFields: [
                        "planId", "planRevisionID", "planSeriesID", "phaseId", "projectId",
-                       "title", "actionType", "expectedProof", "durationMinutes", "deadline"
+                       "title", "actionType", "expectedProof", "durationMinutes", "planningWindow", "deadline"
                    ],
                    wrap: JournalEntity.plannedSession,
                    now: now

@@ -1,6 +1,6 @@
 # Cross-Surface Migration Roadmap
 
-Status: B4 iOS slice complete; B5 is next
+Status: B5 iOS slice complete; B6 is next
 
 Product decisions: `docs/adr/0001` through `docs/adr/0033`
 Target domain language: `CONTEXT.md`
@@ -289,19 +289,29 @@ regressions are immediately felt.
 ### B5. Planning Windows and Capacity Check
 
 **Current.** Deterministic scheduling from availability already exists, along with EventKit
-confirmation and reconciliation. What is missing is the Planning Window as the primary planning
-unit ahead of exact calendar time (`docs/adr/0026`) and the Capacity Check with a non-blocking
-warning (`docs/adr/0027`).
+confirmation and reconciliation. The iOS slice now persists an explicit `PlanningWindow`
+(day, week, or date range) on draft and Planned Session records, while exact Calendar
+Commitment remains an opt-in boundary (`docs/adr/0026`).
 
-**Work.** Make a flexible target day, week, or date range the default for Phases and Planned
-Sessions, with Calendar Commitment as an explicit opt-in for exact times. Add a deterministic
-Capacity Check comparing estimated Planned Session and Practice Cadence load against stated
-weekly availability, broken down by week and source Project. Show a Capacity Warning that
-offers adjustments, never applies them automatically, and never blocks deliberate activation.
+**Work completed (iOS).** `CapacityCheckService` compares estimated Planned Session and
+operational Practice Cadence load against configured weekly `AvailabilityRule`s. It returns
+stable week/project breakdowns, counts real calendar duration across DST transitions, and
+does not warn when no availability has been stated. The wizard shows the warning and requires
+an explicit acknowledgement; activation and reschedule remain deliberate and non-blocking,
+with no automatic reductions, deferrals, completions, or Trail records. The planning window
+is carried through the Swift Codable contract, CloudRecordMapper, and shared Swift/Web
+contract fixtures; legacy payloads safely decode with a missing window.
 
-**Independent verification.** This is spec §12.6: an overloaded week is identified by week and
-by responsible Project, and activation still succeeds after acknowledgement. The Capacity Check
-is deterministic — same inputs, same output, no AI involvement.
+**Independent verification.** Targeted `PlanningWindowCapacityServiceTests` (including a
+spring-forward DST week), `CoursePlanningServiceTests` (acknowledged activation and
+reschedule), Cloud/current+legacy round trips, shared-contract fixtures, full `swift test`,
+and `WebWorkspace/npm test` cover the deterministic and non-blocking path. Calendar preview
+still performs no EventKit write; only the existing second confirmation applies the change
+set, and denied access or a missing target calendar remains recoverable.
+
+**Release caveat.** These are source, unit, and unsigned-build checks. Physical iPhone
+EventKit authorization, real calendar writes/reconciliation, and cross-surface CloudKit
+convergence still require the D1 device/CloudKit acceptance gate.
 
 **Risk.** Low-medium. Preserve the existing EventKit preview and second-confirmation boundary
 exactly.

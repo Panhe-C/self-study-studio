@@ -827,6 +827,9 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
     public var actionType: ActionType
     public var expectedProof: String?
     public var durationMinutes: Int
+    /// Flexible target range used before an optional exact calendar
+    /// commitment. Nil preserves legacy session payloads.
+    public var planningWindow: PlanningWindow?
     public var deadline: Date?
     public var status: PlannedSessionStatus
     public var completedSessionId: UUID?
@@ -847,6 +850,7 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
         actionType: ActionType,
         expectedProof: String? = nil,
         durationMinutes: Int,
+        planningWindow: PlanningWindow? = nil,
         deadline: Date? = nil,
         status: PlannedSessionStatus = .unscheduled,
         completedSessionId: UUID? = nil,
@@ -873,6 +877,7 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
         self.actionType = actionType
         self.expectedProof = expectedProof?.trimmedForJournal
         self.durationMinutes = durationMinutes
+        self.planningWindow = planningWindow
         self.deadline = deadline
         self.status = status
         self.completedSessionId = completedSessionId
@@ -885,7 +890,7 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id, planId, planRevisionID, planSeriesID, isStructuralLocked
         case phaseId, projectId, title, actionType, expectedProof, durationMinutes
-        case deadline, status, completedSessionId, createdAt, updatedAt, deletedAt
+        case planningWindow, deadline, status, completedSessionId, createdAt, updatedAt, deletedAt
         case schemaVersion
     }
 
@@ -903,6 +908,7 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
             actionType: container.decode(ActionType.self, forKey: .actionType),
             expectedProof: container.decodeIfPresent(String.self, forKey: .expectedProof),
             durationMinutes: container.decode(Int.self, forKey: .durationMinutes),
+            planningWindow: container.decodeIfPresent(PlanningWindow.self, forKey: .planningWindow),
             deadline: container.decodeIfPresent(Date.self, forKey: .deadline),
             status: container.decode(PlannedSessionStatus.self, forKey: .status),
             completedSessionId: container.decodeIfPresent(UUID.self, forKey: .completedSessionId),
@@ -1016,6 +1022,9 @@ public struct CoursePlanDraftSession: Codable, Equatable, Identifiable, Sendable
     public var expectedProof: String?
     public var durationMinutes: Int
     public var deadline: Date?
+    /// Flexible target range used by the planning surface before an optional
+    /// exact Calendar Commitment is generated. Legacy drafts decode nil.
+    public var planningWindow: PlanningWindow?
 
     public init(
         id: String,
@@ -1024,7 +1033,8 @@ public struct CoursePlanDraftSession: Codable, Equatable, Identifiable, Sendable
         actionType: ActionType,
         expectedProof: String? = nil,
         durationMinutes: Int,
-        deadline: Date? = nil
+        deadline: Date? = nil,
+        planningWindow: PlanningWindow? = nil
     ) {
         self.id = id
         self.phaseID = phaseID
@@ -1033,5 +1043,6 @@ public struct CoursePlanDraftSession: Codable, Equatable, Identifiable, Sendable
         self.expectedProof = expectedProof
         self.durationMinutes = durationMinutes
         self.deadline = deadline
+        self.planningWindow = planningWindow
     }
 }

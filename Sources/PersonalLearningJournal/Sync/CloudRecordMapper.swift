@@ -251,6 +251,9 @@ public struct CloudRecordMapper {
         record["actionType"] = value.actionType.rawValue
         record["expectedProof"] = value.expectedProof
         record["durationMinutes"] = value.durationMinutes
+        record["planningWindowStart"] = value.planningWindow?.start
+        record["planningWindowEnd"] = value.planningWindow?.end
+        record["planningWindowGranularity"] = value.planningWindow?.granularity.rawValue
         record["deadline"] = value.deadline
         record["status"] = value.status.rawValue
         record["completedSessionId"] = value.completedSessionId?.uuidString
@@ -554,6 +557,7 @@ public struct CloudRecordMapper {
             actionType: actionType,
             expectedProof: optionalString("expectedProof", from: record),
             durationMinutes: try integer("durationMinutes", from: record),
+            planningWindow: try decodePlanningWindow(from: record),
             deadline: optionalDate("deadline", from: record),
             status: status,
             completedSessionId: try optionalUUID("completedSessionId", from: record),
@@ -562,6 +566,22 @@ public struct CloudRecordMapper {
             deletedAt: optionalDate("deletedAt", from: record),
             schemaVersion: try integer("schemaVersion", from: record)
         )
+    }
+
+    private func decodePlanningWindow(from record: CKRecord) throws -> PlanningWindow? {
+        let start = optionalDate("planningWindowStart", from: record)
+        let end = optionalDate("planningWindowEnd", from: record)
+        let rawGranularity = optionalString("planningWindowGranularity", from: record)
+        guard start != nil || end != nil || rawGranularity != nil else { return nil }
+        guard let start, let end, let rawGranularity,
+              let granularity = PlanningWindowGranularity(rawValue: rawGranularity) else {
+            throw CloudRecordMapperError.invalidField("planningWindow")
+        }
+        do {
+            return try PlanningWindow(start: start, end: end, granularity: granularity)
+        } catch {
+            throw CloudRecordMapperError.invalidField("planningWindow")
+        }
     }
 
     private func decodeAvailabilityRule(_ record: CKRecord, id: UUID) throws -> AvailabilityRule {

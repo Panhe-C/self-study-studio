@@ -403,6 +403,11 @@ final class B2ReviewFixTests: XCTestCase {
             planId: plan.id, planRevisionID: plan.revisionID, planSeriesID: plan.planSeriesID,
             isStructuralLocked: true, phaseId: phase.id, projectId: plan.projectId,
             title: "Read", actionType: .reading, durationMinutes: 30,
+            planningWindow: try PlanningWindow(
+                start: timestamp,
+                end: timestamp.addingTimeInterval(24 * 60 * 60),
+                granularity: .dateRange
+            ),
             createdAt: timestamp, updatedAt: timestamp
         )
         let mapper = CloudRecordMapper()
@@ -426,6 +431,11 @@ final class B2ReviewFixTests: XCTestCase {
         XCTAssertEqual(legacySession.planRevisionID, session.planId)
         XCTAssertEqual(legacySession.planSeriesID, session.planId)
         XCTAssertFalse(legacySession.isStructuralLocked)
+
+        sessionRecord["planningWindowEnd"] = nil
+        XCTAssertThrowsError(try mapper.entity(from: sessionRecord)) { error in
+            XCTAssertEqual(error as? CloudRecordMapperError, .invalidField("planningWindow"))
+        }
     }
 
     func testPlanRevisionCarriesRevisionScopedRoutineAndActivationLocksIt() throws {

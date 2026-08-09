@@ -266,6 +266,15 @@
         "actionType": { "type": "enum", "required": true, "values": ["course", "practice", "output", "reading", "experiment", "review"] },
         "expectedProof": { "type": "string", "required": false, "trim": true },
         "durationMinutes": { "type": "integer", "required": true, "minimum": 1 },
+        "planningWindow": {
+          "type": "object",
+          "required": false,
+          "objectFields": {
+            "start": { "type": "date", "required": true },
+            "end": { "type": "date", "required": true },
+            "granularity": { "type": "enum", "required": true, "values": ["day", "week", "dateRange"] }
+          }
+        },
         "deadline": { "type": "date", "required": false },
         "status": { "type": "enum", "required": true, "values": ["unscheduled", "scheduled", "completed", "skipped", "cancelled"] },
         "completedSessionId": { "type": "uuid", "required": false },

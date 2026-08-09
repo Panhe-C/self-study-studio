@@ -735,6 +735,14 @@ public enum JournalRecordContractDecoder {
             guard let start = date("targetStart"), let end = date("targetEnd"), end >= start else {
                 throw invalid("targetEnd")
             }
+        case .plannedSession:
+            if let window = object["planningWindow"] as? [String: Any] {
+                let start = parseDate(window["start"] as? String ?? "", document: document, format: nil)
+                let end = parseDate(window["end"] as? String ?? "", document: document, format: nil)
+                guard let start, let end, end >= start else {
+                    throw invalid("planningWindow.end")
+                }
+            }
         case .availabilityRule:
             guard let start = integer("startMinute"),
                   let end = integer("endMinute"),

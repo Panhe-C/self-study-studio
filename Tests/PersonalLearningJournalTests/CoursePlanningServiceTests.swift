@@ -173,6 +173,86 @@ final class CoursePlanningServiceTests: XCTestCase {
         XCTAssertEqual(try repository.pendingMutations(limit: 100), pendingBefore)
     }
 
+    func testOverCapacityActivationRequiresAcknowledgementButDoesNotBlockAfterAcknowledgement() throws {
+        var capacityCalendar = Calendar.current
+        capacityCalendar.timeZone = TimeZone.current
+        let weekday = capacityCalendar.component(.weekday, from: timestamp)
+        let availability = try AvailabilityRule(
+            weekday: weekday,
+            startMinute: 18 * 60,
+            endMinute: 18 * 60 + 30,
+            timeZoneIdentifier: capacityCalendar.timeZone.identifier,
+            minimumSessionMinutes: 15,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(
+                projects: [project],
+                availabilityRules: [availability]
+            )
+        )
+        let service = CoursePlanningService(repository: repository, now: { self.timestamp })
+        let draftPlan = try service.saveDraft(input: input, draft: draft)
+        let before = try repository.snapshot()
+
+        XCTAssertThrowsError(
+            try service.activate(
+                draftPlanID: draftPlan.id,
+                expectation: try service.revisionGuardExpectation(for: draftPlan.id)
+            )
+        ) { error in
+            XCTAssertEqual(error as? CoursePlanningError, .capacityAcknowledgementRequired)
+        }
+        XCTAssertEqual(try repository.snapshot(), before)
+
+        _ = try service.activate(
+            draftPlanID: draftPlan.id,
+            expectation: try service.revisionGuardExpectation(for: draftPlan.id),
+            capacityAcknowledged: true
+        )
+        XCTAssertEqual(try repository.snapshot().coursePlans.first?.status, .active)
+    }
+
+    func testOverCapacityRescheduleRequiresAcknowledgementBeforeMutation() throws {
+        let weekday = Calendar.current.component(.weekday, from: timestamp)
+        let availability = try AvailabilityRule(
+            weekday: weekday,
+            startMinute: 18 * 60,
+            endMinute: 18 * 60 + 30,
+            timeZoneIdentifier: Calendar.current.timeZone.identifier,
+            minimumSessionMinutes: 15,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(
+            snapshot: JournalSnapshot(projects: [project], availabilityRules: [availability])
+        )
+        let service = CoursePlanningService(repository: repository, now: { self.timestamp })
+        let plan = try service.saveDraft(input: input, draft: draft)
+        _ = try service.activate(draftPlanID: plan.id, capacityAcknowledged: true)
+        let session = try XCTUnwrap(try repository.snapshot().plannedSessions.first)
+        let before = try repository.snapshot()
+
+        XCTAssertThrowsError(
+            try service.reschedule(
+                plannedSessionID: session.id,
+                newDeadline: timestamp.addingTimeInterval(3 * 86_400)
+            )
+        ) { error in
+            XCTAssertEqual(error as? CoursePlanningError, .capacityAcknowledgementRequired)
+        }
+        XCTAssertEqual(try repository.snapshot(), before)
+
+        let updated = try service.reschedule(
+            plannedSessionID: session.id,
+            newDeadline: timestamp.addingTimeInterval(3 * 86_400),
+            capacityAcknowledged: true
+        )
+        XCTAssertEqual(updated.status, .scheduled)
+        XCTAssertEqual(updated.deadline, timestamp.addingTimeInterval(3 * 86_400))
+    }
+
     private let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
     private let projectID = UUID()
 

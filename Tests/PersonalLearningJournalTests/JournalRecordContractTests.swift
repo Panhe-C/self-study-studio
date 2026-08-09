@@ -113,6 +113,7 @@ final class JournalRecordContractTests: XCTestCase {
             "project-invalid-safe-integer",
             "proof-invalid-int64",
             "session-invalid-date",
+            "planned-session-invalid-planning-window",
             "proof-invalid-artifact",
             "evidence-contract-invalid-trigger",
             "practice-routine-invalid-reminder",

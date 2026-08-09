@@ -671,17 +671,51 @@ public final class JournalViewModel: ObservableObject {
         }
     }
 
+    /// Runs the deterministic weekly Capacity Check for an editable draft.
+    /// The projection is read-only: it never creates completion, Trail, or
+    /// calendar records. Callers may pass the calendar-configured rules when
+    /// the wizard is open; otherwise persisted rules are used.
+    public func capacityCheck(
+        draft: CoursePlanDraft,
+        input: CoursePlanningInput,
+        availabilityRules: [AvailabilityRule]? = nil,
+        calendar: Calendar = .current
+    ) -> CapacityCheckResult {
+        CapacityCheckService(calendar: calendar).check(
+            draft: draft,
+            input: input,
+            practiceRoutines: snapshot.operationalPracticeRoutines,
+            availabilityRules: availabilityRules
+                ?? snapshot.availabilityRules.filter { $0.deletedAt == nil }
+        )
+    }
+
+    /// Runs the same projection for a persisted Learning Plan revision.
+    public func capacityCheck(
+        for planID: UUID,
+        availabilityRules: [AvailabilityRule]? = nil,
+        calendar: Calendar = .current
+    ) -> CapacityCheckResult {
+        CapacityCheckService(calendar: calendar).check(
+            snapshot: snapshot,
+            planID: planID,
+            availabilityRules: availabilityRules
+        )
+    }
+
     @discardableResult
     public func activateCoursePlan(
         draftPlanID: UUID,
-        expectation: RevisionGuardExpectation
+        expectation: RevisionGuardExpectation,
+        capacityAcknowledged: Bool = false
     ) throws -> CanonicalNextStepProposal? {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
         let proposal = try coursePlanningService.activate(
             draftPlanID: draftPlanID,
-            expectation: expectation
+            expectation: expectation,
+            capacityAcknowledged: capacityAcknowledged
         )
         pendingCanonicalNextStepProposal = proposal
         if draftCoursePlan?.id == draftPlanID {
@@ -697,13 +731,18 @@ public final class JournalViewModel: ObservableObject {
     /// it immediately before activation for older integrations.
     @discardableResult
     public func activateCoursePlan(
-        draftPlanID: UUID
+        draftPlanID: UUID,
+        capacityAcknowledged: Bool = false
     ) throws -> CanonicalNextStepProposal? {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
         let expectation = try coursePlanningService.revisionGuardExpectation(for: draftPlanID)
-        return try activateCoursePlan(draftPlanID: draftPlanID, expectation: expectation)
+        return try activateCoursePlan(
+            draftPlanID: draftPlanID,
+            expectation: expectation,
+            capacityAcknowledged: capacityAcknowledged
+        )
     }
 
     public func revisionGuardExpectation(for planID: UUID) throws -> RevisionGuardExpectation {
@@ -1376,14 +1415,36 @@ public final class JournalViewModel: ObservableObject {
     @discardableResult
     public func reschedulePlannedSession(
         _ id: UUID,
-        newDeadline: Date
+        newDeadline: Date,
+        capacityAcknowledged: Bool = false,
+        calendar: Calendar = .current
     ) throws -> PlannedSession {
         guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
+        if let session = snapshot.plannedSessions.first(where: { $0.id == id }),
+           let plan = snapshot.coursePlans.first(where: { $0.id == session.planId }) {
+            var candidate = session
+            candidate.deadline = newDeadline
+            var candidateSessions = snapshot.plannedSessions.filter { $0.planId == plan.id }
+            if let index = candidateSessions.firstIndex(where: { $0.id == id }) {
+                candidateSessions[index] = candidate
+            }
+            let result = CapacityCheckService(calendar: calendar).check(
+                plan: plan,
+                phases: snapshot.planPhases.filter { $0.planId == plan.id },
+                sessions: candidateSessions,
+                practiceRoutines: snapshot.operationalPracticeRoutines,
+                availabilityRules: snapshot.availabilityRules.filter { $0.deletedAt == nil }
+            )
+            guard capacityAcknowledged || !result.requiresAcknowledgement else {
+                throw CoursePlanningError.capacityAcknowledgementRequired
+            }
+        }
         let session = try coursePlanningService.reschedule(
             plannedSessionID: id,
-            newDeadline: newDeadline
+            newDeadline: newDeadline,
+            capacityAcknowledged: capacityAcknowledged
         )
         refresh()
         return session

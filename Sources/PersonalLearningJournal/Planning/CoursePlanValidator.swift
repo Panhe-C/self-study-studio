@@ -46,6 +46,7 @@ public struct CoursePlanValidator: Sendable {
 
         var identifiers = Set<String>()
         let phaseIdentifiers = Set(draft.phases.map(\.id))
+        let phasesByID = Dictionary(uniqueKeysWithValues: draft.phases.map { ($0.id, $0) })
         for phase in draft.phases {
             if phase.id.isEmpty || !identifiers.insert(phase.id).inserted {
                 errors.append(.duplicateDraftID(phase.id))
@@ -81,6 +82,15 @@ public struct CoursePlanValidator: Sendable {
             if let deadline = session.deadline,
                deadline < input.startsOn || input.deadline.map({ deadline > $0 }) == true {
                 errors.append(.invalidDateRange)
+            }
+            if let window = session.planningWindow {
+                if window.start < input.startsOn
+                    || input.deadline.map({ window.end > $0 }) == true
+                    || phasesByID[session.phaseID].map({
+                        window.start < $0.targetStart || window.end > $0.targetEnd
+                    }) == true {
+                    errors.append(.invalidDateRange)
+                }
             }
         }
 

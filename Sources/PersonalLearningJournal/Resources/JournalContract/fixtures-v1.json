@@ -510,6 +510,49 @@
       }
     },
     {
+      "id": "planned-session-planning-window",
+      "kind": "plannedSession",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000022",
+        "planId": "00000000-0000-0000-0000-000000000010",
+        "phaseId": "00000000-0000-0000-0000-000000000011",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "title": "Review the merge loop",
+        "actionType": "review",
+        "durationMinutes": 30,
+        "planningWindow": {
+          "start": "2026-01-05T00:00:00Z",
+          "end": "2026-01-11T23:59:59Z",
+          "granularity": "week"
+        },
+        "status": "unscheduled",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "schemaVersion": 3
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000022",
+        "planId": "00000000-0000-0000-0000-000000000010",
+        "planRevisionID": "00000000-0000-0000-0000-000000000010",
+        "planSeriesID": "00000000-0000-0000-0000-000000000010",
+        "isStructuralLocked": false,
+        "phaseId": "00000000-0000-0000-0000-000000000011",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "title": "Review the merge loop",
+        "actionType": "review",
+        "durationMinutes": 30,
+        "planningWindow": {
+          "start": "2026-01-05T00:00:00Z",
+          "end": "2026-01-11T23:59:59Z",
+          "granularity": "week"
+        },
+        "status": "unscheduled",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "schemaVersion": 3
+      }
+    },
+    {
       "id": "availability-rule",
       "kind": "availabilityRule",
       "payload": {
@@ -807,6 +850,28 @@
       "id": "planned-session-missing-required",
       "kind": "plannedSession",
       "payload": {}
+    },
+    {
+      "id": "planned-session-invalid-planning-window",
+      "kind": "plannedSession",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000023",
+        "planId": "00000000-0000-0000-0000-000000000010",
+        "phaseId": "00000000-0000-0000-0000-000000000011",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "title": "Invalid window",
+        "actionType": "course",
+        "durationMinutes": 30,
+        "planningWindow": {
+          "start": "2026-01-12T00:00:00Z",
+          "end": "2026-01-11T23:59:59Z",
+          "granularity": "dateRange"
+        },
+        "status": "unscheduled",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "schemaVersion": 3
+      }
     },
     {
       "id": "availability-rule-missing-required",

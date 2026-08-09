@@ -43,6 +43,7 @@ struct CoursePlanWizardView: View {
     @State private var showingScheduleDraft = false
     @State private var isScheduling = false
     @State private var revisionGuardExpectation: RevisionGuardExpectation?
+    @State private var capacityAcknowledged = false
 
     init(
         viewModel: JournalViewModel,
@@ -141,11 +142,13 @@ struct CoursePlanWizardView: View {
             }
             .onChange(of: input) { _, updated in
                 viewModel.rememberCoursePlanningInput(updated)
+                capacityAcknowledged = false
             }
             .onChange(of: draft) { _, _ in
                 if persistedDraftPlan != nil {
                     hasEditedDraft = true
                 }
+                capacityAcknowledged = false
             }
             .task {
                 captureRevisionGuardExpectationIfNeeded()
@@ -265,6 +268,30 @@ struct CoursePlanWizardView: View {
                     ForEach(draft.warnings, id: \.self) { Text($0).foregroundStyle(.orange) }
                 }
             }
+            let capacity = capacityCheck(for: draft)
+            if capacity.requiresAcknowledgement {
+                Section("Capacity warning") {
+                    Text("This plan exceeds the configured weekly availability. You can still activate it after acknowledging; no sessions or calendar events will be changed automatically.")
+                        .foregroundStyle(.orange)
+                    ForEach(capacity.warnings) { warning in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(warning.message)
+                            Text("Projects: \(warning.projectIDs.map(\.uuidString).joined(separator: ", "))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Button {
+                        capacityAcknowledged.toggle()
+                    } label: {
+                        Label(
+                            capacityAcknowledged ? "Capacity warning acknowledged" : "Acknowledge capacity warning",
+                            systemImage: capacityAcknowledged ? "checkmark.circle.fill" : "exclamationmark.triangle"
+                        )
+                    }
+                    .foregroundStyle(capacityAcknowledged ? .green : .orange)
+                }
+            }
             Section("Will create") {
                 ForEach(draft.phases) { phase in
                     Label(phase.title, systemImage: "flag")
@@ -289,6 +316,7 @@ struct CoursePlanWizardView: View {
                         Label("Activate Learning Plan", systemImage: "checkmark.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(capacity.requiresAcknowledgement && !capacityAcknowledged)
                 }
             }
         } else {
@@ -313,6 +341,16 @@ struct CoursePlanWizardView: View {
             deadline: hasDeadline ? deadline : nil,
             weeklyBudgetMinutes: weeklyBudgetMinutes,
             preferredSessionMinutes: preferredSessionMinutes
+        )
+    }
+
+    private func capacityCheck(for draft: CoursePlanDraft) -> CapacityCheckResult {
+        let configuredRules = try? calendarViewModel.schedulingConfiguration().availabilityRules
+        return viewModel.capacityCheck(
+            draft: draft,
+            input: input,
+            availabilityRules: configuredRules,
+            calendar: Calendar.current
         )
     }
 
@@ -342,7 +380,8 @@ struct CoursePlanWizardView: View {
                 ?? viewModel.revisionGuardExpectation(for: plan.id)
             try viewModel.activateCoursePlan(
                 draftPlanID: plan.id,
-                expectation: expectation
+                expectation: expectation,
+                capacityAcknowledged: capacityAcknowledged
             )
             activationComplete = true
         } catch {
@@ -379,6 +418,8 @@ struct CoursePlanWizardView: View {
             switch error {
             case .configurationRequired:
                 return "Add an AI endpoint, model, and key in AI Settings before generating."
+            case .capacityAcknowledgementRequired:
+                return "Acknowledge the capacity warning before activating this plan. No plan or calendar data was changed."
             case .invalidDraft(let errors):
                 return errors.map(errorText).joined(separator: "\n")
             case .providerUnavailable:
@@ -436,7 +477,8 @@ struct CoursePlanWizardView: View {
                     actionType: $0.actionType,
                     expectedProof: $0.expectedProof,
                     durationMinutes: $0.durationMinutes,
-                    deadline: $0.deadline
+                    deadline: $0.deadline,
+                    planningWindow: $0.planningWindow
                 )
             }
         )
@@ -533,6 +575,25 @@ private struct DraftEditor: View {
                 }
                 Stepper("Duration: \(draft.sessions[index].durationMinutes) min", value: $draft.sessions[index].durationMinutes, in: 15...240, step: 15)
                 TextField("Expected proof", text: optionalTextBinding(for: index), axis: .vertical)
+                Toggle("Use Planning Window", isOn: planningWindowEnabledBinding(for: index))
+                if draft.sessions[index].planningWindow != nil {
+                    Picker("Granularity", selection: planningWindowGranularityBinding(for: index)) {
+                        ForEach(PlanningWindowGranularity.allCases, id: \.self) { granularity in
+                            Text(granularity.title).tag(granularity)
+                        }
+                    }
+                    DatePicker(
+                        "Window start",
+                        selection: planningWindowStartBinding(for: index),
+                        displayedComponents: .date
+                    )
+                    DatePicker(
+                        "Window end",
+                        selection: planningWindowEndBinding(for: index),
+                        in: (draft.sessions[index].planningWindow?.start ?? planInput.startsOn)...,
+                        displayedComponents: .date
+                    )
+                }
             }
         }
 
@@ -547,7 +608,12 @@ private struct DraftEditor: View {
                         actionType: .course,
                         expectedProof: planInput.expectedOutcome,
                         durationMinutes: planInput.preferredSessionMinutes,
-                        deadline: planInput.deadline
+                        deadline: planInput.deadline,
+                        planningWindow: try? PlanningWindow(
+                            start: phase.targetStart,
+                            end: phase.targetEnd,
+                            granularity: .dateRange
+                        )
                     )
                 )
             } label: {
@@ -561,6 +627,77 @@ private struct DraftEditor: View {
         Binding(
             get: { draft.sessions[index].expectedProof ?? "" },
             set: { draft.sessions[index].expectedProof = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private func planningWindowEnabledBinding(for index: Int) -> Binding<Bool> {
+        Binding(
+            get: { draft.sessions[index].planningWindow != nil },
+            set: { enabled in
+                guard draft.sessions.indices.contains(index) else { return }
+                if enabled {
+                    let phase = draft.phases.first { $0.id == draft.sessions[index].phaseID }
+                    draft.sessions[index].planningWindow = try? PlanningWindow(
+                        start: phase?.targetStart ?? planInput.startsOn,
+                        end: phase?.targetEnd ?? planInput.deadline ?? planInput.startsOn,
+                        granularity: .dateRange
+                    )
+                } else {
+                    draft.sessions[index].planningWindow = nil
+                }
+            }
+        )
+    }
+
+    private func planningWindowGranularityBinding(for index: Int) -> Binding<PlanningWindowGranularity> {
+        Binding(
+            get: { draft.sessions[index].planningWindow?.granularity ?? .dateRange },
+            set: { granularity in
+                guard let window = draft.sessions[index].planningWindow else { return }
+                draft.sessions[index].planningWindow = try? PlanningWindow(
+                    start: window.start,
+                    end: window.end,
+                    granularity: granularity
+                )
+            }
+        )
+    }
+
+    private func planningWindowStartBinding(for index: Int) -> Binding<Date> {
+        Binding(
+            get: {
+                draft.sessions[index].planningWindow?.start
+                    ?? draft.phases.first(where: { $0.id == draft.sessions[index].phaseID })?.targetStart
+                    ?? planInput.startsOn
+            },
+            set: { start in
+                guard let window = draft.sessions[index].planningWindow else { return }
+                let end = max(window.end, start)
+                draft.sessions[index].planningWindow = try? PlanningWindow(
+                    start: start,
+                    end: end,
+                    granularity: window.granularity
+                )
+            }
+        )
+    }
+
+    private func planningWindowEndBinding(for index: Int) -> Binding<Date> {
+        Binding(
+            get: {
+                draft.sessions[index].planningWindow?.end
+                    ?? draft.phases.first(where: { $0.id == draft.sessions[index].phaseID })?.targetEnd
+                    ?? planInput.deadline
+                    ?? planInput.startsOn
+            },
+            set: { end in
+                guard let window = draft.sessions[index].planningWindow else { return }
+                draft.sessions[index].planningWindow = try? PlanningWindow(
+                    start: window.start,
+                    end: max(window.start, end),
+                    granularity: window.granularity
+                )
+            }
         )
     }
 

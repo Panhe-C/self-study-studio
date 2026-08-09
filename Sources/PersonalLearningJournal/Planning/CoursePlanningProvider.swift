@@ -2,6 +2,9 @@ import Foundation
 
 public enum CoursePlanningError: Error, Equatable, Sendable {
     case configurationRequired
+    /// Activation remains possible after the learner explicitly acknowledges
+    /// a deterministic weekly capacity warning.
+    case capacityAcknowledgementRequired
     case invalidDraft([CoursePlanningValidationError])
     case providerUnavailable
     case projectMismatch
