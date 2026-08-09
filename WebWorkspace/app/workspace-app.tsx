@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   cloudKitConfig,
+  configureCloudKit,
   hasCloudKitConfiguration,
   inspectCloudKitJournal,
+  waitForCloudKit,
   type CloudKitDiagnostic,
 } from "../lib/cloudkit";
 import {
   readCloudKitJournal,
+  type JournalReadRecord,
   type JournalReadResult,
 } from "../lib/journal-reader";
 import {
@@ -28,6 +31,22 @@ import {
   type WorkspaceNavigationState,
 } from "../lib/workspace-navigation";
 import { PortfolioDashboard } from "./portfolio-dashboard";
+import {
+  createWebJournalWriter,
+  type CanonicalWriteRecord,
+  type WebWriteResult,
+} from "../lib/journal-writer";
+import {
+  BrowserRecoverableDraftStore,
+  createRecoverableDraft,
+  type RecoverableDraft,
+  type RecoverableDraftStore,
+} from "../lib/recoverable-drafts";
+import {
+  resolveSyncConflict,
+  type SyncConflictResolution,
+  type WebSyncConflict,
+} from "../lib/sync-conflicts";
 
 const navigation: Array<{ id: WorkspaceSection; label: string; glyph: string }> = [
   { id: "dashboard", label: "Dashboard", glyph: "⌂" },
@@ -134,6 +153,39 @@ function formatMinutes(minutes: number) {
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 
+type WebJournalWriter = ReturnType<typeof createWebJournalWriter>;
+
+function newRecordID() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return "00000000-0000-4000-8000-000000000001";
+}
+
+function canonicalRecord(record: JournalReadRecord): CanonicalWriteRecord {
+  return {
+    kind: record.kind,
+    recordName: record.recordName,
+    recordType: record.recordType,
+    ...(record.recordChangeTag ? { recordChangeTag: record.recordChangeTag } : {}),
+    payload: structuredClone(record.payload),
+  };
+}
+
+function asWriteResultMessage(result: WebWriteResult) {
+  switch (result.status) {
+    case "committed":
+      return "CloudKit committed the canonical change.";
+    case "conflict":
+      return "CloudKit rejected the stale revision. Choose an explicit conflict action.";
+    case "signed-out":
+      return result.message;
+    case "blocked":
+    case "cancelled":
+    case "partial":
+    case "error":
+      return result.message;
+  }
+}
+
 export function WorkspaceApp({
   initialAsOf,
   initialTimeZone,
@@ -151,6 +203,11 @@ export function WorkspaceApp({
   const [dataMode, setDataMode] = useState<"demo" | "real">("demo");
   const [realProjection, setRealProjection] = useState<JournalProjection | null>(null);
   const [realRead, setRealRead] = useState<JournalReadResult | null>(null);
+  const [realWriter, setRealWriter] = useState<WebJournalWriter | null>(null);
+  const [conflicts, setConflicts] = useState<WebSyncConflict[]>([]);
+  const [writeMessage, setWriteMessage] = useState<string | null>(null);
+  const [draftStore] = useState<RecoverableDraftStore>(() => new BrowserRecoverableDraftStore());
+  const [drafts, setDrafts] = useState<RecoverableDraft[]>([]);
   const [realDashboardSnapshot, setRealDashboardSnapshot] =
     useState<DashboardSnapshot>(() =>
       createDashboardSnapshot({ asOf: initialAsOf, state: "loading" }),
@@ -180,6 +237,10 @@ export function WorkspaceApp({
     useState<CloudKitDiagnostic>(initialDiagnostic);
   const [isCheckingCloud, setIsCheckingCloud] = useState(false);
   const [showDraft, setShowDraft] = useState(false);
+
+  useEffect(() => {
+    void draftStore.list().then(setDrafts).catch(() => setDrafts([]));
+  }, [draftStore]);
 
   useEffect(() => {
     if (!localState) return;
@@ -212,6 +273,18 @@ export function WorkspaceApp({
       setRealRead(result);
       setDiagnostic(diagnosticFromJournalRead(result));
       if (["ready", "empty", "partial"].includes(result.status)) {
+        try {
+          const cloudKit = await waitForCloudKit();
+          configureCloudKit(cloudKit);
+          setRealWriter(createWebJournalWriter({
+            mode: "real",
+            config: cloudKitConfig,
+            container: cloudKit.getDefaultContainer(),
+            draftStore,
+          }));
+        } catch {
+          setRealWriter(null);
+        }
         const projection = projectJournalRecords(result.records, { asOf: initialAsOf });
         setRealProjection(projection);
         setRealDashboardSnapshot(
@@ -222,6 +295,7 @@ export function WorkspaceApp({
           }),
         );
       } else {
+        setRealWriter(null);
         setRealProjection(null);
         setRealDashboardSnapshot(
           createDashboardSnapshot({ asOf: initialAsOf, state: "error", message: result.message }),
@@ -238,6 +312,9 @@ export function WorkspaceApp({
     if (nextMode === "demo") {
       setRealRead(null);
       setRealProjection(null);
+      setRealWriter(null);
+      setConflicts([]);
+      setWriteMessage(null);
       setDiagnostic(initialDiagnostic);
       return;
     }
@@ -258,6 +335,73 @@ export function WorkspaceApp({
     }
   }
 
+  async function refreshDrafts() {
+    try {
+      setDrafts(await draftStore.list());
+    } catch {
+      setDrafts([]);
+    }
+  }
+
+  async function handleWriteResult(result: WebWriteResult) {
+    setWriteMessage(asWriteResultMessage(result));
+    if (result.status === "conflict") {
+      setConflicts((current) => [result.conflict, ...current.filter((item) => item.id !== result.conflict.id)]);
+      setSection("sync");
+    }
+    await refreshDrafts();
+    if (result.status === "committed" && dataMode === "real") await loadRealJournal();
+  }
+
+  async function updateNextStep(projectId: string, nextStep: string) {
+    const value = nextStep.trim();
+    if (!value) return;
+    if (dataMode !== "real" || !realWriter || !realRead) {
+      setWriteMessage("Demo data is noncanonical; switch to Real journal to write a guarded Next Step.");
+      return;
+    }
+    const source = realRead.records.find((record) => record.kind === "project" && record.recordName === projectId);
+    if (!source || !source.recordChangeTag) {
+      setWriteMessage("This Project has no CloudKit change tag, so the guarded write is unavailable.");
+      return;
+    }
+    const next = canonicalRecord({
+      ...source,
+      payload: { ...source.payload, currentNextStep: value, updatedAt: new Date().toISOString() },
+    });
+    const result = await realWriter.writeBatch({
+      operation: "updateNextStep",
+      records: [next],
+      guardedRecords: [{
+        record: next,
+        role: "target",
+        expectation: {
+          baseRevisionID: projectId,
+          baseRecordChangeTag: source.recordChangeTag,
+          targetRevisionID: projectId,
+          targetRecordChangeTag: source.recordChangeTag,
+          recordState: "existingRecord",
+          targetRecordState: "existingRecord",
+        },
+      }],
+    });
+    await handleWriteResult(result);
+  }
+
+  function handleConflictResolution(conflict: WebSyncConflict, resolution: SyncConflictResolution) {
+    try {
+      resolveSyncConflict(conflict, resolution);
+      if (resolution === "keepRemote" || resolution === "discardLocal") {
+        setConflicts((current) => current.filter((item) => item.id !== conflict.id));
+        setWriteMessage(resolution === "keepRemote" ? "Remote value kept; no Trail event was created." : "Local edit discarded; no Trail event was created.");
+      } else {
+        setWriteMessage(`${resolution === "rebaseLocal" ? "Rebase" : "Fork"} is staged as an explicit decision; publish a new canonical revision from the editor.`);
+      }
+    } catch (error) {
+      setWriteMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   const sectionTitle =
     section === "project"
       ? selectedDemo?.project.name ?? (dataMode === "real" ? "Real journal" : "Project")
@@ -266,9 +410,11 @@ export function WorkspaceApp({
   const provenanceLabel = dataMode === "real"
     ? realRead?.status === "blocked"
       ? "Real journal · configuration blocked"
-      : realRead?.status === "signed-out"
-        ? "Real journal · sign-in required"
-        : "Real journal · CloudKit private database · read-only"
+        : realRead?.status === "signed-out"
+          ? "Real journal · sign-in required"
+        : realWriter
+          ? "Real journal · CloudKit private database · guarded writes"
+          : "Real journal · CloudKit private database · read-only"
     : "Demo data · deterministic fixture";
 
   return (
@@ -393,8 +539,9 @@ export function WorkspaceApp({
         <div className={`workspace-provenance ${dataMode}`} role="status">
           <span>{provenanceLabel}</span>
           {dataMode === "real" && realRead?.recordCount !== undefined && (
-            <small>{realRead.recordCount} canonical records · no Web writes</small>
+            <small>{realRead.recordCount} canonical records · {realWriter ? "writes require revision guards" : "writes unavailable"}</small>
           )}
+          {writeMessage && <small role="status">{writeMessage}</small>}
         </div>
 
         <div className="content-scroll">
@@ -418,6 +565,9 @@ export function WorkspaceApp({
                 tab={projectTab}
                 setTab={setProjectTab}
                 showDraft={() => setShowDraft(true)}
+                dataMode={dataMode}
+                canWrite={Boolean(realWriter)}
+                onUpdateNextStep={updateNextStep}
               />
             ) : (
               <RealJournalEmptyState mode={dataMode} />
@@ -430,12 +580,29 @@ export function WorkspaceApp({
               isChecking={isCheckingCloud}
               runCheck={runCloudKitCheck}
               dataMode={dataMode}
+              conflicts={conflicts}
+              drafts={drafts}
+              onResolveConflict={handleConflictResolution}
             />
           )}
         </div>
       </main>
 
-      {showDraft && selectedDemo && <PlanDraftSheet demo={selectedDemo} close={() => setShowDraft(false)} />}
+      {showDraft && selectedDemo && (
+        <PlanDraftSheet
+          demo={selectedDemo}
+          close={() => setShowDraft(false)}
+          dataMode={dataMode}
+          writer={realWriter}
+          records={realRead?.records ?? []}
+          onResult={handleWriteResult}
+          onDraftSaved={async (draft) => {
+            await draftStore.save(draft);
+            await refreshDrafts();
+            setWriteMessage("Recoverable draft saved locally; it clears only after CloudKit commits.");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -494,11 +661,17 @@ function ProjectWorkspace({
   tab,
   setTab,
   showDraft,
+  dataMode,
+  canWrite,
+  onUpdateNextStep,
 }: {
   demo: ProjectDemo;
   tab: ProjectTab;
   setTab: (tab: ProjectTab) => void;
   showDraft: () => void;
+  dataMode: "demo" | "real";
+  canWrite: boolean;
+  onUpdateNextStep: (projectId: string, nextStep: string) => Promise<void>;
 }) {
   const project = demo.project;
   return (
@@ -514,7 +687,7 @@ function ProjectWorkspace({
           <small className="demo-source">{demo.sourceLabel}</small>
         </div>
         <div className="project-hero-actions">
-          <button className="secondary-button">Add proof</button>
+          <button className="secondary-button" disabled={dataMode === "demo"}>Add proof</button>
           <button className="primary-button" onClick={showDraft}>Adjust plan</button>
         </div>
       </section>
@@ -534,8 +707,8 @@ function ProjectWorkspace({
         ))}
       </div>
 
-      {tab === "overview" && <ProjectOverview demo={demo} />}
-      {tab === "plan" && <PlanPanel demo={demo} showDraft={showDraft} />}
+      {tab === "overview" && <ProjectOverview demo={demo} dataMode={dataMode} canWrite={canWrite} onUpdateNextStep={onUpdateNextStep} />}
+      {tab === "plan" && <PlanPanel demo={demo} showDraft={showDraft} dataMode={dataMode} />}
       {tab === "practice" && <PracticePanel demo={demo} />}
       {tab === "proof" && <ProofPanel demo={demo} />}
       {tab === "trail" && <TrailPanel demo={demo} />}
@@ -544,8 +717,28 @@ function ProjectWorkspace({
   );
 }
 
-function ProjectOverview({ demo }: { demo: ProjectDemo }) {
+function ProjectOverview({
+  demo,
+  dataMode,
+  canWrite,
+  onUpdateNextStep,
+}: {
+  demo: ProjectDemo;
+  dataMode: "demo" | "real";
+  canWrite: boolean;
+  onUpdateNextStep: (projectId: string, nextStep: string) => Promise<void>;
+}) {
   const project = demo.project;
+  const [nextStep, setNextStep] = useState(project.nextStep);
+  const [isSaving, setIsSaving] = useState(false);
+  async function saveNextStep() {
+    setIsSaving(true);
+    try {
+      await onUpdateNextStep(project.id, nextStep);
+    } finally {
+      setIsSaving(false);
+    }
+  }
   return (
     <div className="project-content-grid">
       <div className="project-main-column page-stack small-gap">
@@ -590,8 +783,10 @@ function ProjectOverview({ demo }: { demo: ProjectDemo }) {
       <aside className="project-side-column page-stack small-gap">
         <article className="card next-step-card">
           <span className="mini-label">Canonical next step</span>
-          <h3>{project.nextStep}</h3>
-          <button className="dark-button">Make Up Next</button>
+          <input aria-label="Canonical next step" value={nextStep} onChange={(event) => setNextStep(event.target.value)} />
+          <button className="dark-button" disabled={dataMode !== "real" || !canWrite || isSaving} onClick={() => void saveNextStep()}>
+            {isSaving ? "Saving…" : dataMode === "real" && canWrite ? "Save guarded Next Step" : "Real journal write only"}
+          </button>
         </article>
         <article className="card">
           <div className="section-heading compact">
@@ -617,7 +812,7 @@ function ProjectOverview({ demo }: { demo: ProjectDemo }) {
   );
 }
 
-function PlanPanel({ demo, showDraft }: { demo: ProjectDemo; showDraft: () => void }) {
+function PlanPanel({ demo, showDraft, dataMode }: { demo: ProjectDemo; showDraft: () => void; dataMode: "demo" | "real" }) {
   return (
     <div className="panel-layout">
       <section className="card plan-timeline-card">
@@ -657,7 +852,7 @@ function PlanPanel({ demo, showDraft }: { demo: ProjectDemo; showDraft: () => vo
         <article className="card revision-card">
           <span className="mini-label">Plan history</span>
           <h3>{demo.planRevision} published revision</h3>
-          <p>Imported as deterministic Demo data · no structural conflicts.</p>
+          <p>{dataMode === "real" ? "Revision identity and structural changes are guarded in CloudKit." : "Imported as deterministic Demo data · no structural conflicts."}</p>
           <button className="secondary-button">View history</button>
         </article>
       </aside>
@@ -826,11 +1021,17 @@ function SyncDiagnostics({
   isChecking,
   runCheck,
   dataMode,
+  conflicts,
+  drafts,
+  onResolveConflict,
 }: {
   diagnostic: CloudKitDiagnostic;
   isChecking: boolean;
   runCheck: () => void;
   dataMode: "demo" | "real";
+  conflicts: WebSyncConflict[];
+  drafts: RecoverableDraft[];
+  onResolveConflict: (conflict: WebSyncConflict, resolution: SyncConflictResolution) => void;
 }) {
   const recordTypes = Object.entries(diagnostic.recordTypes ?? {}).sort((a, b) => b[1] - a[1]);
   return (
@@ -839,7 +1040,7 @@ function SyncDiagnostics({
         <div>
           <span className="mini-label">Direct journal access</span>
           <h2>Sync & conflicts</h2>
-          <p>{dataMode === "real" ? "Real mode reads the same private CloudKit zone used by the iPhone App. Web writes remain disabled." : "Run a read-only diagnostic before switching to Real journal mode."}</p>
+          <p>{dataMode === "real" ? "Real mode reads and writes the same private CloudKit zone used by the iPhone App. Every write is atomic and change-tag guarded." : "Run a read-only diagnostic before switching to Real journal mode."}</p>
         </div>
         <button className="primary-button" onClick={runCheck} disabled={isChecking}>
           {isChecking ? "Checking…" : "Run CloudKit check"}
@@ -893,16 +1094,137 @@ function SyncDiagnostics({
         </section>
       )}
 
-      <section className="card conflict-empty-state">
-        <span className="conflict-icon">↻</span>
-        <div><h3>{dataMode === "real" ? "Real journal read is read-only" : "No Web conflicts loaded"}</h3><p>{dataMode === "real" ? "No Web writes or silent demo fallback occur in this mode. Same-field and structural collisions require a later explicit decision flow." : "Same-field and structural collisions will appear here. Last-write-wins is never applied silently."}</p></div>
-      </section>
+      {drafts.length > 0 && (
+        <section className="card recoverable-drafts-card">
+          <div className="section-heading compact"><div><span className="mini-label">Recoverable drafts</span><h3>{drafts.length} unfinished edit{drafts.length === 1 ? "" : "s"}</h3></div><span className="soft-badge">local only</span></div>
+          <p>Drafts survive a browser restart and clear only after CloudKit reports a semantic commit.</p>
+          <div className="draft-list">{drafts.map((draft) => <div className="draft-list-row" key={draft.id}><strong>{draft.kind}</strong><span>{draft.status}</span><small>{new Date(draft.updatedAt).toLocaleString()}</small></div>)}</div>
+        </section>
+      )}
+
+      {conflicts.length > 0 ? conflicts.map((conflict) => (
+        <section className="card sync-conflict-card" key={conflict.id}>
+          <div className="section-heading compact"><div><span className="mini-label">{conflict.structural ? "Structural conflict" : "Same-field conflict"} · {conflict.kind}</span><h3>CloudKit needs an explicit decision</h3></div><span className="soft-badge">no silent LWW</span></div>
+          <div className="conflict-columns">
+            <div><span className="mini-label">Base</span><pre>{JSON.stringify(conflict.basePayload, null, 2)}</pre></div>
+            <div><span className="mini-label">Local Web edit</span><pre>{JSON.stringify(conflict.localPayload, null, 2)}</pre></div>
+            <div><span className="mini-label">Remote CloudKit</span><pre>{JSON.stringify(conflict.serverPayload, null, 2)}</pre></div>
+          </div>
+          <p className="conflict-fields">Conflicting fields: {conflict.conflictingFields.join(", ") || "structural identity"}</p>
+          <div className="conflict-actions">
+            {(["keepRemote", "discardLocal", "rebaseLocal", "fork"] as SyncConflictResolution[]).map((resolution) => <button key={resolution} className={resolution === "keepRemote" ? "secondary-button" : "text-button"} onClick={() => onResolveConflict(conflict, resolution)}>{resolution === "keepRemote" ? "Keep remote" : resolution === "discardLocal" ? "Discard local" : resolution === "rebaseLocal" ? "Rebase local" : "Fork revision"}</button>)}
+          </div>
+        </section>
+      )) : (
+        <section className="card conflict-empty-state">
+          <span className="conflict-icon">↻</span>
+          <div><h3>{dataMode === "real" ? "No unresolved CloudKit conflicts" : "No Web conflicts loaded"}</h3><p>{dataMode === "real" ? "Guarded writes never retry stale revisions or apply last-write-wins. Same-field and structural collisions will appear here." : "Same-field and structural collisions will appear here. Last-write-wins is never applied silently."}</p></div>
+        </section>
+      )}
     </div>
   );
 }
 
-function PlanDraftSheet({ demo, close }: { demo: ProjectDemo; close: () => void }) {
+function PlanDraftSheet({
+  demo,
+  close,
+  dataMode,
+  writer,
+  records,
+  onResult,
+  onDraftSaved,
+}: {
+  demo: ProjectDemo;
+  close: () => void;
+  dataMode: "demo" | "real";
+  writer: WebJournalWriter | null;
+  records: JournalReadRecord[];
+  onResult: (result: WebWriteResult) => Promise<void>;
+  onDraftSaved: (draft: RecoverableDraft) => Promise<void>;
+}) {
   const activePhase = demo.planPhases.find((phase) => phase.status === "Active") ?? demo.planPhases[0];
+  const [outcome, setOutcome] = useState(activePhase?.description ?? "");
+  const [expectedProof, setExpectedProof] = useState(demo.project.expectedProof);
+  const [draftId, setDraftId] = useState<string | undefined>();
+  const [isSaving, setIsSaving] = useState(false);
+  const activePlan = records.find((record) => record.kind === "coursePlan" && record.payload.projectId === demo.project.id && record.payload.status === "active");
+  const canActivate = dataMode === "real" && Boolean(writer && activePlan?.recordChangeTag);
+
+  async function saveDraft() {
+    const draft = createRecoverableDraft({
+      kind: "learningPlan",
+      projectId: demo.project.id,
+      payload: {
+        title: demo.planTitle,
+        outcome,
+        expectedProof,
+        source: "Web Workspace plan editor",
+      },
+    });
+    setDraftId(draft.id);
+    await onDraftSaved(draft);
+  }
+
+  async function activateRevision() {
+    if (!writer || !activePlan?.recordChangeTag) return;
+    setIsSaving(true);
+    try {
+      let currentDraftID = draftId;
+      if (!currentDraftID) {
+        const draft = createRecoverableDraft({
+          kind: "learningPlan",
+          projectId: demo.project.id,
+          payload: { title: demo.planTitle, outcome, expectedProof, source: "Web Workspace plan editor" },
+          status: "pending",
+        });
+        currentDraftID = draft.id;
+        setDraftId(currentDraftID);
+        await onDraftSaved(draft);
+      }
+      const id = newRecordID();
+      const now = new Date().toISOString();
+      const payload = {
+        ...activePlan.payload,
+        id,
+        revision: Number(activePlan.payload.revision ?? demo.planRevision) + 1,
+        revisionID: id,
+        baseRevisionID: activePlan.recordName,
+        supersedesID: activePlan.recordName,
+        status: "active",
+        courseOutline: outcome,
+        expectedOutcome: expectedProof,
+        updatedAt: now,
+        activatedAt: now,
+      };
+      const target: CanonicalWriteRecord = {
+        kind: "coursePlan",
+        recordName: id,
+        recordType: activePlan.recordType,
+        payload,
+      };
+      const result = await writer.writeBatch({
+        operation: "activateLearningPlan",
+        records: [target],
+        draftId: currentDraftID,
+        guardedRecords: [{
+          record: canonicalRecord(activePlan),
+          role: "base",
+          expectation: {
+            baseRevisionID: activePlan.recordName,
+            baseRecordChangeTag: activePlan.recordChangeTag,
+            targetRevisionID: id,
+            recordState: "existingRecord",
+            targetRecordState: "newRecord",
+          },
+        }],
+      });
+      await onResult(result);
+      if (result.status === "committed") close();
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <div className="sheet-backdrop" role="presentation" onMouseDown={close}>
       <section className="plan-sheet" role="dialog" aria-modal="true" aria-labelledby="draft-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -911,18 +1233,19 @@ function PlanDraftSheet({ demo, close }: { demo: ProjectDemo; close: () => void 
           <button className="close-button" onClick={close} aria-label="Close plan draft">×</button>
         </header>
         <div className="sheet-body">
-          <label><span>Phase outcome</span><textarea defaultValue={activePhase.description} /></label>
+          <label><span>Phase outcome</span><textarea value={outcome} onChange={(event) => setOutcome(event.target.value)} /></label>
           <div className="field-row">
-            <label><span>Plan window</span><input value={activePhase.window} readOnly /></label>
+            <label><span>Plan window</span><input value={activePhase?.window ?? ""} readOnly /></label>
             <label><span>Revision</span><input value={`Revision ${demo.planRevision + 1} draft`} readOnly /></label>
           </div>
-          <label><span>Expected proof</span><textarea defaultValue={demo.project.expectedProof} /></label>
+          <label><span>Expected proof</span><textarea value={expectedProof} onChange={(event) => setExpectedProof(event.target.value)} /></label>
           <div className="draft-warning"><span>i</span><div><strong>Capacity check</strong><p>{formatMinutes(demo.capacity.plannedMinutes)} planned against {formatMinutes(demo.capacity.availableMinutes)} available. {demo.capacity.note}</p></div></div>
           <div className="revision-note"><span className="mini-label">What creates a new revision?</span><p>Changing this outcome, phase dates, expected proof, phase order, or Routine structure. Session completion and Proof remain ordinary execution updates.</p></div>
+          <p className="read-only-note">{dataMode === "real" ? (canActivate ? "Activation creates a new immutable CoursePlan revision and checks the current CloudKit change tag." : "Activation is unavailable until a canonical CoursePlan and change tag are loaded.") : "Demo records are noncanonical. This editor can only save a local recoverable draft."}</p>
         </div>
         <footer className="sheet-footer">
-          <button className="secondary-button" onClick={close}>Save draft</button>
-          <button className="primary-button" disabled title="CloudKit writes are enabled after contract validation">Review activation</button>
+          <button className="secondary-button" onClick={() => void saveDraft()} disabled={isSaving}>Save recoverable draft</button>
+          <button className="primary-button" disabled={!canActivate || isSaving} onClick={() => void activateRevision()} title={canActivate ? "Create and activate a guarded CoursePlan revision" : "CloudKit writes require Real journal mode and a revision guard"}>{isSaving ? "Activating…" : "Activate guarded revision"}</button>
         </footer>
       </section>
     </div>

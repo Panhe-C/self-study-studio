@@ -426,6 +426,18 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .conflict-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: #eef0f3; color: #6e747c; font-size: 17px; }
 .conflict-empty-state h3 { font-size: 14px; }
 .conflict-empty-state p { margin: 4px 0 0; font-size: 11.5px; }
+.recoverable-drafts-card > p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.draft-list { display: grid; gap: 8px; margin-top: 15px; }
+.draft-list-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 9px; background: var(--panel-soft); font-size: 11.5px; }
+.draft-list-row span { color: var(--amber); text-transform: capitalize; }
+.draft-list-row small { color: var(--muted); }
+.sync-conflict-card { border-color: #e7c994; background: #fffdf8; }
+.conflict-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.conflict-columns pre { max-height: 170px; margin: 7px 0 0; overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: #515862; font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.conflict-fields { margin: 13px 0 0; color: #846d44; font-size: 11.5px; }
+.conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+.next-step-card input { width: 100%; min-height: 42px; margin: 10px 0 12px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 9px; background: #fff; color: var(--ink); font-size: 13px; }
+.next-step-card .dark-button { width: 100%; }
 
 .sheet-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: flex-end; background: rgba(20, 23, 28, 0.28); backdrop-filter: blur(3px); }
 .plan-sheet { width: min(570px, 100%); height: 100%; display: flex; flex-direction: column; background: white; box-shadow: -20px 0 60px rgba(20,24,32,0.15); animation: sheet-in 180ms ease-out; }
@@ -467,6 +479,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   .search-button { min-width: 36px; width: 36px; justify-content: center; }
   .search-button span:nth-child(2), .search-button kbd { display: none; }
   .content-scroll { padding: 22px 18px 40px; }
+  .conflict-columns { grid-template-columns: 1fr; }
   .portfolio-header { align-items: flex-start; flex-direction: column; }
   .portfolio-main-grid, .portfolio-lower-grid { grid-template-columns: 1fr; }
   .portfolio-project-body { grid-template-columns: 1fr; }

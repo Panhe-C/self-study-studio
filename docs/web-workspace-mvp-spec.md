@@ -1,6 +1,6 @@
 # Web Workspace MVP Product Specification
 
-Status: product decisions accepted; MVP implementation not started (the `WebWorkspace/` demo surfaces pass 39 tests on two hardcoded demo Projects, and CloudKit access is read-only diagnostics; connecting them to the real Journal is roadmap milestone C1)
+Status: product decisions accepted; C1 reads and the C2 typed guarded-write/conflict/draft slice are implemented in `WebWorkspace/`; real CloudKit/device acceptance remains a release gate.
 
 Decision record: `docs/adr/0001` through `docs/adr/0031`
 

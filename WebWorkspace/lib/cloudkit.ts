@@ -30,6 +30,29 @@ export type CloudKitRecord = {
   fields?: Record<string, CloudKitRecordField>;
 };
 
+export type CloudKitModifyRecordsRequest = {
+  recordsToSave: CloudKitRecord[];
+  recordNamesToDelete?: string[];
+};
+
+export type CloudKitModifyRecordsOptions = {
+  zoneID: { zoneName: string };
+  atomic: boolean;
+  savePolicy: "ifServerRecordUnchanged";
+};
+
+export type CloudKitRecordError = {
+  recordName?: string;
+  reason?: string;
+  serverRecord?: CloudKitRecord;
+  record?: CloudKitRecord;
+};
+
+export type CloudKitModifyRecordsResponse = {
+  records?: CloudKitRecord[];
+  errors?: CloudKitRecordError[];
+};
+
 export type CloudKitZoneChange = {
   records?: CloudKitRecord[];
   moreComing?: boolean;
@@ -41,6 +64,14 @@ export type CloudKitDatabase = {
   fetchRecordZoneChanges(
     options: Record<string, unknown>,
   ): Promise<{ zones?: CloudKitZoneChange[] }>;
+  modifyRecords?(
+    request: CloudKitModifyRecordsRequest,
+    options: CloudKitModifyRecordsOptions,
+  ): Promise<CloudKitModifyRecordsResponse>;
+  fetchRecords?(recordNames: string[]): Promise<{
+    records?: CloudKitRecord[];
+    errors?: CloudKitRecordError[];
+  }>;
 };
 
 export type CloudKitContainer = {

@@ -7,7 +7,7 @@
 
 > **本手册描述已发布的 iPhone 形态。** Today Agenda、Carryover、单个 PlannedSession
 > Reschedule、Plan Revision、Stage Review Readiness、Stage Review 和 Qualifying Proof 已进入当前实现；
-> Web Workspace 仍使用 demo 数据，直到路线图 C1 接入真实 Journal。
+> Web Workspace 默认使用明确标记的 Demo 数据；Real journal 已接入 CloudKit 读写、Revision Guard、冲突工作区和可恢复草稿。真实 CloudKit/设备验收仍是发布门槛。
 > Today 的日期内排序 override 只保存在当前 ViewModel 内存中，不进入 Journal、CloudKit 或导出。
 >
 > **配套物料待重新生成。** `docs/product-guide/` 下的 PPTX 与 A4 PDF 仍是 v1.0 内容，需按第 12
@@ -45,7 +45,7 @@
 
 ### 1.5 产品边界
 
-当前版本不是课程平台、社交社区、排行榜、连续打卡工具或全自动学习 Agent。CloudKit/iCloud 私有同步、AI 课程规划和学习日历已经进入产品流程；Web Workspace 已有实现但仍跑 demo 数据。
+当前版本不是课程平台、社交社区、排行榜、连续打卡工具或全自动学习 Agent。CloudKit/iCloud 私有同步、AI 课程规划和学习日历已经进入产品流程；Web Workspace 默认展示 demo，也可在 Real journal 模式下使用受 Revision Guard 保护的 CloudKit 写入。
 
 ## 2. 学习轨迹核心闭环
 
@@ -381,7 +381,7 @@ Contract、Proof Revision 与 EvidenceAcceptance 一起原子提交。没有 Qua
 - 单人私有 iCloud 同步已实现；没有账号体系与多人协作。
 - 没有搜索、社交、排行榜和课程市场。
 - AI Review 与 AI 课程规划都是可选边界，不会阻断日常记录、本地规划和本地复盘。
-- Web Workspace 只跑 demo 数据，尚未接入真实 Journal。
+- Web Workspace 默认跑 demo；Real journal 已接入真实 Journal 的读取与受保护写入，token/schema/origin/同账号设备验收尚未完成。
 
 ## 11. 路线图与非目标
 
@@ -423,7 +423,7 @@ Contract、Proof Revision 与 EvidenceAcceptance 一起原子提交。没有 Qua
 - 修正导航为四个主入口，补充 Calendar Tab。
 - 更新验证基线为 261 个测试 0 失败，移除已修复的既知失败用例。
 - 把 CloudKit 同步、AI 课程规划和学习日历从“已设计”改为“已实现”。
-- 移除“桌面或 Web 版本”非目标，说明 Web Workspace 的 demo 数据现状。
+- 移除“桌面或 Web 版本”非目标，说明 Web Workspace 的 Demo/Real 双模式、冲突工作区和可恢复草稿边界。
 - 标注第 6 节功能说明与配套 PPTX/PDF 尚未重新核对生成。
 
 ### 2026-08-09 · v1.2

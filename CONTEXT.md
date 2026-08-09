@@ -17,7 +17,7 @@ Statuses were checked against the repository on 2026-08-09. The sequence that cl
 **Web Workspace** `[partial]`:
 The browser-based surface for deliberate planning, analysis, learning-trail exploration, and stage review over the same personal learning journal used on iPhone.
 _Avoid_: Website backend, admin panel, separate web platform
-_Gap_: Demo mode still uses two hardcoded fixtures, while the explicit Real journal mode now has a read-only CloudKit adapter/projector. Same-owner production CloudKit, schema, origin, and cross-device acceptance remain unverified.
+_Gap_: Demo mode still uses two hardcoded fixtures, while the explicit Real journal mode now has a CloudKit adapter/projector plus typed guarded writes and conflict/draft UI. Same-owner production CloudKit, schema, origin, and cross-device acceptance remain unverified.
 
 **iPhone App** `[shipped]`:
 The mobile surface for carrying out learning, timing practice, making quick records, and capturing proof in the moment.
@@ -108,7 +108,7 @@ _Gap_: no audit log exists; the separation is currently maintained by keeping no
 **Sync Merge** `[shipped]`:
 Automatic reconciliation of compatible changes from the Web Workspace and iPhone App, including independently created records and edits to different fields of the same record.
 _Avoid_: Last write wins, overwrite, manual sync
-_Gap_: implemented for iPhone-to-iPhone; Web is not yet a writer.
+_Gap_: compatible merge/conflict logic and guarded Web writes are covered by fake CloudKit tests; real two-surface convergence remains unverified.
 
 **Sync Conflict** `[shipped]`:
 A same-field or structural collision that cannot be merged without changing user intent; it remains unresolved until the learner chooses or combines the competing values.
@@ -121,12 +121,12 @@ _Avoid_: Background merge, last-write-wins, warning-only check
 **Online-First Workspace** `[partial]`:
 The Web Workspace operating mode in which canonical records are read and changed through a live connection; only unfinished drafts are locally recoverable, while complete offline execution remains an iPhone responsibility.
 _Avoid_: Offline-first web app, local replica, background sync queue
-_Gap_: Web has no local replica and no writes; Real mode has live read-only canonical access, while recoverable drafts and production CloudKit acceptance remain future work.
+_Gap_: Web has no local replica; Real mode has live canonical access with guarded online writes, while production CloudKit acceptance remains unverified.
 
 **Direct Journal Access** `[partial]`:
 The Web Workspace reads and writes the Journal Owner's private CloudKit database through CloudKit JS rather than routing canonical records through an application-owned data service.
 _Avoid_: Web database, synchronization backend, server-owned journal
-_Gap_: `lib/journal-reader.ts` and `lib/journal-projector.ts` now feed the product with read-only canonical records and visible provenance; token/schema/origin provisioning and same-owner production verification remain outstanding.
+_Gap_: `lib/journal-reader.ts`, `lib/journal-projector.ts`, and `lib/journal-writer.ts` feed the product with visible provenance and guarded canonical writes; token/schema/origin provisioning and same-owner production verification remain outstanding.
 
 **Support Service** `[planned]`:
 A stateless or derived Web service used only for capabilities that should not run in the browser, such as protected AI calls or export rendering; it does not become a source of truth for Journal records.
@@ -151,19 +151,19 @@ _Avoid_: Temporary plan, unsaved plan
 An AI-assisted Plan Draft proposed from the Project goal, learner context, materials, time budget, and desired outcome; it has no authority until edited and activated by the learner.
 _Avoid_: AI plan, automatic plan, active plan
 
-**Recoverable Draft** `[planned]`:
+**Recoverable Draft** `[shipped]`:
 A locally buffered Plan Draft or unpublished Review that survives a transient Web connection loss but cannot become canonical until connectivity and revision checks succeed.
 _Avoid_: Offline workspace, synchronized record, published change
 
 **Active Plan** `[shipped]`:
 A published learning plan that guides upcoming learning sessions across the Web Workspace and iPhone App.
 _Avoid_: Approved mobile plan, final plan
-_Gap_: Real Web mode can project active Learning Plans read-only; Web authoring/publication remains a later C2 responsibility and production data acceptance is unverified.
+_Gap_: Real Web mode can author/activate guarded plan revisions; full production data and device acceptance remain unverified.
 
 **Plan Revision Draft** `[shipped]`:
 An editable proposal for structurally changing an Active Plan, including its Phase objectives, ordering, expected Proof, or Practice Routine structure; activation supersedes the prior published revision without erasing it.
 _Avoid_: Direct plan edit, duplicate plan, execution update
-_Gap_: Web authoring and publication remain a later C1/C2 responsibility.
+_Gap_: Web authoring/publication is implemented through the C2 adapter; routine/review/proof production acceptance remains unverified.
 
 **Plan Revision** `[shipped]`:
 One immutable published structural version of a Learning Plan; only one revision is active, while superseded revisions remain available to explain historical learning decisions.

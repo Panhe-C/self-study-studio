@@ -1,6 +1,6 @@
 # Cross-Surface Migration Roadmap
 
-Status: C1 read-only Web slice implemented; real CloudKit/device acceptance remains unverified
+Status: C2 typed Web write/conflict/draft slice implemented; real CloudKit/device acceptance remains unverified
 
 Product decisions: `docs/adr/0001` through `docs/adr/0033`
 Target domain language: `CONTEXT.md`
@@ -13,8 +13,8 @@ code has not followed all of them yet. The iOS app now uses the canonical Learni
 domain (with a compatibility `CoursePlan` alias), while it still has the pre-decision model
 (flat `PracticeRoutine`, seven `ProjectStatus` values, a Primary/Alternatives
 recommendation split, Weekly-Review-only reflection). The Web Workspace keeps Demo mode
-explicit and now has a read-only Real journal adapter/projector over CloudKit; production
-schema, allowed-origin, token, and same-owner device acceptance remain separate evidence.
+explicit and now has a Real journal adapter/projector plus typed guarded writes over CloudKit;
+production schema, allowed-origin, token, and same-owner device acceptance remain separate evidence.
 
 None of the twelve acceptance scenarios in `docs/web-workspace-mvp-spec.md` §12 can pass
 today, because the two surfaces do not yet share one domain model. This roadmap splits that
@@ -374,6 +374,15 @@ and the first place where a contract mismatch becomes user-visible.
 
 ### C2. Web writes with revision guards and a conflict workspace
 
+**Current.** `WebWorkspace/lib/journal-writer.ts` owns the approved Web write operations
+(Next Step, Learning Plan authoring/activation, Routine, Qualifying Proof, and Stage Review),
+translating only contract-validated payloads into atomic CloudKit batches with independent
+base/target change-tag expectations. Stale writes stop without retry and feed
+`Sync & Conflicts`; `sync-conflicts.ts` provides three-way merge and explicit keep-remote,
+discard-local, rebase, and legal fork decisions. The browser stores only unfinished drafts in
+IndexedDB/localStorage and clears them after a semantic CloudKit commit. Demo mode is blocked
+from the adapter.
+
 **Work.** Enable browser writes for the operations Web owns: Learning Plan authoring and
 activation, Plan Revision Drafts, Practice Routine design, Proof acceptance as Qualifying
 Proof, and Stage Review publication. Implement optimistic concurrency through CloudKit record
@@ -386,8 +395,10 @@ survive transient connection loss but cannot become canonical offline (`docs/adr
 
 **Independent verification.** This is spec §12.9 and §12.10: different-field Web and iPhone
 edits merge, a same-field edit appears as a resolvable Sync Conflict, and a stale activation or
-publication fails without overwriting the newer revision. Conflict resolution appears in the
-Audit Log while only the resulting decisions enter the Learning Trail.
+publication fails without overwriting the newer revision. Node fake-CloudKit tests cover the
+atomic/guard/draft/conflict semantics and the UI exposes the explicit resolution workspace.
+Real CloudKit conditional-write and two-surface acceptance remain unverified. Conflict
+resolution appears in the Audit Log while only the resulting decisions enter the Learning Trail.
 
 **Risk.** High. Two independent writers against one private database. Do not start before A2
 is enforced and B2/B6 guards exist.
