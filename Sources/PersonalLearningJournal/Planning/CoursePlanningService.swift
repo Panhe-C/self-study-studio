@@ -430,6 +430,58 @@ public final class CoursePlanningService {
         try repository.commit(JournalTransaction(upserts: [.plannedSession(session)], origin: .user))
     }
 
+    /// Reschedules one execution record without creating a new plan revision.
+    /// The phase window and every sibling session remain untouched; the prior
+    /// window is retained in a schedule-change Trail event for carryover audit.
+    @discardableResult
+    public func reschedule(
+        plannedSessionID: UUID,
+        newDeadline: Date
+    ) throws -> PlannedSession {
+        let snapshot = try repository.snapshot()
+        guard let index = snapshot.plannedSessions.firstIndex(where: { $0.id == plannedSessionID }) else {
+            throw JournalValidationError.missingPlannedSession
+        }
+        var session = snapshot.plannedSessions[index]
+        guard session.status != .completed else { return session }
+
+        let phase = snapshot.planPhases.first(where: { $0.id == session.phaseId })
+        let originalWindowStart = phase?.targetStart ?? session.createdAt
+        let originalWindowEnd = session.deadline ?? phase?.targetEnd ?? session.createdAt
+        let timestamp = now()
+        session.deadline = newDeadline
+        session.status = .scheduled
+        session.updatedAt = timestamp
+
+        let event = TrailEvent(
+            projectId: session.projectId,
+            type: .scheduleChanged,
+            sourceId: session.id,
+            occurredAt: timestamp,
+            title: "Planned session rescheduled",
+            detail: [
+                "Original window: \(originalWindowStart.ISO8601Format()) – \(originalWindowEnd.ISO8601Format())",
+                "New deadline: \(newDeadline.ISO8601Format())"
+            ].joined(separator: " · ")
+        )
+        let sessionReference = JournalEntityReference(.plannedSession, session.id)
+        var expectations: [JournalEntityReference: RevisionGuardExpectation] = [:]
+        if let metadata = try repository.metadata(for: sessionReference) {
+            expectations[sessionReference] = .existingTarget(
+                revisionID: session.id,
+                recordChangeTag: metadata.recordChangeTag
+            )
+        }
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.plannedSession(session), .trailEvent(event)],
+                origin: .user,
+                revisionExpectations: expectations
+            )
+        )
+        return session
+    }
+
     public func skip(plannedSessionID: UUID) throws {
         let snapshot = try repository.snapshot()
         guard let index = snapshot.plannedSessions.firstIndex(where: { $0.id == plannedSessionID }) else {

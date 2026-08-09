@@ -284,9 +284,21 @@ public final class JournalViewModel: ObservableObject {
 
     /// Applies a local, day-scoped ordering choice. Source records and Trail
     /// remain unchanged; explicit source actions still go through Journal APIs.
-    public func applyTodayAgendaOverride(_ override: TodayAgendaOverride) {
+    public func applyTodayAgendaOverride(
+        _ override: TodayAgendaOverride,
+        calendar: Calendar = .current
+    ) {
+        if override.position == .upNext {
+            // Up Next is exclusive within a day. Removing an older explicit
+            // choice lets the service demote that item to its declared default
+            // position when a new item is selected.
+            todayAgendaOverrides.removeAll {
+                calendar.isDate($0.day, inSameDayAs: override.day) &&
+                    $0.position == .upNext
+            }
+        }
         todayAgendaOverrides.removeAll {
-            Calendar.current.isDate($0.day, inSameDayAs: override.day) &&
+            calendar.isDate($0.day, inSameDayAs: override.day) &&
                 $0.source == override.source &&
                 $0.sourceID == override.sourceID
         }
@@ -296,10 +308,11 @@ public final class JournalViewModel: ObservableObject {
     public func clearTodayAgendaOverride(
         day: Date,
         source: TodayAgendaSource,
-        sourceID: UUID
+        sourceID: UUID,
+        calendar: Calendar = .current
     ) {
         todayAgendaOverrides.removeAll {
-            Calendar.current.isDate($0.day, inSameDayAs: day) &&
+            calendar.isDate($0.day, inSameDayAs: day) &&
                 $0.source == source &&
                 $0.sourceID == sourceID
         }
@@ -1358,6 +1371,22 @@ public final class JournalViewModel: ObservableObject {
         }
         try coursePlanningService.unschedule(plannedSessionID: id)
         refresh()
+    }
+
+    @discardableResult
+    public func reschedulePlannedSession(
+        _ id: UUID,
+        newDeadline: Date
+    ) throws -> PlannedSession {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        let session = try coursePlanningService.reschedule(
+            plannedSessionID: id,
+            newDeadline: newDeadline
+        )
+        refresh()
+        return session
     }
 
     public func skipPlannedSession(_ id: UUID) throws {

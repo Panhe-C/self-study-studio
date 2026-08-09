@@ -1,17 +1,17 @@
 # Self Study Studio 产品功能手册
 
-文档版本：1.1<br>
-最近核对：2026-08-08<br>
+文档版本：1.2<br>
+最近核对：2026-08-09<br>
 产品阶段：v0.1 学习闭环（iPhone）；跨端模型迁移未开始<br>
-验证基线：`swift test` 261 个测试，0 失败（2026-08-08）
+验证基线：`swift test` 433 个测试，0 失败（2026-08-09）
 
-> **本手册描述已发布的 iPhone 形态。** 已接受但尚未实现的目标模型（Practice Block、Today
-> Agenda、Carryover、Plan Revision、Stage Review、Qualifying Proof）见 `CONTEXT.md` 与
-> [跨端迁移路线图](cross-surface-migration-roadmap.md)。第 6 节的功能说明尚未逐条重新核对到
-> 2026-08-08 的代码；第 4 节导航和上方基线已修正。
+> **本手册描述已发布的 iPhone 形态。** Today Agenda、Carryover、单个 PlannedSession
+> Reschedule 和 Plan Revision 已进入当前实现；Practice Block、Stage Review、Qualifying Proof
+> 仍按 `CONTEXT.md` 与[跨端迁移路线图](cross-surface-migration-roadmap.md)中的状态推进。
+> Today 的日期内排序 override 只保存在当前 ViewModel 内存中，不进入 Journal、CloudKit 或导出。
 >
 > **配套物料待重新生成。** `docs/product-guide/` 下的 PPTX 与 A4 PDF 仍是 v1.0 内容，需按第 12
-> 节流程重新生成后才能对外使用。
+> 节流程重新生成后才能对外使用；文档中的功能事实已按 2026-08-09 源码和测试重新核对。
 
 > Self Study Studio 是一个本地优先的个人学习日志。它用 Project、Session、Proof、Trail 和 Review，把“我学了什么”转化为“下一步做什么”。
 
@@ -112,6 +112,12 @@ SwiftUI 页面通过统一状态协调层调用学习规则、附件、Review �
 **展示规则**：只显示状态为 `active` 且 Next Step 非空的 Project。卡片包含项目名、Next Step、最近 Session 和最近 Proof 上下文。<br>
 **操作**：Start 打开 Timer；Quick Log 打开快速记录。<br>
 **空状态**：没有可继续项目时显示 “No Active Next Step”，提示为 active Project 添加 Next Step。
+
+#### Today Agenda 与 Carryover
+
+Today 同时展示 active Project 的一个 Next Step、当天或逾期的 PlannedSession，以及符合星期设置的 Practice routine。排序是确定性的；Agenda 的 Up Next、Later Today、Optional 和 Skip Today 是当天的展示 override，不会改写 Journal 源记录，也不会进入 CloudKit 或导出。
+
+逾期 PlannedSession 会显示 Carryover，并保留实际的原始窗口开始/结束时间与 deadline。用户可以选择 Do Today、Skip，或打开独立的 Reschedule sheet 选择新的日期与窗口结束时间；Reschedule 只更新选中的 PlannedSession，并写入一条 scheduleChanged Trail 事件。Revise Plan 仍进入 Plan detail/wizard，创建结构性的新 revision，不是单个 session 的改期。
 
 ### 6.3 Project 管理
 
@@ -334,6 +340,9 @@ SwiftUI 页面通过统一状态协调层调用学习规则、附件、Review �
 | --- | --- | --- | --- | --- |
 | Onboarding 与首条 Session | 已实现 | 创建 1–3 个 Project 后完成首条记录 | ViewModel/Service tests | Area 可空，其余核心字段必填 |
 | Today Continue | 已实现 | active Project 显示 Next Step | TodayView/Service tests | 无 Next Step 不显示 |
+| Today Agenda 与 Carryover | 已实现 | PlannedSession、Practice cadence、Project Next Step 与逾期 Carryover | TodayAgendaService/CoursePlanningService tests | 日期内 override 仅在当前 ViewModel 内存中，不同步 |
+| 单个 PlannedSession Reschedule | 已实现 | 独立 sheet 选择新日期/窗口结束时间，只改选中 session 并写 scheduleChanged Trail | CoursePlanningService tests | 真机 Dynamic Type 与 CloudKit 并发仍需设备门禁 |
+| Learning Plan Revision | 已实现 | Plan detail/wizard 创建结构性 revision；不与单个 session 改期混用 | CoursePlanning/PlanLifecycle tests | 计划结构修改仍需 guarded activation |
 | Quick Log 与 Timer | 已实现 | 两种入口生成统一 Session | Service/ViewModel tests | Timer 真机后台行为未验证 |
 | Proof 与预览 | 已实现 | 图片、音频、文件、链接证据 | Attachment/Preview tests | 受设备权限和本地文件可用性影响 |
 | Trail | 已实现 | 项目时间线串联关键事件 | Service tests | 只在 Project Detail 内 |
@@ -341,15 +350,15 @@ SwiftUI 页面通过统一状态协调层调用学习规则、附件、Review �
 | OpenAI-compatible Review | 部分实现 | 配置后调用 Chat Completions | Provider tests | 1 个来源引用断言失败 |
 | Library 与完整导出 | 已实现 | Proof 分组浏览并导出 Bundle | Export tests | 只保存本地路径 |
 | SwiftData 与旧 JSON 导入 | 已实现 | 本地持久化和一次性迁移 | Store tests | 没有多设备冲突处理 |
-| CloudKit/iCloud | 已设计 | 当前无入口 | 设计/实施计划 | 尚未进入产品代码 |
-| AI 课程规划 | 已设计 | 当前无入口 | 设计/实施计划 | 尚未进入产品代码 |
-| 学习日历 | 已设计 | 当前无 Calendar Tab | 设计/实施计划 | 尚未进入产品代码 |
+| CloudKit/iCloud | 已实现（需配置） | 私有同步、outbox、冲突与账号空间边界 | CloudSync/SwiftData tests | 真实账户、CloudKit schema、网络和双设备仍需设备门禁 |
+| AI 课程规划 | 已实现（可选） | 配置后生成 draft；本地校验与手动流程可独立运行 | Provider/CoursePlanning tests | Endpoint/model/key 与网络是外部依赖 |
+| 学习日历 | 已实现（需权限） | 日/周/月排课草稿与 EventKit 二次确认 | Calendar tests | 真机权限、可写日历和外部事件仍需设备验证 |
 
 ## 10. 当前限制与已知问题
 
 ### 10.1 测试
 
-2026-08-08 执行 `swift test` 共 261 个测试，0 失败。2026-07-15 的 260 测试基线同时验证了 `swift build` 与未签名 iOS 模拟器构建，详见 `docs/product-health-validation.md`。
+2026-08-09 执行 `swift test` 共 433 个测试，0 失败，并通过 `swift build`。新增基线覆盖 Today Agenda 的原始窗口、Carryover Reschedule 的 selected-only mutation 与 Trail audit。静态测试/build 不等同于 Dynamic Type、VoiceOver、物理设备、实时 CloudKit 或双设备收敛验收。
 
 ### 10.2 设备与平台
 
@@ -374,7 +383,7 @@ SwiftUI 页面通过统一状态协调层调用学习规则、附件、Review �
 
 ### 已决定但尚未实现
 
-见 [跨端迁移路线图](cross-surface-migration-roadmap.md)：Practice Block、Today Agenda、Carryover、Plan Revision、Stage Review、Qualifying Proof、四态项目生命周期，以及 Web Workspace 接入真实 Journal。
+见 [跨端迁移路线图](cross-surface-migration-roadmap.md)：Practice Block、Stage Review、Qualifying Proof、四态项目生命周期，以及 Web Workspace 接入真实 Journal。Today Agenda、Carryover 和 Plan Revision 已在当前 iPhone 包中实现。
 
 ### 当前非目标
 
@@ -406,6 +415,12 @@ SwiftUI 页面通过统一状态协调层调用学习规则、附件、Review �
 - 把 CloudKit 同步、AI 课程规划和学习日历从“已设计”改为“已实现”。
 - 移除“桌面或 Web 版本”非目标，说明 Web Workspace 的 demo 数据现状。
 - 标注第 6 节功能说明与配套 PPTX/PDF 尚未重新核对生成。
+
+### 2026-08-09 · v1.2
+
+- 补充 Today Agenda、Carryover 原始窗口展示与单个 PlannedSession Reschedule 行为。
+- 明确 Reschedule 与 Revise Plan 的边界：前者只改一个 session 并写 scheduleChanged Trail，后者进入结构性 revision wizard。
+- 更新 433 个 Swift 测试基线，并标注内存中的日期排序 override、Dynamic Type/真机/CloudKit 验收边界。
 
 ### 2026-07-13 · v1.0
 

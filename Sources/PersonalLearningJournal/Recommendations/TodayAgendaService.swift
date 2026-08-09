@@ -202,7 +202,6 @@ public struct TodayAgendaService: Sendable {
         let phaseByID = Dictionary(uniqueKeysWithValues: snapshot.planPhases.map { ($0.id, $0) })
 
         var baseItems: [BaseAgendaItem] = []
-        var projectsWithPlannedItems = Set<UUID>()
 
         for session in snapshot.plannedSessions where isExecutable(session) {
             guard activePlanIDs.contains(session.planId),
@@ -214,13 +213,12 @@ public struct TodayAgendaService: Sendable {
             let isInToday = windowStart < dayEnd && windowEnd >= dayStart
             guard isCarryover || isInToday else { continue }
 
-            projectsWithPlannedItems.insert(project.id)
             let detail = [project.name, phase?.title].compactMap { $0 }.joined(separator: " · ")
             let carryover = isCarryover
                 ? TodayCarryover(
                     reason: .planningWindowPassed,
-                    originalWindowStart: phase?.targetStart,
-                    originalWindowEnd: phase?.targetEnd,
+                    originalWindowStart: windowStart,
+                    originalWindowEnd: windowEnd,
                     originalDeadline: session.deadline
                 )
                 : nil
@@ -236,7 +234,7 @@ public struct TodayAgendaService: Sendable {
                         originalDeadline: session.deadline,
                         windowStart: windowStart,
                         windowEnd: windowEnd,
-                        position: carryover == nil ? .laterToday : .laterToday,
+                        position: .laterToday,
                         carryover: carryover
                     ),
                     defaultPosition: .laterToday,
@@ -247,17 +245,15 @@ public struct TodayAgendaService: Sendable {
             )
         }
 
-        var projectsWithPracticeItems = Set<UUID>()
         let weekday = calendar.component(.weekday, from: dayStart)
         for routine in snapshot.operationalPracticeRoutines where
             !routine.isArchived && routine.deletedAt == nil && routine.weekdays.contains(weekday) {
             guard let projectID = routine.projectId,
                   projectByID[projectID] != nil,
-                  routine.createdAt <= dayEnd else { continue }
+                  routine.createdAt < dayEnd else { continue }
             // A past date is history, not an overdue practice task. The
             // current date and future projections may show the occurrence.
             guard dayStart >= todayStart else { continue }
-            projectsWithPracticeItems.insert(projectID)
             baseItems.append(
                 BaseAgendaItem(
                     item: TodayAgendaItem(
@@ -277,9 +273,9 @@ public struct TodayAgendaService: Sendable {
             )
         }
 
-        for project in projects where
-            !projectsWithPlannedItems.contains(project.id) &&
-            !projectsWithPracticeItems.contains(project.id) {
+        // Every executable Project contributes its one canonical Next Step to
+        // Today, even when the same Project also has planned or practice work.
+        for project in projects {
             baseItems.append(
                 BaseAgendaItem(
                     item: TodayAgendaItem(
@@ -381,7 +377,8 @@ public struct TodayAgendaService: Sendable {
         for (index, override) in overrides.enumerated() where calendar.isDate(override.day, inSameDayAs: day) {
             overrideMap[Key(source: override.source, sourceID: override.sourceID)] = (override.position, index)
         }
-        let applied = baseItems.map { item in
+        let sortedBaseItems = baseItems.sorted(by: isCanonicalBaseOrder)
+        let applied = sortedBaseItems.map { item in
             let key = Key(source: item.item.source, sourceID: item.item.sourceID)
             let value = overrideMap[key]
             return Applied(
@@ -392,52 +389,76 @@ public struct TodayAgendaService: Sendable {
         }
         let explicitUpNext = applied
             .filter { $0.requested == .upNext }
-            .min { ($0.overrideOrder ?? .max, $0.item.item.id) < ($1.overrideOrder ?? .max, $1.item.item.id) }
+            .max { left, right in
+                let leftOrder = left.overrideOrder ?? .min
+                let rightOrder = right.overrideOrder ?? .min
+                if leftOrder != rightOrder { return leftOrder < rightOrder }
+                return isCanonicalBaseOrder(left.item, right.item)
+            }
         let selectedID = explicitUpNext?.item.item.id
             ?? applied.first(where: { $0.requested != .skipToday })?.item.item.id
 
         return applied
+            .map { value in
+                let position = resolvedPosition(
+                    requested: value.requested,
+                    defaultPosition: value.item.defaultPosition,
+                    itemID: value.item.item.id,
+                    selectedID: selectedID
+                )
+                return (value.item, position)
+            }
             .sorted { left, right in
-                let leftGroup = sortGroup(left.requested, selectedID: selectedID, itemID: left.item.item.id)
-                let rightGroup = sortGroup(right.requested, selectedID: selectedID, itemID: right.item.item.id)
+                let leftGroup = sortGroup(left.1)
+                let rightGroup = sortGroup(right.1)
                 if leftGroup != rightGroup { return leftGroup < rightGroup }
-                if left.requested == .upNext,
-                   left.overrideOrder != right.overrideOrder {
-                    return (left.overrideOrder ?? .max) < (right.overrideOrder ?? .max)
-                }
-                if left.item.kindRank != right.item.kindRank { return left.item.kindRank < right.item.kindRank }
-                if left.item.sortDate != right.item.sortDate { return left.item.sortDate < right.item.sortDate }
-                let leftText = left.item.sortText.lowercased()
-                let rightText = right.item.sortText.lowercased()
-                if leftText != rightText { return leftText < rightText }
-                return left.item.item.id < right.item.item.id
+                return isCanonicalBaseOrder(left.0, right.0)
             }
             .map { value in
-                let position: TodayAgendaPosition
-                if value.requested == .skipToday {
-                    position = .skipToday
-                } else if value.item.item.id == selectedID {
-                    position = .upNext
-                } else {
-                    position = value.requested == .laterToday ? .laterToday : .optional
-                }
-                return value.item.item.positioned(position)
+                value.0.item.positioned(value.1)
             }
     }
 
-    private func sortGroup(
-        _ requested: TodayAgendaPosition,
-        selectedID: String?,
-        itemID: String
-    ) -> Int {
-        if requested == .skipToday { return 4 }
-        if itemID == selectedID { return 0 }
-        switch requested {
-        case .upNext: return 1
-        case .laterToday: return 2
-        case .optional: return 3
-        case .skipToday: return 4
+    private func resolvedPosition(
+        requested: TodayAgendaPosition,
+        defaultPosition: TodayAgendaPosition,
+        itemID: String,
+        selectedID: String?
+    ) -> TodayAgendaPosition {
+        if itemID == selectedID, requested != .skipToday {
+            return .upNext
         }
+        switch requested {
+        case .skipToday:
+            return .skipToday
+        case .upNext:
+            if itemID == selectedID { return .upNext }
+            // A stale or older explicit Up Next is demoted to the item's
+            // declared default instead of creating a second Up Next.
+            return defaultPosition == .upNext ? .laterToday : defaultPosition
+        case .laterToday:
+            return .laterToday
+        case .optional:
+            return .optional
+        }
+    }
+
+    private func sortGroup(_ position: TodayAgendaPosition) -> Int {
+        switch position {
+        case .upNext: return 0
+        case .laterToday: return 1
+        case .optional: return 2
+        case .skipToday: return 3
+        }
+    }
+
+    private func isCanonicalBaseOrder(_ left: BaseAgendaItem, _ right: BaseAgendaItem) -> Bool {
+        if left.kindRank != right.kindRank { return left.kindRank < right.kindRank }
+        if left.sortDate != right.sortDate { return left.sortDate < right.sortDate }
+        let leftText = left.sortText.lowercased()
+        let rightText = right.sortText.lowercased()
+        if leftText != rightText { return leftText < rightText }
+        return left.item.id < right.item.id
     }
 
     private struct BaseAgendaItem {

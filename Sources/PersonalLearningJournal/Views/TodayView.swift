@@ -14,6 +14,7 @@ public struct TodayView: View {
     @State private var selectedPractice: PracticeRoutine?
     @State private var showingPracticeManager = false
     @State private var practiceError: String?
+    @State private var reschedulingCarryover: CarryoverRescheduleContext?
 
     public init(viewModel: JournalViewModel) {
         self.viewModel = viewModel
@@ -172,6 +173,9 @@ public struct TodayView: View {
         }
         .sheet(isPresented: $showingPracticeManager) {
             PracticeManagerView(viewModel: viewModel)
+        }
+        .sheet(item: $reschedulingCarryover) { context in
+            CarryoverRescheduleSheet(viewModel: viewModel, context: context)
         }
         .alert("Review failed", isPresented: .constant(reviewError != nil)) {
             Button("OK") { reviewError = nil }
@@ -386,31 +390,16 @@ public struct TodayView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    HStack(spacing: 8) {
-                        Button("Do Today") {
-                            setAgendaPosition(.upNext, for: item)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(StudioTheme.accent)
-                        .accessibilityLabel("Do carryover today")
-                        if let plan = viewModel.activeLearningPlan(for: context.project.id) {
-                            NavigationLink("Reschedule") {
-                                CoursePlanDetailView(viewModel: viewModel, project: context.project, plan: plan)
-                            }
-                            .accessibilityLabel("Reschedule carryover")
-                        }
-                        Button("Skip", role: .destructive) {
-                            try? viewModel.skipPlannedSession(context.session.id)
-                        }
-                        .accessibilityLabel("Skip carryover")
-                        if let plan = viewModel.activeLearningPlan(for: context.project.id) {
-                            NavigationLink("Revise Plan") {
-                                CoursePlanDetailView(viewModel: viewModel, project: context.project, plan: plan)
-                            }
-                            .accessibilityLabel("Revise plan for carryover")
-                        }
+                    if let originalStart = carryover.originalWindowStart,
+                       let originalEnd = carryover.originalWindowEnd {
+                        Text("Original window: \(originalStart.formatted(date: .abbreviated, time: .shortened)) – \(originalEnd.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(
+                                "Original window from \(originalStart.formatted(date: .abbreviated, time: .shortened)) to \(originalEnd.formatted(date: .abbreviated, time: .shortened))"
+                            )
                     }
-                    .font(.caption.weight(.semibold))
+                    carryoverActions(item, context: context)
                 }
             }
             HStack {
@@ -548,6 +537,87 @@ public struct TodayView: View {
                 .frame(width: 32, height: 32)
         }
         .accessibilityLabel("Change agenda position for \(item.title)")
+    }
+
+    @ViewBuilder
+    private func carryoverActions(
+        _ item: TodayAgendaItem,
+        context: PlannedSessionContext
+    ) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                carryoverActionButtons(item, context: context)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                carryoverActionButtons(item, context: context)
+            }
+            Menu {
+                carryoverActionMenu(item, context: context)
+            } label: {
+                Label("Carryover actions", systemImage: "ellipsis.circle")
+            }
+            .accessibilityLabel("Carryover actions for \(context.session.title)")
+        }
+        .font(.caption.weight(.semibold))
+    }
+
+    @ViewBuilder
+    private func carryoverActionButtons(
+        _ item: TodayAgendaItem,
+        context: PlannedSessionContext
+    ) -> some View {
+        Button("Do Today") {
+            setAgendaPosition(.upNext, for: item)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(StudioTheme.accent)
+        .accessibilityLabel("Do carryover today")
+
+        Button("Reschedule") {
+            reschedulingCarryover = CarryoverRescheduleContext(
+                session: context.session,
+                originalWindowStart: item.carryover?.originalWindowStart,
+                originalWindowEnd: item.carryover?.originalWindowEnd
+            )
+        }
+        .accessibilityLabel("Reschedule carryover")
+
+        Button("Skip", role: .destructive) {
+            try? viewModel.skipPlannedSession(context.session.id)
+        }
+        .accessibilityLabel("Skip carryover")
+
+        if let plan = viewModel.activeLearningPlan(for: context.project.id) {
+            NavigationLink("Revise Plan") {
+                CoursePlanDetailView(viewModel: viewModel, project: context.project, plan: plan)
+            }
+            .accessibilityLabel("Revise plan for carryover")
+        }
+    }
+
+    @ViewBuilder
+    private func carryoverActionMenu(
+        _ item: TodayAgendaItem,
+        context: PlannedSessionContext
+    ) -> some View {
+        Button("Do Today") {
+            setAgendaPosition(.upNext, for: item)
+        }
+        Button("Reschedule") {
+            reschedulingCarryover = CarryoverRescheduleContext(
+                session: context.session,
+                originalWindowStart: item.carryover?.originalWindowStart,
+                originalWindowEnd: item.carryover?.originalWindowEnd
+            )
+        }
+        Button("Skip", role: .destructive) {
+            try? viewModel.skipPlannedSession(context.session.id)
+        }
+        if let plan = viewModel.activeLearningPlan(for: context.project.id) {
+            NavigationLink("Revise Plan") {
+                CoursePlanDetailView(viewModel: viewModel, project: context.project, plan: plan)
+            }
+        }
     }
 
     private func setAgendaPosition(_ position: TodayAgendaPosition, for item: TodayAgendaItem) {
@@ -727,6 +797,85 @@ public struct TodayView: View {
         case "Syncing": "arrow.triangle.2.circlepath.icloud"
         case "Needs Attention": "exclamationmark.icloud"
         default: "icloud"
+        }
+    }
+}
+
+private struct CarryoverRescheduleContext: Identifiable {
+    let session: PlannedSession
+    let originalWindowStart: Date?
+    let originalWindowEnd: Date?
+
+    var id: UUID { session.id }
+}
+
+private struct CarryoverRescheduleSheet: View {
+    @ObservedObject var viewModel: JournalViewModel
+    let context: CarryoverRescheduleContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var newDeadline: Date
+    @State private var errorMessage: String?
+
+    init(viewModel: JournalViewModel, context: CarryoverRescheduleContext) {
+        self.viewModel = viewModel
+        self.context = context
+        _newDeadline = State(initialValue: context.session.deadline ?? Date())
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Original carryover") {
+                    if let start = context.originalWindowStart,
+                       let end = context.originalWindowEnd {
+                        Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.subheadline)
+                    } else {
+                        Text("Original window unavailable")
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("This keeps the original carryover in Trail history and changes only this session.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("New date and window") {
+                    DatePicker(
+                        "Window ends",
+                        selection: $newDeadline,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .accessibilityLabel("New carryover window end")
+                }
+            }
+            .navigationTitle("Reschedule Carryover")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .fontWeight(.semibold)
+                }
+            }
+            .alert("Could not reschedule", isPresented: .constant(errorMessage != nil)) {
+                Button("OK") { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func save() {
+        do {
+            _ = try viewModel.reschedulePlannedSession(
+                context.session.id,
+                newDeadline: newDeadline
+            )
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

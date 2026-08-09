@@ -24,14 +24,16 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 
 ## What Is Implemented
 
-The list below describes the shipped iPhone model. The accepted target domain language in
-`CONTEXT.md` is ahead of it: Practice Blocks, Today Agenda, Carryover, Plan Revisions as a
-first-class type, Stage Review, and Qualifying Proof are decided but not yet built. Each term in
-`CONTEXT.md` is marked with its implementation status.
+The list below describes the shipped iPhone model. Today Agenda, Carryover, and immutable plan
+revisions are implemented in the package and surfaced from Today/Project flows. Practice Blocks,
+Stage Review, and Qualifying Proof remain future domain work where marked in `CONTEXT.md`.
 
 - Two-step onboarding for 1-3 current projects with `name`, `area`, `goal`, one `Next Step`, and a required first Session before Today opens
 - Project creation after onboarding, plus edit and status changes
 - Today continue cards for active projects with a clear next step, latest Session, and latest Proof context
+- Deterministic Today Agenda combining due/overdue planned sessions, recurring practice, and one Next Step per active Project
+- Carryover cards that show the original planning window and offer Do Today, individual Reschedule, Skip, or Revise Plan
+- Individual carryover rescheduling updates only the selected PlannedSession, records a schedule-change Trail event, and keeps Revise Plan as the structural revision flow
 - Review prompts for active projects that have gone quiet for 7 days or when recent evidence is ready to review
 - Quick Log sessions with project defaults, presets, custom duration stepping, and first-onboarding completion
 - Timer sessions with pause, resume, end, discard, and a live active-duration display
@@ -107,7 +109,8 @@ xcodebuild -project SelfStudyStudio.xcodeproj -target SelfStudyStudio -sdk iphon
 
 Current verification status:
 
-- 2026-08-08: `swift test` completed 261 tests with 0 failures, and `npm test` in `WebWorkspace` completed 39 tests with 0 failures. The count includes the in-progress practice-timer runtime work in the working tree.
+- 2026-08-09: `swift test` completed 433 tests with 0 failures, and `swift build` completed successfully. Today Agenda/Carryover and individual reschedule behavior are covered by service tests; the day-scoped agenda-position override is intentionally in-memory/local-only and is not synced.
+- 2026-08-09: The package build and tests do not establish iPhone Dynamic Type/layout, physical-device behavior, or live CloudKit/iCloud convergence. Those remain separate device and Cloud acceptance gates.
 - 2026-07-15: evidence-first convergence completed `swift test` with 260 tests and 0 failures; `swift build` and the unsigned iOS Simulator build succeeded. A clean iPhone 16 Pro Simulator install launched into onboarding. See `docs/product-health-validation.md` for the requirement audit and the separate physical-device gate.
 - 2026-07-10: `swift test` completed 49 tests with 0 failures.
 - 2026-07-10: `swift build` completed successfully.

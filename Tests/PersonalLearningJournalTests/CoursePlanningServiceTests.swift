@@ -47,6 +47,45 @@ final class CoursePlanningServiceTests: XCTestCase {
         XCTAssertEqual(try repository.snapshot().projects.first?.currentNextStep, "Read lecture 1")
     }
 
+    func testRescheduleMutatesOnlySelectedSessionAndAuditsOriginalWindow() throws {
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let service = CoursePlanningService(repository: repository, now: { self.timestamp })
+        let draftPlan = try service.saveDraft(input: input, draft: draftWithTwoSessions)
+        _ = try service.activate(draftPlanID: draftPlan.id)
+        let before = try repository.snapshot()
+        let selected = try XCTUnwrap(before.plannedSessions.first { $0.title == "Implement tokenizer" })
+        let sibling = try XCTUnwrap(before.plannedSessions.first { $0.title == "Review tokenizer" })
+        let newDeadline = timestamp.addingTimeInterval(3 * 86_400)
+
+        let updated = try service.reschedule(
+            plannedSessionID: selected.id,
+            newDeadline: newDeadline
+        )
+        let after = try repository.snapshot()
+
+        XCTAssertEqual(updated.id, selected.id)
+        XCTAssertEqual(updated.deadline, newDeadline)
+        XCTAssertEqual(updated.status, .scheduled)
+        XCTAssertEqual(
+            after.plannedSessions.first(where: { $0.id == sibling.id }),
+            sibling
+        )
+        XCTAssertEqual(after.coursePlans, before.coursePlans)
+        XCTAssertEqual(after.planPhases, before.planPhases)
+        let audit = try XCTUnwrap(
+            after.trailEvents.last(where: {
+                $0.type == .scheduleChanged && $0.sourceId == selected.id
+            })
+        )
+        XCTAssertTrue(audit.detail.contains("Original window:"))
+        XCTAssertTrue(audit.detail.contains("New deadline:"))
+        let originalPhase = try XCTUnwrap(before.planPhases.first { $0.id == selected.phaseId })
+        XCTAssertTrue(audit.detail.contains(originalPhase.targetStart.ISO8601Format()))
+        XCTAssertTrue(audit.detail.contains((selected.deadline ?? originalPhase.targetEnd).ISO8601Format()))
+        XCTAssertTrue(audit.detail.contains(newDeadline.ISO8601Format()))
+        XCTAssertEqual(audit.projectId, selected.projectId)
+    }
+
     func testGenerationFailureLeavesJournalUnchanged() async throws {
         let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
         let service = CoursePlanningService(
