@@ -223,6 +223,28 @@ public final class SwiftDataJournalRepository: JournalRepository {
                 } else {
                     context.insert(StoredSyncMetadataV2(key: key, payload: payload))
                 }
+                guard !mutationIDs.isEmpty,
+                      let recordChangeTag = value.recordChangeTag else {
+                    continue
+                }
+                // The base mutation may have been replaced while its network
+                // request was in flight. Preserve that pending replacement,
+                // but advance its guard to the server version just accepted.
+                let expectation = RevisionGuardExpectation.existingTarget(
+                    revisionID: value.entity.id,
+                    recordChangeTag: recordChangeTag
+                )
+                let encodedExpectation = try JSONEncoder.journal.encode(expectation)
+                let pendingReplacements = try context.fetch(
+                    FetchDescriptor<StoredPendingMutationV2>()
+                )
+                for pending in pendingReplacements where
+                    pending.entityKindRaw == value.entity.kind.rawValue &&
+                    pending.entityID == value.entity.id &&
+                    !pending.isTerminal &&
+                    !mutationIDs.contains(pending.id) {
+                    pending.revisionExpectationPayload = encodedExpectation
+                }
             }
             try context.save()
         } catch {
@@ -643,27 +665,19 @@ public final class SwiftDataJournalRepository: JournalRepository {
         transactionID: UUID,
         revisionExpectation: RevisionGuardExpectation?
     ) throws {
-        let effectiveTransactionID: UUID
-        if entity.kind == .practiceSession,
-           let pendingBase = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
-            .first(where: {
-                $0.entityKindRaw == entity.kind.rawValue &&
-                $0.entityID == entity.id &&
-                !$0.isTerminal
-            }) {
-            effectiveTransactionID = pendingBase.transactionID
+        let pendingBase: StoredPendingMutationV2? = if entity.kind == .practiceSession {
+            try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
+                .first(where: {
+                    $0.entityKindRaw == entity.kind.rawValue &&
+                    $0.entityID == entity.id &&
+                    !$0.isTerminal
+                })
         } else {
-            effectiveTransactionID = transactionID
+            nil
         }
+        let effectiveTransactionID = pendingBase?.transactionID ?? transactionID
         let effectiveRevisionExpectation: RevisionGuardExpectation?
-        if entity.kind == .practiceSession,
-           revisionExpectation == nil,
-           let pendingBase = try context.fetch(FetchDescriptor<StoredPendingMutationV2>())
-            .first(where: {
-                $0.entityKindRaw == entity.kind.rawValue &&
-                $0.entityID == entity.id &&
-                !$0.isTerminal
-            }) {
+        if let pendingBase {
             effectiveRevisionExpectation = pendingBase.revisionExpectationPayload.flatMap {
                 try? JSONDecoder.journal.decode(RevisionGuardExpectation.self, from: $0)
             }

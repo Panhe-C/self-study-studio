@@ -332,6 +332,22 @@ public final class InMemoryJournalRepository: JournalRepository {
             outbox.removeAll { mutationIDs.contains($0.id) }
             for value in metadata {
                 recordMetadata[value.entity] = value
+                guard !mutationIDs.isEmpty,
+                      let recordChangeTag = value.recordChangeTag else {
+                    continue
+                }
+                // A send can be acknowledged after a newer local write has
+                // replaced the sent mutation. Keep that replacement pending,
+                // but promote its guard to the server version just accepted;
+                // the next push must not overwrite an intervening remote edit.
+                let expectation = RevisionGuardExpectation.existingTarget(
+                    revisionID: value.entity.id,
+                    recordChangeTag: recordChangeTag
+                )
+                for index in outbox.indices where
+                    !outbox[index].isTerminal && outbox[index].entity == value.entity {
+                    outbox[index].revisionExpectation = expectation
+                }
             }
         }
     }
@@ -448,25 +464,11 @@ public final class InMemoryJournalRepository: JournalRepository {
         // chain when that base mutation is still pending. Reusing its
         // transaction ID keeps Project/LearningSession/TrailEvent siblings
         // ahead of the final PracticeSession payload on CloudKit.
-        let effectiveTransactionID: UUID
-        if entity.kind == .practiceSession,
-           let pendingBase = outbox.last(where: {
-               $0.entity == entity && !$0.isTerminal
-           }) {
-            effectiveTransactionID = pendingBase.transactionID
-        } else {
-            effectiveTransactionID = transactionID
-        }
-        let effectiveRevisionExpectation: RevisionGuardExpectation?
-        if entity.kind == .practiceSession,
-           revisionExpectation == nil,
-           let pendingBase = outbox.last(where: {
-               $0.entity == entity && !$0.isTerminal
-           }) {
-            effectiveRevisionExpectation = pendingBase.revisionExpectation
-        } else {
-            effectiveRevisionExpectation = revisionExpectation
-        }
+        let pendingBase = entity.kind == .practiceSession
+            ? outbox.last(where: { $0.entity == entity && !$0.isTerminal })
+            : nil
+        let effectiveTransactionID = pendingBase?.transactionID ?? transactionID
+        let effectiveRevisionExpectation = pendingBase.map(\.revisionExpectation) ?? revisionExpectation
         // Planning drafts and activation are separate local transactions but
         // represent one final payload per planning record. Practice base and
         // reflection writes have the same latest-payload requirement. Other

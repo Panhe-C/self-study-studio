@@ -185,6 +185,102 @@ final class CloudSyncEndToEndTests: XCTestCase {
         XCTAssertEqual(remoteSnapshot.projects.count, 1)
         XCTAssertEqual(remoteSnapshot.trailEvents.count, 1)
     }
+
+    func testInFlightBaseAckUpgradesReflectionGuardAndPreventsOverwrite() async throws {
+        let timestamp = Date(timeIntervalSince1970: 20_000)
+        let project = Project(
+            name: "Practice Project",
+            area: "Learning",
+            goal: "Improve",
+            currentNextStep: "Keep going",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let routine = PracticeRoutine(
+            projectId: project.id,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: [2],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository()
+        try repository.commit(
+            JournalTransaction(
+                upserts: [.project(project), .practiceRoutine(routine)],
+                origin: .remote
+            )
+        )
+        let service = PracticeService(
+            repository: repository,
+            now: { timestamp.addingTimeInterval(1) }
+        )
+        let sessionID = UUID()
+        let sessionReference = JournalEntityReference(.practiceSession, sessionID)
+        let startedAt = timestamp
+        let endedAt = timestamp.addingTimeInterval(120)
+        _ = try service.saveSession(
+            sessionId: sessionID,
+            routineId: routine.id,
+            linkedProjectId: routine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 120,
+            note: nil
+        )
+        let baseTransactionID = try XCTUnwrap(
+            repository.pendingMutations(limit: 100)
+                .first(where: { $0.entity == sessionReference })?.transactionID
+        )
+
+        let cloud = InFlightPracticeCloudClient()
+        let coordinator = CloudSyncCoordinator(repository: repository, client: cloud)
+        let syncTask = Task { try await coordinator.syncNow() }
+        await cloud.waitUntilFirstSendStarted()
+
+        _ = try service.updateSessionReflection(
+            sessionId: sessionID,
+            routineId: routine.id,
+            linkedProjectId: routine.projectId,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            activeDurationSeconds: 120,
+            note: "Enriched reflection"
+        )
+        await cloud.releaseFirstSend()
+        try await syncTask.value
+
+        let pendingAfterAck = try repository.pendingMutations(limit: 100)
+        let replacement = try XCTUnwrap(
+            pendingAfterAck.first(where: { $0.entity == sessionReference })
+        )
+        XCTAssertEqual(replacement.transactionID, baseTransactionID)
+        XCTAssertEqual(
+            replacement.revisionExpectation,
+            .existingTarget(revisionID: sessionID, recordChangeTag: "server-v1")
+        )
+        XCTAssertEqual(
+            pendingAfterAck.filter { $0.entity.kind == .practiceSession }.count,
+            1
+        )
+        XCTAssertEqual(try repository.snapshot().practiceSessions.first?.note, "Enriched reflection")
+
+        try await cloud.queueRemotePracticeEdit(sessionID: sessionID, note: "Remote edit")
+        try await coordinator.syncNow()
+
+        let conflicts = try repository.conflicts()
+        XCTAssertTrue(conflicts.contains { $0.entity == sessionReference })
+        let serverNote = try await cloud.serverPracticeNote(sessionID: sessionID)
+        XCTAssertEqual(serverNote, "Remote edit")
+        XCTAssertEqual(try repository.snapshot().practiceSessions.first?.note, "Enriched reflection")
+        XCTAssertEqual(
+            try repository.terminalMutations(limit: 100)
+                .filter { $0.entity == sessionReference }.count,
+            1
+        )
+    }
 }
 
 private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
@@ -261,5 +357,144 @@ private actor SharedFakeCloudDatabaseClient: CloudDatabaseClient {
 
     func sentReferences() -> [JournalEntityReference] {
         sentReferenceLog
+    }
+}
+
+private actor InFlightPracticeCloudClient: CloudDatabaseClient {
+    private let mapper = CloudRecordMapper()
+    private let zoneID = CKRecordZone.ID(
+        zoneName: CloudSyncCoordinator.zoneName,
+        ownerName: CKCurrentUserDefaultName
+    )
+    private var records: [String: CKRecord] = [:]
+    private var serverTags: [JournalEntityReference: String] = [:]
+    private var queuedChanges: [CloudRemoteChange] = []
+    private var didPauseFirstSend = false
+    private var firstSendReleased = false
+    private var sendStartedContinuation: CheckedContinuation<Void, Never>?
+    private var sendReleaseContinuation: CheckedContinuation<Void, Never>?
+    private var fetchTokenIssued = false
+
+    func ensureZone(named: String) async throws {}
+
+    func send(_ mutations: [CloudMutation]) async throws -> CloudSendResult {
+        try await send(mutations, revisionExpectations: [:])
+    }
+
+    func send(
+        _ mutations: [CloudMutation],
+        revisionExpectations: [JournalEntityReference: CloudRevisionExpectation]
+    ) async throws -> CloudSendResult {
+        var acknowledged: Set<UUID> = []
+        var metadata: [SyncRecordMetadata] = []
+        var terminalErrors: [UUID: String] = [:]
+        for mutation in mutations {
+            guard case let .save(mutationID, entity) = mutation else {
+                continue
+            }
+            let currentTag = serverTags[entity.reference]
+            if let expectation = revisionExpectations[entity.reference],
+               expectation.targetRecordState == .existingRecord,
+               currentTag != expectation.targetRecordChangeTag {
+                terminalErrors[mutationID] = "stale server tag"
+                continue
+            }
+            let record = try mapper.record(for: entity, zoneID: zoneID)
+            records[key(for: record)] = record
+            let serverTag = currentTag ?? "server-v1"
+            serverTags[entity.reference] = serverTag
+            acknowledged.insert(mutationID)
+            metadata.append(
+                SyncRecordMetadata(
+                    entity: entity.reference,
+                    zoneName: CloudSyncCoordinator.zoneName,
+                    recordName: record.recordID.recordName,
+                    recordChangeTag: serverTag,
+                    lastSyncedPayload: try JSONEncoder.journal.encode(entity),
+                    lastSyncedAt: Date(),
+                    state: .synced
+                )
+            )
+        }
+
+        if !didPauseFirstSend {
+            didPauseFirstSend = true
+            sendStartedContinuation?.resume()
+            sendStartedContinuation = nil
+            if !firstSendReleased {
+                await withCheckedContinuation { continuation in
+                    sendReleaseContinuation = continuation
+                }
+            }
+        }
+        return CloudSendResult(
+            acknowledgedMutationIDs: acknowledged,
+            metadata: metadata,
+            terminalErrors: terminalErrors
+        )
+    }
+
+    func fetchChanges(after tokenData: Data?) async throws -> CloudChangeBatch {
+        if !fetchTokenIssued {
+            fetchTokenIssued = true
+            return CloudChangeBatch(tokenData: Data("race-v1".utf8))
+        }
+        let changes = queuedChanges
+        queuedChanges.removeAll()
+        return CloudChangeBatch(
+            changes: changes,
+            tokenData: Data("race-v2".utf8)
+        )
+    }
+
+    func waitUntilFirstSendStarted() async {
+        if didPauseFirstSend { return }
+        await withCheckedContinuation { continuation in
+            sendStartedContinuation = continuation
+        }
+    }
+
+    func releaseFirstSend() {
+        firstSendReleased = true
+        sendReleaseContinuation?.resume()
+        sendReleaseContinuation = nil
+    }
+
+    func queueRemotePracticeEdit(sessionID: UUID, note: String) throws {
+        let reference = JournalEntityReference(.practiceSession, sessionID)
+        guard let record = records[key(kind: .practiceSession, id: sessionID)] else {
+            throw CloudRecordMapperError.mismatchedRecordIdentifier
+        }
+        guard case var .practiceSession(session) = try mapper.entity(from: record) else {
+            throw CloudRecordMapperError.mismatchedRecordIdentifier
+        }
+        session.note = note
+        let edited = try mapper.record(for: .practiceSession(session), zoneID: zoneID)
+        records[key(for: edited)] = edited
+        serverTags[reference] = "server-v2"
+        queuedChanges.append(.save(edited))
+    }
+
+    func serverPracticeNote(sessionID: UUID) throws -> String? {
+        guard let record = records[key(kind: .practiceSession, id: sessionID)] else {
+            return nil
+        }
+        guard case let .practiceSession(session) = try mapper.entity(from: record) else {
+            return nil
+        }
+        return session.note
+    }
+
+    private func key(for record: CKRecord) -> String {
+        key(kind: record.recordType, id: record.recordID.recordName)
+    }
+
+    private func key(kind: JournalEntityKind, id: UUID) -> String {
+        let recordType = kind == .practiceSession ? "PracticeSession" : kind.rawValue
+        return key(kind: recordType, id: id.uuidString)
+    }
+
+    private func key(kind: String, id: String) -> String {
+        "\(kind):\(id)"
     }
 }
