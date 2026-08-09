@@ -717,6 +717,14 @@ public enum RevisionGuard {
     }
 }
 
+public enum PlanPhaseProgress: String, Codable, CaseIterable, Sendable {
+    case notStarted
+    case active
+    case completed
+    case paused
+    case abandoned
+}
+
 public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var planId: UUID
@@ -729,6 +737,9 @@ public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
     public var title: String
     public var objective: String
     public var expectedProof: String
+    /// Execution progress is mutable independently of the immutable
+    /// structural fields in a published plan revision.
+    public var progress: PlanPhaseProgress
     public var ordinal: Int
     public var targetStart: Date
     public var targetEnd: Date
@@ -746,6 +757,7 @@ public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
         title: String,
         objective: String,
         expectedProof: String,
+        progress: PlanPhaseProgress = .notStarted,
         ordinal: Int,
         targetStart: Date,
         targetEnd: Date,
@@ -775,6 +787,7 @@ public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
         self.title = title.trimmedForJournal
         self.objective = objective.trimmedForJournal
         self.expectedProof = expectedProof.trimmedForJournal
+        self.progress = progress
         self.ordinal = ordinal
         self.targetStart = targetStart
         self.targetEnd = targetEnd
@@ -786,7 +799,7 @@ public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, planId, planRevisionID, planSeriesID, isStructuralLocked
-        case title, objective, expectedProof, ordinal, targetStart, targetEnd
+        case title, objective, expectedProof, progress, ordinal, targetStart, targetEnd
         case createdAt, updatedAt, deletedAt, schemaVersion
     }
 
@@ -801,6 +814,7 @@ public struct PlanPhase: Codable, Equatable, Identifiable, Sendable {
             title: container.decode(String.self, forKey: .title),
             objective: container.decode(String.self, forKey: .objective),
             expectedProof: container.decode(String.self, forKey: .expectedProof),
+            progress: container.decodeIfPresent(PlanPhaseProgress.self, forKey: .progress) ?? .notStarted,
             ordinal: container.decode(Int.self, forKey: .ordinal),
             targetStart: container.decode(Date.self, forKey: .targetStart),
             targetEnd: container.decode(Date.self, forKey: .targetEnd),

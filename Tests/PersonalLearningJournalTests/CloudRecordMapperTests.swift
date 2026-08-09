@@ -58,6 +58,50 @@ final class CloudRecordMapperTests: XCTestCase {
         }
     }
 
+    func testStageReviewAndPhaseProgressRoundTripThroughCloudRecords() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let projectID = UUID()
+        let phaseID = UUID()
+        let review = Review(
+            scope: .stage,
+            projectId: projectID,
+            phaseId: phaseID,
+            status: .draft,
+            periodStart: timestamp,
+            periodEnd: timestamp.addingTimeInterval(86_400),
+            facts: ["Phase ended"],
+            patterns: [],
+            decisions: [],
+            projectRecommendations: [:],
+            nextSteps: [:],
+            aiSourceSummary: [],
+            sourceReferences: ["Phase ended": ["PlanPhase:\(phaseID.uuidString)"]],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let phase = try PlanPhase(
+            id: phaseID,
+            planId: UUID(),
+            title: "Phase",
+            objective: "Objective",
+            expectedProof: "Proof",
+            progress: .completed,
+            ordinal: 0,
+            targetStart: timestamp,
+            targetEnd: timestamp.addingTimeInterval(86_400),
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let mapper = CloudRecordMapper()
+        let reviewRecord = try mapper.record(for: .review(review), zoneID: zoneID)
+        let phaseRecord = try mapper.record(for: .planPhase(phase), zoneID: zoneID)
+
+        XCTAssertEqual(try mapper.entity(from: reviewRecord), .review(review))
+        XCTAssertEqual(try mapper.entity(from: phaseRecord), .planPhase(phase))
+        XCTAssertEqual(reviewRecord["scope"] as? String, "stage")
+        XCTAssertEqual(phaseRecord["progress"] as? String, "completed")
+    }
+
     func testProjectMapsToStablePrivateZoneRecord() throws {
         let project = Project(
             id: fixedID,

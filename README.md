@@ -25,8 +25,9 @@ Continue today -> record in 30 seconds -> attach Proof -> review the week
 ## What Is Implemented
 
 The list below describes the shipped iPhone model. Today Agenda, Carryover, and immutable plan
-revisions are implemented in the package and surfaced from Today/Project flows. Practice Blocks,
-Stage Review, and Qualifying Proof remain future domain work where marked in `CONTEXT.md`.
+revisions are implemented in the package and surfaced from Today/Project flows. Stage Review,
+readiness, and Qualifying Proof are implemented in the iPhone package; the Web Workspace still
+uses demo data until the C1 real-Journal connection.
 
 - Two-step onboarding for 1-3 current projects with `name`, `area`, `goal`, one `Next Step`, and a required first Session before Today opens
 - Project creation after onboarding, plus edit and status changes
@@ -43,6 +44,9 @@ Stage Review, and Qualifying Proof remain future domain work where marked in `CO
 - Photo Proof from camera or photo library, audio recording, file import, and links
 - Proof detail screens: image preview, local audio playback, Quick Look file preview, and link opening
 - Project Learning Trail events for sessions, Proofs, Next Step changes, status changes, and reviews
+- Project-scoped Stage Review readiness and explicit draft-to-published decisions anchored to a Plan Phase
+- Qualifying Proof acceptance linked to an Evidence Contract, Proof Revision, Review Decision, and phase transition
+- Stage Review `extendPhase`/`revisePhase` decisions create guarded Plan Revision Drafts; missing Proof blocks phase advancement
 - Project status transitions: `active`, `low-frequency`, `paused`, `archived`
 - Project detail actions for Start, Quick Log, Proof, Learning Trail, and historical Reviews
 - Async Weekly Review through an `AIReviewProvider` abstraction
@@ -64,7 +68,7 @@ Stage Review, and Qualifying Proof remain future domain work where marked in `CO
 - Calendar event identifiers and last-written snapshots remain local-only; synced availability never contains event titles, notes, attendees, locations, URLs, or raw events
 - Normalized SwiftData runtime store for Projects, Sessions, Proofs, Reviews, Trail events, and onboarding state; one-time import from legacy `journal.json`
 - JSON export plus attachment directory export from Library
-- SwiftUI screens for onboarding, Today, Projects, Library, Quick Log, Timer, Review, Proof detail, and AI Review settings
+- SwiftUI screens for onboarding, Today, Projects, Learning Plan, Stage Review, Library, Quick Log, Timer, Review, Proof detail, and AI Review settings
 - Private personal iCloud sync with account-scoped journal stores, local-first attachments, a retryable outbox, conflict review, automatic upload after local edits, foreground refresh, and a visible iCloud status surface
 - Evidence-first Project activation, accepted Proof revisions, explicit Review Decisions, deterministic Today recommendations, and measurable Product Health
 - Password-protected AES.GCM archive export/import with SHA-256 integrity checks, stable-ID preview, recoverable Trash, 30-day retention candidates, and explicit purge impact
@@ -109,7 +113,7 @@ xcodebuild -project SelfStudyStudio.xcodeproj -target SelfStudyStudio -sdk iphon
 
 Current verification status:
 
-- 2026-08-09: `swift test` completed 433 tests with 0 failures, and `swift build` completed successfully. Today Agenda/Carryover and individual reschedule behavior are covered by service tests; the day-scoped agenda-position override is intentionally in-memory/local-only and is not synced.
+- 2026-08-09: `swift test` completed 446 tests with 0 failures, and `swift build` completed successfully. Stage Review readiness/publication, Qualifying Proof linkage, guarded Plan Revision Drafts, and shared Web contract fixtures are covered by targeted tests; the day-scoped agenda-position override is intentionally in-memory/local-only and is not synced.
 - 2026-08-09: The package build and tests do not establish iPhone Dynamic Type/layout, physical-device behavior, or live CloudKit/iCloud convergence. Those remain separate device and Cloud acceptance gates.
 - 2026-07-15: evidence-first convergence completed `swift test` with 260 tests and 0 failures; `swift build` and the unsigned iOS Simulator build succeeded. A clean iPhone 16 Pro Simulator install launched into onboarding. See `docs/product-health-validation.md` for the requirement audit and the separate physical-device gate.
 - 2026-07-10: `swift test` completed 49 tests with 0 failures.

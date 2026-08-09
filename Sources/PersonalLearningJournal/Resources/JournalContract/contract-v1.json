@@ -108,6 +108,10 @@
       "recordType": "Review",
       "fields": {
         "id": { "type": "uuid", "required": true },
+        "scope": { "type": "enum", "required": false, "values": ["weekly", "stage"] },
+        "projectId": { "type": "uuid", "required": false },
+        "phaseId": { "type": "uuid", "required": false },
+        "status": { "type": "enum", "required": false, "values": ["draft", "published"] },
         "periodStart": { "type": "date", "required": true },
         "periodEnd": { "type": "date", "required": true },
         "facts": { "type": "stringArray", "required": true },
@@ -122,7 +126,8 @@
         "deletedAt": { "type": "date", "required": false },
         "schemaVersion": { "type": "integer", "required": true, "minimum": 1 },
         "confirmedDecisionIds": { "type": "uuidArray", "required": true },
-        "referencedProofRevisionIds": { "type": "uuidArray", "required": true }
+        "referencedProofRevisionIds": { "type": "uuidArray", "required": true },
+        "publishedAt": { "type": "date", "required": false }
       }
     },
     "evidenceContract": {
@@ -159,6 +164,9 @@
         "id": { "type": "uuid", "required": true },
         "contractId": { "type": "uuid", "required": true },
         "proofId": { "type": "uuid", "required": true },
+        "phaseId": { "type": "uuid", "required": false },
+        "reviewId": { "type": "uuid", "required": false },
+        "proofRevisionId": { "type": "uuid", "required": false },
         "acceptedCriteria": { "type": "stringArray", "required": true, "trim": true },
         "acceptedAt": { "type": "date", "required": true },
         "deletedAt": { "type": "date", "required": false }
@@ -183,10 +191,13 @@
         "id": { "type": "uuid", "required": true },
         "reviewId": { "type": "uuid", "required": true },
         "projectId": { "type": "uuid", "required": true },
-        "kind": { "type": "enum", "required": true, "values": ["continueUnchanged", "changeNextStep", "reviseContract", "changeFrequency", "pause", "abandon", "archive", "complete"] },
+        "kind": { "type": "enum", "required": true, "values": ["continueUnchanged", "changeNextStep", "reviseContract", "changeFrequency", "pause", "abandon", "advancePhase", "extendPhase", "revisePhase", "archive", "complete"] },
         "nextStep": { "type": "string", "required": false, "trim": true },
         "contractId": { "type": "uuid", "required": false },
         "capstoneProofId": { "type": "uuid", "required": false },
+        "phaseId": { "type": "uuid", "required": false },
+        "qualifyingProofAcceptanceId": { "type": "uuid", "required": false },
+        "planRevisionDraftId": { "type": "uuid", "required": false },
         "decidedAt": { "type": "date", "required": true },
         "deletedAt": { "type": "date", "required": false }
       }
@@ -243,6 +254,7 @@
         "title": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
         "objective": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
         "expectedProof": { "type": "string", "required": true, "trim": true },
+        "progress": { "type": "enum", "required": false, "values": ["notStarted", "active", "completed", "paused", "abandoned"] },
         "ordinal": { "type": "integer", "required": true, "minimum": 0 },
         "targetStart": { "type": "date", "required": true },
         "targetEnd": { "type": "date", "required": true },

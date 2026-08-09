@@ -234,6 +234,7 @@ private struct ProjectDetailView: View {
     @State private var showingAISettings = false
     @State private var showingCoursePlanWizard = false
     @State private var showingCommitment = false
+    @State private var selectedStageReview: Review?
 
     private var currentProject: Project {
         viewModel.projects.first { $0.id == project.id } ?? project
@@ -296,6 +297,34 @@ private struct ProjectDetailView: View {
                             Text("\(viewModel.plannedSessions(for: plan.id).count) planned sessions")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                        }
+                    }
+                    ForEach(viewModel.phases(for: plan.id)) { phase in
+                        let readiness = try? viewModel.stageReviewReadiness(
+                            projectID: currentProject.id,
+                            phaseID: phase.id,
+                            at: Date()
+                        )
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(phase.title)
+                                    .font(.subheadline)
+                                Text(readiness?.explanation ?? "Readiness unavailable")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 8)
+                            Button {
+                                openStageReview(for: phase)
+                            } label: {
+                                Label(
+                                    phase.progress == .completed ? "History" : "Review",
+                                    systemImage: phase.progress == .completed ? "clock.arrow.circlepath" : "text.book.closed"
+                                )
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("Open Stage Review for \(phase.title)")
                         }
                     }
                 } else {
@@ -409,7 +438,11 @@ private struct ProjectDetailView: View {
             Section("Reviews") {
                 ForEach(viewModel.reviewsForProject(currentProject.id)) { review in
                     NavigationLink {
-                        ReviewView(viewModel: viewModel, review: review)
+                        if review.scope == .stage {
+                            StageReviewView(viewModel: viewModel, review: review)
+                        } else {
+                            ReviewView(viewModel: viewModel, review: review)
+                        }
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(review.decisions.first ?? "Weekly Review")
@@ -449,6 +482,11 @@ private struct ProjectDetailView: View {
         }
         .sheet(isPresented: $showingProof) {
             AddProofView(viewModel: viewModel, project: currentProject, session: nil)
+        }
+        .sheet(item: $selectedStageReview) { review in
+            NavigationStack {
+                StageReviewView(viewModel: viewModel, review: review)
+            }
         }
         .sheet(item: $quickLogProject) { project in
             QuickLogView(viewModel: viewModel, project: project)
@@ -496,6 +534,17 @@ private struct ProjectDetailView: View {
             _ = try await viewModel.createWeeklyReview(
                 periodStart: Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast,
                 periodEnd: Date()
+            )
+        } catch {
+            reviewError = error.localizedDescription
+        }
+    }
+
+    private func openStageReview(for phase: PlanPhase) {
+        do {
+            selectedStageReview = try viewModel.openStageReview(
+                projectID: currentProject.id,
+                phaseID: phase.id
             )
         } catch {
             reviewError = error.localizedDescription

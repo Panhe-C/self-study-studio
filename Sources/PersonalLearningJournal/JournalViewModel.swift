@@ -226,6 +226,10 @@ public final class JournalViewModel: ObservableObject {
         snapshot.reviews
     }
 
+    public var stageReviews: [Review] {
+        snapshot.reviews.filter { $0.scope == .stage }
+    }
+
     /// Canonical Learning Plan collection. `coursePlans` remains the source
     /// compatibility spelling below for older integrations.
     public var learningPlans: [LearningPlan] {
@@ -415,6 +419,43 @@ public final class JournalViewModel: ObservableObject {
         let value = try journalService.completeReview(reviewId: reviewId, decision: decision)
         refresh()
         return value
+    }
+
+    public func stageReviewReadiness(
+        projectID: UUID,
+        phaseID: UUID,
+        at date: Date = Date(),
+        requested: Bool = false
+    ) throws -> StageReviewReadiness {
+        try StageReviewService(repository: journalService.journalRepository)
+            .readiness(projectID: projectID, phaseID: phaseID, at: date, requested: requested)
+    }
+
+    @discardableResult
+    public func openStageReview(projectID: UUID, phaseID: UUID) throws -> Review {
+        let review = try StageReviewService(repository: journalService.journalRepository)
+            .openStageReview(projectID: projectID, phaseID: phaseID)
+        refresh()
+        return review
+    }
+
+    @discardableResult
+    public func publishStageReview(
+        reviewID: UUID,
+        decision: ReviewDecision,
+        qualifyingProofID: UUID?,
+        acceptedCriteria: [String]
+    ) throws -> Review {
+        let service = StageReviewService(repository: journalService.journalRepository)
+        let review = try service.publishStageReview(
+            reviewID: reviewID,
+            decision: decision,
+            qualifyingProofID: qualifyingProofID,
+            acceptedCriteria: acceptedCriteria,
+            expectation: try service.revisionGuardExpectation(for: reviewID)
+        )
+        refresh()
+        return review
     }
 
     @discardableResult
@@ -1321,7 +1362,8 @@ public final class JournalViewModel: ObservableObject {
 
     public func reviewsForProject(_ projectId: UUID) -> [Review] {
         snapshot.reviews.filter { review in
-            review.nextSteps.keys.contains(projectId)
+            review.projectId == projectId
+                || review.nextSteps.keys.contains(projectId)
                 || review.projectRecommendations.keys.contains(projectId)
         }
     }

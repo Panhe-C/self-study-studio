@@ -156,6 +156,12 @@ export function decodeJournalRecord(
     normalized.planSeriesID ??= normalized.id;
     normalized.revisionID ??= normalized.id;
   }
+  // Swift Codable keeps legacy Review payloads readable with the same
+  // canonical defaults used by the shared fixtures.
+  if (kind === "review") {
+    normalized.scope ??= "weekly";
+    normalized.status ??= "published";
+  }
   if ((kind === "planPhase" || kind === "plannedSession") && typeof normalized.planId === "string") {
     // Legacy child records predate explicit revision identity and structural
     // locks. Match the iPhone decoder's safe fallback so both surfaces
@@ -166,6 +172,9 @@ export function decodeJournalRecord(
   }
   if (kind === "practiceRoutine") {
     normalized.isStructuralLocked ??= false;
+  }
+  if (kind === "planPhase") {
+    normalized.progress ??= "notStarted";
   }
   validateCrossFieldRules(normalized, kind, contract);
   return { kind, payload: normalized };
@@ -550,6 +559,11 @@ function validateCrossFieldRules(
       if (decision === "changeNextStep" && (typeof payload.nextStep !== "string" || payload.nextStep.trim() === "")) fail("nextStep");
       if ((decision === "reviseContract" || decision === "changeFrequency") && payload.contractId === undefined) fail("contractId");
       if (decision === "complete" && payload.capstoneProofId === undefined) fail("capstoneProofId");
+      if (decision === "advancePhase") {
+        if (payload.phaseId === undefined) fail("phaseId");
+        if (payload.qualifyingProofAcceptanceId === undefined) fail("qualifyingProofAcceptanceId");
+      }
+      if ((decision === "extendPhase" || decision === "revisePhase") && payload.phaseId === undefined) fail("phaseId");
       break;
     }
     default:

@@ -83,6 +83,11 @@ public struct EvidenceAcceptance: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var contractId: UUID
     public var proofId: UUID
+    /// Optional Stage Review linkage. Legacy contract acceptances leave these
+    /// nil and remain valid for the recurring Evidence Contract flow.
+    public var phaseId: UUID?
+    public var reviewId: UUID?
+    public var proofRevisionId: UUID?
     public var acceptedCriteria: [String]
     public var acceptedAt: Date
     public var deletedAt: Date?
@@ -91,6 +96,9 @@ public struct EvidenceAcceptance: Codable, Equatable, Identifiable, Sendable {
         id: UUID = UUID(),
         contractId: UUID,
         proofId: UUID,
+        phaseId: UUID? = nil,
+        reviewId: UUID? = nil,
+        proofRevisionId: UUID? = nil,
         acceptedCriteria: [String],
         acceptedAt: Date = Date(),
         deletedAt: Date? = nil
@@ -98,8 +106,19 @@ public struct EvidenceAcceptance: Codable, Equatable, Identifiable, Sendable {
         self.id = id
         self.contractId = contractId
         self.proofId = proofId
+        self.phaseId = phaseId
+        self.reviewId = reviewId
+        self.proofRevisionId = proofRevisionId
         self.acceptedCriteria = acceptedCriteria.map { $0.trimmedForJournal }.filter { !$0.isEmpty }
         self.acceptedAt = acceptedAt
         self.deletedAt = deletedAt
     }
+
+    public var isQualifyingProof: Bool {
+        phaseId != nil && reviewId != nil && proofRevisionId != nil && deletedAt == nil
+    }
 }
+
+/// A source-compatible name for the explicit phase-scoped acceptance carried
+/// by `EvidenceAcceptance`; persisted records remain `EvidenceAcceptance`.
+public typealias QualifyingProof = EvidenceAcceptance

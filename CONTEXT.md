@@ -274,10 +274,10 @@ _Avoid_: Mobile-approved review, review report
 
 ## Reflection
 
-**Stage Review** `[planned]`:
+**Stage Review** `[partial]`:
 A reflection on one Project, usually anchored to a completed or ending Plan Phase, that evaluates evidence and decides how the Project should proceed.
 _Avoid_: Monthly report, portfolio review, long weekly review
-_Gap_: only the cross-project Weekly Review exists.
+_Gap_: the deterministic iPhone domain/service/UI now opens and publishes project-scoped Stage Reviews; Web still presents demo data and real CloudKit/device acceptance remains a release gate.
 
 **Review Fact** `[shipped]`:
 A deterministic, source-linked observation derived from plans, sessions, practice, proof, or trail history without interpretation by AI.
@@ -290,17 +290,17 @@ _Avoid_: Automatic decision, fact, instruction
 **Review Decision** `[shipped]`:
 A learner-confirmed outcome of a Review that may advance a Phase or change a Project, Learning Plan, Practice Routine, or Next Step.
 _Avoid_: AI recommendation, generated conclusion
-_Gap_: `ReviewDecisionKind` cannot advance a Plan Phase yet; legacy `archive` remains decode-only compatibility for migrated records.
+_Gap_: legacy `archive` remains decode-only compatibility for migrated records; Web publication is pending the real Journal connection.
 
 **Qualifying Proof** `[partial]`:
 Proof explicitly accepted as satisfying a Plan Phase's expected outcome; it is required before a Stage Review can complete that Phase or advance to the next one.
 _Avoid_: Attachment, activity record, unreviewed evidence
-_Gap_: `EvidenceAcceptance` accepts Proof against Evidence Contract criteria, not against a Plan Phase outcome, and nothing gates Phase completion.
+_Gap_: the iPhone Stage Review path now requires an active Evidence Contract, inspectable Proof, explicit criteria, and a Proof Revision before phase completion; Web and real CloudKit/device acceptance remain pending.
 
-**Stage Review Readiness** `[planned]`:
+**Stage Review Readiness** `[shipped]`:
 A system-detected state indicating that a Plan Phase is due, its Planned Sessions are resolved, its expected Proof is available, or the learner explicitly requests reflection.
 _Avoid_: Automatic review, completed Phase, AI trigger
-_Gap_: Review prompts fire for Projects quiet for seven days, which is a staleness signal rather than Phase readiness.
+_Gap_: readiness is deterministic, source-linked, and prompt-only on iPhone; it never publishes by itself. Web consumption and physical-device/CloudKit acceptance remain pending.
 
 **Weekly Review** `[shipped]`:
 A time-boxed reflection across the learner's active Projects that identifies portfolio-level patterns, neglected work, and near-term adjustments.

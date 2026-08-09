@@ -165,6 +165,10 @@ public struct CloudRecordMapper {
     }
 
     private func encode(_ value: Review, into record: CKRecord) throws {
+        record["scope"] = value.scope.rawValue
+        record["projectId"] = value.projectId?.uuidString
+        record["phaseId"] = value.phaseId?.uuidString
+        record["status"] = value.status.rawValue
         record["periodStart"] = value.periodStart
         record["periodEnd"] = value.periodEnd
         record["facts"] = value.facts as NSArray
@@ -183,6 +187,7 @@ public struct CloudRecordMapper {
         record["aiSourceSummary"] = value.aiSourceSummary as NSArray
         record["sourceReferences"] = value.sourceReferences
             .flatMap { decision, sources in sources.map { encodePair(decision, $0) } } as NSArray
+        record["publishedAt"] = value.publishedAt
         encodeDates(value.createdAt, value.updatedAt, nil, value.deletedAt, value.schemaVersion, into: record)
     }
 
@@ -231,6 +236,7 @@ public struct CloudRecordMapper {
         record["title"] = value.title
         record["objective"] = value.objective
         record["expectedProof"] = value.expectedProof
+        record["progress"] = value.progress.rawValue
         record["ordinal"] = value.ordinal
         record["targetStart"] = value.targetStart
         record["targetEnd"] = value.targetEnd
@@ -455,8 +461,16 @@ public struct CloudRecordMapper {
     }
 
     private func decodeReview(_ record: CKRecord, id: UUID) throws -> Review {
-        Review(
+        guard let scope = ReviewScope(rawValue: optionalString("scope", from: record) ?? ReviewScope.weekly.rawValue),
+              let status = ReviewStatus(rawValue: optionalString("status", from: record) ?? ReviewStatus.published.rawValue) else {
+            throw CloudRecordMapperError.invalidField("review scope/status")
+        }
+        return Review(
             id: id,
+            scope: scope,
+            projectId: try optionalUUID("projectId", from: record),
+            phaseId: try optionalUUID("phaseId", from: record),
+            status: status,
             periodStart: try date("periodStart", from: record),
             periodEnd: try date("periodEnd", from: record),
             facts: strings("facts", from: record),
@@ -469,7 +483,8 @@ public struct CloudRecordMapper {
             createdAt: try date("createdAt", from: record),
             updatedAt: try date("updatedAt", from: record),
             deletedAt: optionalDate("deletedAt", from: record),
-            schemaVersion: try integer("schemaVersion", from: record)
+            schemaVersion: try integer("schemaVersion", from: record),
+            publishedAt: optionalDate("publishedAt", from: record)
         )
     }
 
@@ -530,6 +545,7 @@ public struct CloudRecordMapper {
             title: try string("title", from: record),
             objective: try string("objective", from: record),
             expectedProof: optionalString("expectedProof", from: record) ?? "",
+            progress: PlanPhaseProgress(rawValue: optionalString("progress", from: record) ?? PlanPhaseProgress.notStarted.rawValue) ?? .notStarted,
             ordinal: try integer("ordinal", from: record),
             targetStart: try date("targetStart", from: record),
             targetEnd: try date("targetEnd", from: record),

@@ -341,6 +341,13 @@ own. The whole flow completes with every AI capability disabled.
 **Risk.** Medium-high. Atomicity matters: a partially applied publication would corrupt the
 Trail's meaning.
 
+**Implementation status (2026-08-09).** The iPhone slice is implemented: deterministic Readiness,
+project/phase-anchored draft Stage Reviews, explicit Qualifying Proof acceptance with Proof Revision
+and Evidence Contract linkage, Revision Guard publication, phase/project transitions, and guarded
+Plan Revision Drafts. Shared Swift/Web contract fixtures and decoder fallbacks cover the new canonical
+fields. Web still renders demo data; real Journal reads remain the C1 boundary, and physical-device /
+CloudKit convergence remains a release gate.
+
 ---
 
 ## Phase C — Connect the Web Workspace

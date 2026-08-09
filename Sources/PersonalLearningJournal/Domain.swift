@@ -547,8 +547,24 @@ public struct Proof: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+/// Review scope keeps the existing cross-project Weekly Review record shape
+/// while giving Stage Review its explicit Project/Plan Phase anchor.
+public enum ReviewScope: String, Codable, CaseIterable, Sendable {
+    case weekly
+    case stage
+}
+
+public enum ReviewStatus: String, Codable, CaseIterable, Sendable {
+    case draft
+    case published
+}
+
 public struct Review: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
+    public var scope: ReviewScope
+    public var projectId: UUID?
+    public var phaseId: UUID?
+    public var status: ReviewStatus
     public var periodStart: Date
     public var periodEnd: Date
     public var facts: [String]
@@ -564,9 +580,14 @@ public struct Review: Codable, Equatable, Identifiable, Sendable {
     public var schemaVersion: Int
     public var confirmedDecisionIds: [UUID]
     public var referencedProofRevisionIds: [UUID]
+    public var publishedAt: Date?
 
     public init(
         id: UUID = UUID(),
+        scope: ReviewScope = .weekly,
+        projectId: UUID? = nil,
+        phaseId: UUID? = nil,
+        status: ReviewStatus = .published,
         periodStart: Date,
         periodEnd: Date,
         facts: [String],
@@ -581,9 +602,14 @@ public struct Review: Codable, Equatable, Identifiable, Sendable {
         deletedAt: Date? = nil,
         schemaVersion: Int = JournalSchema.currentVersion,
         confirmedDecisionIds: [UUID] = [],
-        referencedProofRevisionIds: [UUID] = []
+        referencedProofRevisionIds: [UUID] = [],
+        publishedAt: Date? = nil
     ) {
         self.id = id
+        self.scope = scope
+        self.projectId = projectId
+        self.phaseId = phaseId
+        self.status = status
         self.periodStart = periodStart
         self.periodEnd = periodEnd
         self.facts = facts
@@ -599,19 +625,24 @@ public struct Review: Codable, Equatable, Identifiable, Sendable {
         self.schemaVersion = schemaVersion
         self.confirmedDecisionIds = confirmedDecisionIds
         self.referencedProofRevisionIds = referencedProofRevisionIds
+        self.publishedAt = publishedAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, periodStart, periodEnd, facts, patterns, decisions
+        case id, scope, projectId, phaseId, status, periodStart, periodEnd, facts, patterns, decisions
         case projectRecommendations, nextSteps, aiSourceSummary, sourceReferences
         case createdAt, updatedAt, deletedAt, schemaVersion
-        case confirmedDecisionIds, referencedProofRevisionIds
+        case confirmedDecisionIds, referencedProofRevisionIds, publishedAt
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             id: try container.decode(UUID.self, forKey: .id),
+            scope: try container.decodeIfPresent(ReviewScope.self, forKey: .scope) ?? .weekly,
+            projectId: try container.decodeIfPresent(UUID.self, forKey: .projectId),
+            phaseId: try container.decodeIfPresent(UUID.self, forKey: .phaseId),
+            status: try container.decodeIfPresent(ReviewStatus.self, forKey: .status) ?? .published,
             periodStart: try container.decode(Date.self, forKey: .periodStart),
             periodEnd: try container.decode(Date.self, forKey: .periodEnd),
             facts: try container.decode([String].self, forKey: .facts),
@@ -633,7 +664,8 @@ public struct Review: Codable, Equatable, Identifiable, Sendable {
             referencedProofRevisionIds: try container.decodeIfPresent(
                 [UUID].self,
                 forKey: .referencedProofRevisionIds
-            ) ?? []
+            ) ?? [],
+            publishedAt: try container.decodeIfPresent(Date.self, forKey: .publishedAt)
         )
     }
 }

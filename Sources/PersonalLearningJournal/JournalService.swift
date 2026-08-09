@@ -31,6 +31,11 @@ public final class JournalService {
         state
     }
 
+    /// Shared repository seam for feature services that publish a guarded
+    /// multi-record transaction (for example Stage Review). The Journal
+    /// Service remains the owner of its in-memory projection.
+    public var journalRepository: any JournalRepository { repository }
+
     public func refreshFromRepository() {
         state = (try? repository.snapshot()) ?? state
     }
@@ -700,6 +705,10 @@ public final class JournalService {
             review.referencedProofRevisionIds += state.proofRevisions
                 .filter { $0.proofId == proof.id }
                 .map(\.id)
+        case .advancePhase, .extendPhase, .revisePhase:
+            // Project-scoped Stage Review publication owns phase transitions;
+            // the legacy Weekly Review service must not apply them partially.
+            throw JournalValidationError.missingReviewDecision
         }
         project.updatedAt = changedAt
         review.confirmedDecisionIds.append(decision.id)

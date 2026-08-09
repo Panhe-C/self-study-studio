@@ -148,6 +148,9 @@ public struct ReviewView: View {
         case .changeNextStep: String(localized: "review.decision.change_next_step")
         case .reviseContract: String(localized: "review.decision.revise_contract")
         case .changeFrequency: "Change frequency"
+        case .advancePhase: "Advance phase"
+        case .extendPhase: "Extend phase"
+        case .revisePhase: "Revise phase"
         case .pause: String(localized: "review.decision.pause")
         case .abandon, .archive: String(localized: "review.decision.abandon")
         case .complete: String(localized: "review.decision.complete")

@@ -713,6 +713,11 @@ public enum JournalRecordContractDecoder {
             guard let start = date("periodStart"), let end = date("periodEnd"), end >= start else {
                 throw invalid("periodEnd")
             }
+            if object["scope"] as? String == ReviewScope.stage.rawValue {
+                guard object["projectId"] != nil, object["phaseId"] != nil else {
+                    throw invalid("phaseId")
+                }
+            }
         case .evidenceContract:
             guard let trigger = object["trigger"] as? [String: Any], trigger.count == 1 else {
                 throw invalid("trigger")
@@ -862,6 +867,15 @@ public enum JournalRecordContractDecoder {
             }
             if decision == "complete", object["capstoneProofId"] == nil {
                 throw invalid("capstoneProofId")
+            }
+            if decision == "advancePhase" {
+                guard object["phaseId"] != nil else { throw invalid("phaseId") }
+                guard object["qualifyingProofAcceptanceId"] != nil else {
+                    throw invalid("qualifyingProofAcceptanceId")
+                }
+            }
+            if ["extendPhase", "revisePhase"].contains(decision), object["phaseId"] == nil {
+                throw invalid("phaseId")
             }
         default:
             break

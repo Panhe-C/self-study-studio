@@ -51,6 +51,32 @@ test("accepts the shared fractional-seconds ISO fixture", () => {
   assert.deepEqual(decodeJournalRecord(fixture.payload, fixture.kind).payload, fixture.expectedNormalized);
 });
 
+test("keeps Stage Review canonical links decodable on Web", () => {
+  const stageReview = fixtureSuite.valid.find((fixture) => fixture.id === "review-stage-draft");
+  const qualifyingAcceptance = fixtureSuite.valid.find((fixture) => fixture.id === "evidence-acceptance-qualifying");
+  const stageDecision = fixtureSuite.valid.find((fixture) => fixture.id === "review-decision-stage");
+  assert.ok(stageReview && qualifyingAcceptance && stageDecision);
+
+  const decodedReview = decodeJournalRecord(stageReview.payload, stageReview.kind).payload;
+  assert.equal(decodedReview.scope, "stage");
+  assert.equal(decodedReview.status, "draft");
+  assert.equal(decodedReview.projectId, "00000000-0000-0000-0000-000000000001");
+  assert.equal(decodedReview.phaseId, "00000000-0000-0000-0000-000000000011");
+
+  const decodedAcceptance = decodeJournalRecord(
+    qualifyingAcceptance.payload,
+    qualifyingAcceptance.kind,
+  ).payload;
+  assert.equal(decodedAcceptance.phaseId, "00000000-0000-0000-0000-000000000011");
+  assert.equal(decodedAcceptance.reviewId, decodedReview.id);
+  assert.equal(decodedAcceptance.proofRevisionId, "00000000-0000-0000-0000-000000000007");
+
+  const decodedDecision = decodeJournalRecord(stageDecision.payload, stageDecision.kind).payload;
+  assert.equal(decodedDecision.kind, "advancePhase");
+  assert.equal(decodedDecision.phaseId, decodedReview.phaseId);
+  assert.equal(decodedDecision.qualifyingProofAcceptanceId, decodedAcceptance.id);
+});
+
 test("uses the shared symbolic date format and rejects unknown formats", () => {
   assert.equal(journalRecordContract.formats.iso8601, "utcIso8601OptionalFraction");
   const fixture = fixtureSuite.valid.find((candidate) => candidate.id === "session-fractional");

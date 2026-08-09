@@ -255,6 +255,8 @@
       },
       "expectedNormalized": {
         "id": "00000000-0000-0000-0000-000000000004",
+        "scope": "weekly",
+        "status": "published",
         "periodStart": "2026-01-01T00:00:00Z",
         "periodEnd": "2026-01-07T00:00:00Z",
         "facts": [
@@ -276,6 +278,56 @@
         ],
         "aiSourceSummary": [],
         "sourceReferences": {},
+        "createdAt": "2026-01-07T00:00:00Z",
+        "updatedAt": "2026-01-07T00:00:00Z",
+        "schemaVersion": 3,
+        "confirmedDecisionIds": [],
+        "referencedProofRevisionIds": []
+      }
+    },
+    {
+      "id": "review-stage-draft",
+      "kind": "review",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000041",
+        "scope": "stage",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "phaseId": "00000000-0000-0000-0000-000000000011",
+        "status": "draft",
+        "periodStart": "2026-01-01T00:00:00Z",
+        "periodEnd": "2026-01-07T00:00:00Z",
+        "facts": ["Phase target window ended"],
+        "patterns": [],
+        "decisions": [],
+        "projectRecommendations": [],
+        "nextSteps": [],
+        "aiSourceSummary": [],
+        "sourceReferences": {
+          "phase": ["PlanPhase:00000000-0000-0000-0000-000000000011"]
+        },
+        "createdAt": "2026-01-07T00:00:00Z",
+        "updatedAt": "2026-01-07T00:00:00Z",
+        "schemaVersion": 3,
+        "confirmedDecisionIds": [],
+        "referencedProofRevisionIds": []
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000041",
+        "scope": "stage",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "phaseId": "00000000-0000-0000-0000-000000000011",
+        "status": "draft",
+        "periodStart": "2026-01-01T00:00:00Z",
+        "periodEnd": "2026-01-07T00:00:00Z",
+        "facts": ["Phase target window ended"],
+        "patterns": [],
+        "decisions": [],
+        "projectRecommendations": [],
+        "nextSteps": [],
+        "aiSourceSummary": [],
+        "sourceReferences": {
+          "phase": ["PlanPhase:00000000-0000-0000-0000-000000000011"]
+        },
         "createdAt": "2026-01-07T00:00:00Z",
         "updatedAt": "2026-01-07T00:00:00Z",
         "schemaVersion": 3,
@@ -340,6 +392,30 @@
       }
     },
     {
+      "id": "evidence-acceptance-qualifying",
+      "kind": "evidenceAcceptance",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000042",
+        "contractId": "00000000-0000-0000-0000-000000000005",
+        "proofId": "00000000-0000-0000-0000-000000000003",
+        "phaseId": "00000000-0000-0000-0000-000000000011",
+        "reviewId": "00000000-0000-0000-0000-000000000041",
+        "proofRevisionId": "00000000-0000-0000-0000-000000000007",
+        "acceptedCriteria": ["Explains pair counting"],
+        "acceptedAt": "2026-01-07T00:00:00Z"
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000042",
+        "contractId": "00000000-0000-0000-0000-000000000005",
+        "proofId": "00000000-0000-0000-0000-000000000003",
+        "phaseId": "00000000-0000-0000-0000-000000000011",
+        "reviewId": "00000000-0000-0000-0000-000000000041",
+        "proofRevisionId": "00000000-0000-0000-0000-000000000007",
+        "acceptedCriteria": ["Explains pair counting"],
+        "acceptedAt": "2026-01-07T00:00:00Z"
+      }
+    },
+    {
       "id": "proof-revision",
       "kind": "proofRevision",
       "payload": {
@@ -378,6 +454,28 @@
         "projectId": "00000000-0000-0000-0000-000000000001",
         "kind": "changeNextStep",
         "nextStep": "Benchmark the loop",
+        "decidedAt": "2026-01-07T00:00:00Z"
+      }
+    },
+    {
+      "id": "review-decision-stage",
+      "kind": "reviewDecision",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000043",
+        "reviewId": "00000000-0000-0000-0000-000000000041",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "kind": "advancePhase",
+        "phaseId": "00000000-0000-0000-0000-000000000011",
+        "qualifyingProofAcceptanceId": "00000000-0000-0000-0000-000000000042",
+        "decidedAt": "2026-01-07T00:00:00Z"
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000043",
+        "reviewId": "00000000-0000-0000-0000-000000000041",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "kind": "advancePhase",
+        "phaseId": "00000000-0000-0000-0000-000000000011",
+        "qualifyingProofAcceptanceId": "00000000-0000-0000-0000-000000000042",
         "decidedAt": "2026-01-07T00:00:00Z"
       }
     },
@@ -468,11 +566,50 @@
         "title": "Tokenizer",
         "objective": "Build and explain BPE",
         "expectedProof": "Passing round-trip fixtures",
+        "progress": "notStarted",
         "ordinal": 0,
         "targetStart": "2026-01-01T00:00:00Z",
         "targetEnd": "2026-01-07T00:00:00Z",
         "createdAt": "2026-01-01T00:00:00Z",
         "updatedAt": "2026-01-01T00:00:00Z",
+        "schemaVersion": 3
+      }
+    },
+    {
+      "id": "plan-phase-active",
+      "kind": "planPhase",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000044",
+        "planId": "00000000-0000-0000-0000-000000000010",
+        "planRevisionID": "00000000-0000-0000-0000-000000000010",
+        "planSeriesID": "00000000-0000-0000-0000-000000000010",
+        "isStructuralLocked": false,
+        "title": "Tokenizer active",
+        "objective": "Build and explain BPE",
+        "expectedProof": "Passing round-trip fixtures",
+        "progress": "active",
+        "ordinal": 0,
+        "targetStart": "2026-01-01T00:00:00Z",
+        "targetEnd": "2026-01-07T00:00:00Z",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-07T00:00:00Z",
+        "schemaVersion": 3
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000044",
+        "planId": "00000000-0000-0000-0000-000000000010",
+        "planRevisionID": "00000000-0000-0000-0000-000000000010",
+        "planSeriesID": "00000000-0000-0000-0000-000000000010",
+        "isStructuralLocked": false,
+        "title": "Tokenizer active",
+        "objective": "Build and explain BPE",
+        "expectedProof": "Passing round-trip fixtures",
+        "progress": "active",
+        "ordinal": 0,
+        "targetStart": "2026-01-01T00:00:00Z",
+        "targetEnd": "2026-01-07T00:00:00Z",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-07T00:00:00Z",
         "schemaVersion": 3
       }
     },

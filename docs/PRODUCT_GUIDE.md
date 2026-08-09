@@ -3,11 +3,11 @@
 文档版本：1.2<br>
 最近核对：2026-08-09<br>
 产品阶段：v0.1 学习闭环（iPhone）；跨端模型迁移未开始<br>
-验证基线：`swift test` 433 个测试，0 失败（2026-08-09）
+验证基线：`swift test` 446 个测试，0 失败（2026-08-09）
 
 > **本手册描述已发布的 iPhone 形态。** Today Agenda、Carryover、单个 PlannedSession
-> Reschedule 和 Plan Revision 已进入当前实现；Practice Block、Stage Review、Qualifying Proof
-> 仍按 `CONTEXT.md` 与[跨端迁移路线图](cross-surface-migration-roadmap.md)中的状态推进。
+> Reschedule、Plan Revision、Stage Review Readiness、Stage Review 和 Qualifying Proof 已进入当前实现；
+> Web Workspace 仍使用 demo 数据，直到路线图 C1 接入真实 Journal。
 > Today 的日期内排序 override 只保存在当前 ViewModel 内存中，不进入 Journal、CloudKit 或导出。
 >
 > **配套物料待重新生成。** `docs/product-guide/` 下的 PPTX 与 A4 PDF 仍是 v1.0 内容，需按第 12
@@ -188,6 +188,14 @@ Today 同时展示 active Project 的一个 Next Step、当天或逾期的 Plann
 
 ![Weekly Review 流程](../diagrams/product-review-flow.svg)
 
+#### 阶段复盘与 Qualifying Proof
+
+Project 的 Plan Phase 到期、Planned Sessions 已解决、可检查 Proof 出现，或学习者主动请求时，iPhone
+会生成确定性的 Stage Review Readiness。打开 Stage Review 只写入带 Phase/Session/Proof 来源引用的草稿；
+它不会自动发布。发布 `advancePhase` 必须选择 Qualifying Proof、填写满足的验收标准，并由活跃 Evidence
+Contract、Proof Revision 与 EvidenceAcceptance 一起原子提交。没有 Qualifying Proof 时，只能继续、延长、
+修改计划、暂停或放弃；延长/修改计划会创建受 Revision Guard 保护的 Plan Revision Draft，不会覆盖当前计划。
+
 ### 6.11 AI Review 与本地降级
 
 **配置**：Endpoint、Model 与 API Key。Endpoint/Model 进入偏好设置，API Key 保存在 Keychain。<br>
@@ -347,6 +355,8 @@ Today 同时展示 active Project 的一个 Next Step、当天或逾期的 Plann
 | Proof 与预览 | 已实现 | 图片、音频、文件、链接证据 | Attachment/Preview tests | 受设备权限和本地文件可用性影响 |
 | Trail | 已实现 | 项目时间线串联关键事件 | Service tests | 只在 Project Detail 内 |
 | Weekly Review | 已实现 | 可编辑复盘与显式应用建议 | ReviewService/ViewModel tests | AI 不是必需条件 |
+| Stage Review Readiness / Stage Review | 部分实现 | 按 Phase 提示、打开草稿并显式发布阶段决定 | StageReviewService/StageReviewServiceTests | Web 仍是 demo；真机与 CloudKit 仍需门禁 |
+| Qualifying Proof | 部分实现 | 通过 Evidence Contract 与验收标准接受 Proof 后推进 Phase | StageReviewService/JournalRecordContract tests | 只在 Stage Review 发布路径生效 |
 | OpenAI-compatible Review | 部分实现 | 配置后调用 Chat Completions | Provider tests | 1 个来源引用断言失败 |
 | Library 与完整导出 | 已实现 | Proof 分组浏览并导出 Bundle | Export tests | 只保存本地路径 |
 | SwiftData 与旧 JSON 导入 | 已实现 | 本地持久化和一次性迁移 | Store tests | 没有多设备冲突处理 |
@@ -358,7 +368,7 @@ Today 同时展示 active Project 的一个 Next Step、当天或逾期的 Plann
 
 ### 10.1 测试
 
-2026-08-09 执行 `swift test` 共 433 个测试，0 失败，并通过 `swift build`。新增基线覆盖 Today Agenda 的原始窗口、Carryover Reschedule 的 selected-only mutation 与 Trail audit。静态测试/build 不等同于 Dynamic Type、VoiceOver、物理设备、实时 CloudKit 或双设备收敛验收。
+2026-08-09 执行 `swift test` 共 446 个测试，0 失败，并通过 `swift build`。新增基线覆盖 Stage Review Readiness、Qualifying Proof 原子发布、Revision Guard 与 shared Web contract fixtures，同时保留 Today Agenda 的原始窗口、Carryover Reschedule 的 selected-only mutation 与 Trail audit。静态测试/build 不等同于 Dynamic Type、VoiceOver、物理设备、实时 CloudKit 或双设备收敛验收。
 
 ### 10.2 设备与平台
 
@@ -420,7 +430,7 @@ Today 同时展示 active Project 的一个 Next Step、当天或逾期的 Plann
 
 - 补充 Today Agenda、Carryover 原始窗口展示与单个 PlannedSession Reschedule 行为。
 - 明确 Reschedule 与 Revise Plan 的边界：前者只改一个 session 并写 scheduleChanged Trail，后者进入结构性 revision wizard。
-- 更新 433 个 Swift 测试基线，并标注内存中的日期排序 override、Dynamic Type/真机/CloudKit 验收边界。
+- 更新 446 个 Swift 测试基线，并标注 Stage Review 的 Web/demo、内存中的日期排序 override、Dynamic Type/真机/CloudKit 验收边界。
 
 ### 2026-07-13 · v1.0
 
