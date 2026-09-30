@@ -905,6 +905,10 @@ public enum JournalRecordContractDecoder {
         case .practiceSession:
             let value = try decoder.decode(PracticeSession.self, from: payload)
             return .practiceSession(try value.validated())
+        case .learningRecordRevision:
+            return .learningRecordRevision(try decoder.decode(LearningRecordRevision.self, from: payload))
+        case .learningAdjustmentSuggestion:
+            return .learningAdjustmentSuggestion(try decoder.decode(LearningAdjustmentSuggestion.self, from: payload))
         }
     }
 

@@ -222,7 +222,7 @@ public struct ProjectArchiveView: View {
     }
 }
 
-private struct ProjectDetailView: View {
+struct ProjectDetailView: View {
     @ObservedObject var viewModel: JournalViewModel
     var project: Project
     @State private var showingEdit = false
@@ -235,6 +235,10 @@ private struct ProjectDetailView: View {
     @State private var showingCoursePlanWizard = false
     @State private var showingCommitment = false
     @State private var selectedStageReview: Review?
+    @State private var commandSuggestion: LearningAdjustmentSuggestion?
+    @State private var commandDecision: SuggestionDecision = .adopted
+    @State private var adjustmentError: String?
+    @State private var isRequestingAdjustments = false
 
     private var currentProject: Project {
         viewModel.projects.first { $0.id == project.id } ?? project
@@ -287,6 +291,17 @@ private struct ProjectDetailView: View {
             }
 
             Section("Learning Plan") {
+                Button {
+                    Task { await requestAdjustmentSuggestions() }
+                } label: {
+                    if isRequestingAdjustments {
+                        Label("adjustment.requesting", systemImage: "hourglass")
+                    } else {
+                        Label("adjustment.request", systemImage: "sparkles")
+                    }
+                }
+                .disabled(isRequestingAdjustments)
+
                 if let plan = viewModel.activeLearningPlan(for: currentProject.id) {
                     NavigationLink {
                         CoursePlanDetailView(viewModel: viewModel, project: currentProject, plan: plan)
@@ -339,6 +354,28 @@ private struct ProjectDetailView: View {
                     Text("Draft revision \(draft.revision) is ready to review.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            let pendingSuggestions = viewModel.adjustmentSuggestions(for: currentProject.id)
+                .filter { $0.decision == .pending }
+            if !pendingSuggestions.isEmpty {
+                Section("adjustment.pending.section") {
+                    ForEach(pendingSuggestions) { suggestion in
+                        AdjustmentSuggestionRow(
+                            viewModel: viewModel,
+                            suggestion: suggestion,
+                            onAdopt: {
+                                commandDecision = .adopted
+                                commandSuggestion = $0
+                            },
+                            onModify: {
+                                commandDecision = .modified
+                                commandSuggestion = $0
+                            },
+                            onError: { adjustmentError = $0 }
+                        )
+                    }
                 }
             }
 
@@ -397,11 +434,18 @@ private struct ProjectDetailView: View {
             Section("Sessions") {
                 ForEach(viewModel.sessionsForProject(currentProject.id)) { session in
                     NavigationLink {
-                        SessionDetailView(
-                            viewModel: viewModel,
-                            project: currentProject,
-                            session: session
-                        )
+                        // Guided-flow records carry an assessment and open
+                        // the correction-capable detail (spec 10); legacy
+                        // records keep the plain session detail.
+                        if session.assessment != nil {
+                            LearningRecordDetailView(viewModel: viewModel, session: session)
+                        } else {
+                            SessionDetailView(
+                                viewModel: viewModel,
+                                project: currentProject,
+                                session: session
+                            )
+                        }
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(session.note)
@@ -503,10 +547,35 @@ private struct ProjectDetailView: View {
         .sheet(isPresented: $showingCommitment) {
             ProjectCommitmentView(viewModel: viewModel, project: currentProject)
         }
+        .sheet(item: $commandSuggestion) { suggestion in
+            AdjustmentCommandSheet(
+                viewModel: viewModel,
+                suggestion: suggestion,
+                decision: commandDecision
+            ) { command in
+                do {
+                    if commandDecision == .modified {
+                        try viewModel.modifyAdjustmentSuggestion(suggestion.id, command: command)
+                    } else {
+                        try viewModel.adoptAdjustmentSuggestion(suggestion.id, command: command)
+                    }
+                } catch {
+                    adjustmentError = error.localizedDescription
+                }
+            }
+        }
         .alert("Review failed", isPresented: .constant(reviewError != nil)) {
             Button("OK") { reviewError = nil }
         } message: {
             Text(reviewError ?? "")
+        }
+        .alert(
+            String(localized: "adjustment.error_title"),
+            isPresented: .constant(adjustmentError != nil)
+        ) {
+            Button("OK") { adjustmentError = nil }
+        } message: {
+            Text(adjustmentError ?? "")
         }
     }
 
@@ -537,6 +606,19 @@ private struct ProjectDetailView: View {
             )
         } catch {
             reviewError = error.localizedDescription
+        }
+    }
+
+    private func requestAdjustmentSuggestions() async {
+        isRequestingAdjustments = true
+        defer { isRequestingAdjustments = false }
+        do {
+            _ = try await viewModel.requestAdjustmentSuggestions(
+                projectID: currentProject.id,
+                userRequest: String(localized: "adjustment.request.default")
+            )
+        } catch {
+            adjustmentError = error.localizedDescription
         }
     }
 
@@ -671,6 +753,330 @@ private struct EditProjectView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
+        }
+    }
+}
+
+
+// MARK: - Pending adjustment suggestions (spec 11)
+
+/// One pending learning adjustment suggestion on the course detail. Ordinary
+/// kinds adopt / modify / ignore through the JournalViewModel wrappers;
+/// structural ones always route through a plan revision draft reviewed in
+/// `PlanRevisionDiffView`, then activate on the existing revision path.
+private struct AdjustmentSuggestionRow: View {
+    @ObservedObject var viewModel: JournalViewModel
+    let suggestion: LearningAdjustmentSuggestion
+    let onAdopt: (LearningAdjustmentSuggestion) -> Void
+    let onModify: (LearningAdjustmentSuggestion) -> Void
+    let onError: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(suggestion.title)
+                .font(.subheadline.weight(.semibold))
+            if !suggestion.rationale.isEmpty {
+                Text(suggestion.rationale)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !suggestion.proposedValue.isEmpty {
+                Text(suggestion.proposedValue)
+                    .font(.subheadline)
+            }
+            if suggestion.kind == .structuralRevision {
+                structuralActions
+            } else {
+                ordinaryActions
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var ordinaryActions: some View {
+        HStack(spacing: 10) {
+            Button {
+                onAdopt(suggestion)
+            } label: {
+                Text("adjustment.adopt")
+            }
+            .buttonStyle(.borderedProminent)
+            Button {
+                onModify(suggestion)
+            } label: {
+                Text("adjustment.modify")
+            }
+            .buttonStyle(.bordered)
+            ignoreButton
+        }
+        .font(.caption)
+    }
+
+    @ViewBuilder
+    private var structuralActions: some View {
+        if let resolved = viewModel.adjustmentDiff(for: suggestion) {
+            NavigationLink {
+                PlanRevisionDiffView(
+                    diff: resolved.diff,
+                    sourceSessions: resolved.sources,
+                    onActivate: { capacityAcknowledged in
+                        try viewModel.activateStructuralAdjustment(
+                            suggestionID: suggestion.id,
+                            capacityAcknowledged: capacityAcknowledged
+                        )
+                    }
+                )
+            } label: {
+                Label("adjustment.review_draft", systemImage: "doc.text.magnifyingglass")
+            }
+        } else {
+            Button {
+                prepareDraft()
+            } label: {
+                Label("adjustment.prepare_draft", systemImage: "doc.badge.plus")
+            }
+            .buttonStyle(.bordered)
+        }
+        ignoreButton
+            .font(.caption)
+    }
+
+    private var ignoreButton: some View {
+        Button {
+            ignore()
+        } label: {
+            Text("adjustment.ignore")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func ignore() {
+        do {
+            try viewModel.ignoreAdjustmentSuggestion(suggestion.id)
+        } catch {
+            onError(error.localizedDescription)
+        }
+    }
+
+    private func prepareDraft() {
+        do {
+            _ = try viewModel.prepareStructuralAdjustmentDraft(suggestionID: suggestion.id)
+        } catch {
+            onError(error.localizedDescription)
+        }
+    }
+}
+
+/// Collects every parameter required by the selected command. A generic
+/// "adopt" action is never sent for reschedule, daily order, or duration:
+/// the command is constructed only after the user supplies its target.
+private struct AdjustmentCommandSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var viewModel: JournalViewModel
+    let suggestion: LearningAdjustmentSuggestion
+    let decision: SuggestionDecision
+    let onSave: (LearningAdjustmentCommand) -> Void
+
+    @State private var value: String
+    @State private var day: Date
+    @State private var position: TodayAgendaPosition = .upNext
+    @State private var source: TodayAgendaSource = .plannedSession
+    @State private var sourceID: UUID
+    @State private var plannedSessionID: UUID?
+    @State private var minutes: Int = 30
+
+    init(
+        viewModel: JournalViewModel,
+        suggestion: LearningAdjustmentSuggestion,
+        decision: SuggestionDecision,
+        onSave: @escaping (LearningAdjustmentCommand) -> Void
+    ) {
+        self.viewModel = viewModel
+        self.suggestion = suggestion
+        self.decision = decision
+        self.onSave = onSave
+        _value = State(initialValue: suggestion.proposedValue)
+        _day = State(initialValue: Date())
+        let sessions = viewModel.snapshot.plannedSessions
+            .filter { $0.projectId == suggestion.projectID && $0.deletedAt == nil }
+            .sorted {
+                ($0.deadline ?? .distantFuture, $0.title)
+                    < ($1.deadline ?? .distantFuture, $1.title)
+            }
+        _sourceID = State(initialValue: sessions.first?.id ?? suggestion.projectID)
+        _source = State(initialValue: sessions.isEmpty ? .nextStep : .plannedSession)
+        _plannedSessionID = State(initialValue: sessions.first?.id)
+    }
+
+    private var plannedSessions: [PlannedSession] {
+        viewModel.snapshot.plannedSessions
+            .filter { $0.projectId == suggestion.projectID && $0.deletedAt == nil }
+            .sorted {
+                ($0.deadline ?? .distantFuture, $0.title)
+                    < ($1.deadline ?? .distantFuture, $1.title)
+            }
+    }
+
+    private var canSave: Bool {
+        switch suggestion.kind {
+        case .nextStep:
+            return !value.trimmedForJournal.isEmpty
+        case .dailyOrder:
+            return true
+        case .reschedule:
+            return plannedSessionID != nil
+        case .temporaryDuration:
+            return plannedSessionID != nil && minutes > 0
+        case .structuralRevision:
+            return false
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(suggestion.title).font(.headline)
+                    if !suggestion.rationale.isEmpty {
+                        Text(suggestion.rationale)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                commandFields
+            }
+            .navigationTitle(
+                Text(decision == .modified
+                    ? "adjustment.sheet.modify.title"
+                    : "adjustment.sheet.adopt.title")
+            )
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("adjustment.sheet.cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(
+                        decision == .modified
+                            ? "adjustment.sheet.save"
+                            : "adjustment.sheet.adopt"
+                    ) {
+                        guard let command = makeCommand() else { return }
+                        onSave(command)
+                        dismiss()
+                    }
+                    .disabled(!canSave)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var commandFields: some View {
+        switch suggestion.kind {
+        case .nextStep:
+            Section("adjustment.command.next_step.section") {
+                TextField("adjustment.command.next_step.field", text: $value, axis: .vertical)
+            }
+        case .dailyOrder:
+            Section("adjustment.command.daily_order.section") {
+                DatePicker(
+                    "adjustment.command.daily_order.date",
+                    selection: $day,
+                    displayedComponents: .date
+                )
+                Picker("adjustment.command.daily_order.item", selection: $sourceID) {
+                    Text("adjustment.command.daily_order.current_next_step").tag(suggestion.projectID)
+                    ForEach(plannedSessions) { session in
+                        Text(session.title).tag(session.id)
+                    }
+                }
+                .onChange(of: sourceID) { _, newValue in
+                    source = plannedSessions.contains { $0.id == newValue }
+                        ? .plannedSession : .nextStep
+                }
+                Picker("adjustment.command.daily_order.position", selection: $position) {
+                    ForEach(TodayAgendaPosition.allCases, id: \.self) { item in
+                        Text(localizedPosition(item)).tag(item)
+                    }
+                }
+            }
+        case .reschedule:
+            Section("adjustment.command.reschedule.section") {
+                plannedSessionPicker
+                DatePicker(
+                    "adjustment.command.reschedule.new_date",
+                    selection: $day,
+                    displayedComponents: .date
+                )
+            }
+        case .temporaryDuration:
+            Section("adjustment.command.temporary_duration.section") {
+                plannedSessionPicker
+                Stepper(
+                    String(
+                        format: String(localized: "adjustment.command.temporary_duration.minutes"),
+                        minutes
+                    ),
+                    value: $minutes,
+                    in: 1...480,
+                    step: 5
+                )
+            }
+        case .structuralRevision:
+            Section {
+                Text("adjustment.command.structural.message")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var plannedSessionPicker: some View {
+        Picker("adjustment.command.planned_session", selection: Binding(
+            get: { plannedSessionID ?? plannedSessions.first?.id ?? suggestion.projectID },
+            set: { plannedSessionID = $0 }
+        )) {
+            ForEach(plannedSessions) { session in
+                Text(session.title).tag(session.id)
+            }
+        }
+    }
+
+    private func makeCommand() -> LearningAdjustmentCommand? {
+        switch suggestion.kind {
+        case .nextStep:
+            return .nextStep(value: value)
+        case .dailyOrder:
+            return .dailyOrder(target: DailyOrderAdoptionTarget(
+                day: day,
+                source: source,
+                sourceID: sourceID,
+                position: position
+            ))
+        case .reschedule:
+            guard let plannedSessionID else { return nil }
+            return .reschedule(target: RescheduleAdoptionTarget(
+                plannedSessionID: plannedSessionID,
+                newDeadline: day
+            ))
+        case .temporaryDuration:
+            guard let plannedSessionID else { return nil }
+            return .temporaryDuration(target: TemporaryDurationAdoptionTarget(
+                plannedSessionID: plannedSessionID,
+                minutes: minutes
+            ))
+        case .structuralRevision:
+            return nil
+        }
+    }
+
+    private func localizedPosition(_ position: TodayAgendaPosition) -> String {
+        switch position {
+        case .upNext: return String(localized: "adjustment.command.position.up_next")
+        case .laterToday: return String(localized: "adjustment.command.position.later_today")
+        case .optional: return String(localized: "adjustment.command.position.optional")
+        case .skipToday: return String(localized: "adjustment.command.position.skip_today")
         }
     }
 }

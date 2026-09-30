@@ -229,7 +229,29 @@ struct CoursePlanWizardView: View {
         }
 
         if let draftBinding = Binding($draft) {
-            DraftEditor(draft: draftBinding, planInput: input)
+            DraftEditor(
+                draft: draftBinding,
+                planInput: input,
+                onRegeneratePhase: { phaseID in regeneratePhase(phaseID) }
+            )
+
+            if let draft, !draft.assumptions.isEmpty {
+                Section("Assumptions") {
+                    ForEach(draft.assumptions, id: \.self) { Text($0) }
+                }
+            }
+
+            if let draft {
+                let capacity = capacityCheck(for: draft)
+                if capacity.requiresAcknowledgement || !capacity.warnings.isEmpty {
+                    Section("Capacity warning") {
+                        ForEach(capacity.warnings) { warning in
+                            Text(warning.message)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+            }
         } else {
             Section {
                 ContentUnavailableView(
@@ -365,6 +387,22 @@ struct CoursePlanWizardView: View {
         }
     }
 
+    private func regeneratePhase(_ phaseID: String) {
+        guard let draft else { return }
+        Task {
+            do {
+                let updated = try await viewModel.regenerateCoursePlanPhase(
+                    input: input,
+                    draft: draft,
+                    phaseID: phaseID
+                )
+                self.draft = updated
+            } catch {
+                errorMessage = errorText(error)
+            }
+        }
+    }
+
     private func activateDraft() {
         guard let draft else { return }
         do {
@@ -449,6 +487,8 @@ struct CoursePlanWizardView: View {
         case .invalidRevision: "The plan revision is invalid."
         case .invalidOrdinal: "The phase order is invalid."
         case .invalidRevisionIdentity: "The plan revision identity is invalid."
+        case .blankCompletionCriterion: "Remove blank completion criteria."
+        case .tooManyCompletionCriteria: "Keep at most five completion criteria per session."
         }
     }
 
@@ -508,12 +548,27 @@ struct CoursePlanWizardView: View {
 private struct DraftEditor: View {
     @Binding var draft: CoursePlanDraft
     let planInput: CoursePlanningInput
+    let onRegeneratePhase: (String) -> Void
+    @State private var undoStack: [CoursePlanDraft] = []
 
     var body: some View {
         Section("Draft") {
+            Label(
+                NSLocalizedString("learning_plan.draft_status", comment: "Status shown on an unsaved AI plan draft"),
+                systemImage: "doc.badge.clock"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
             TextField("Plan title", text: $draft.title)
             TextField("Summary", text: $draft.summary, axis: .vertical)
                 .lineLimit(2...4)
+            Button {
+                guard let previous = undoStack.popLast() else { return }
+                draft = previous
+            } label: {
+                Label("Undo Last Edit", systemImage: "arrow.uturn.backward")
+            }
+            .disabled(undoStack.isEmpty)
         }
 
         ForEach(Array(draft.phases.indices), id: \.self) { index in
@@ -525,8 +580,12 @@ private struct DraftEditor: View {
                         .disabled(index == 0)
                     Button { movePhase(index, by: 1) } label: { Image(systemName: "arrow.down") }
                         .disabled(index == draft.phases.count - 1)
-                    Button(role: .destructive) { draft.phases.remove(at: index) } label: { Image(systemName: "trash") }
+                    Button { onRegeneratePhase(draft.phases[index].id) } label: { Image(systemName: "arrow.clockwise") }
+                    Button(role: .destructive) { deletePhase(index) } label: { Image(systemName: "trash") }
                 }
+                Text("Canonical Milestone: \(draft.phases[index].objective)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 TextField("Objective", text: $draft.phases[index].objective, axis: .vertical)
                 TextField("Expected proof", text: $draft.phases[index].expectedProof, axis: .vertical)
                 DatePicker("Start", selection: $draft.phases[index].targetStart, displayedComponents: .date)
@@ -536,17 +595,20 @@ private struct DraftEditor: View {
 
         Section {
             Button {
-                draft.phases.append(
-                    CoursePlanDraftPhase(
-                        id: "phase-\(UUID().uuidString)",
-                        title: "New phase",
-                        objective: planInput.goal,
-                        expectedProof: planInput.expectedOutcome,
-                        ordinal: draft.phases.count,
-                        targetStart: planInput.startsOn,
-                        targetEnd: planInput.deadline ?? planInput.startsOn
+                apply { draft in
+                    CoursePlanDraftEditingService.addPhase(
+                        draft,
+                        phase: CoursePlanDraftPhase(
+                            id: "phase-\(UUID().uuidString)",
+                            title: "New phase",
+                            objective: planInput.goal,
+                            expectedProof: planInput.expectedOutcome,
+                            ordinal: draft.phases.count,
+                            targetStart: planInput.startsOn,
+                            targetEnd: planInput.deadline ?? planInput.startsOn
+                        )
                     )
-                )
+                }
             } label: {
                 Label("Add Phase", systemImage: "plus")
             }
@@ -561,7 +623,23 @@ private struct DraftEditor: View {
                         .disabled(index == 0)
                     Button { moveSession(index, by: 1) } label: { Image(systemName: "arrow.down") }
                         .disabled(index == draft.sessions.count - 1)
-                    Button(role: .destructive) { draft.sessions.remove(at: index) } label: { Image(systemName: "trash") }
+                    Button(role: .destructive) { deleteSession(index) } label: { Image(systemName: "trash") }
+                }
+                if !draft.sessions[index].completionCriteria.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Completion criteria")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ForEach(draft.sessions[index].completionCriteria, id: \.self) { criterion in
+                            Text("• \(criterion)")
+                                .font(.caption)
+                        }
+                    }
+                }
+                if let reason = draft.sessions[index].recommendationReason, !reason.isEmpty {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Picker("Phase", selection: $draft.sessions[index].phaseID) {
                     ForEach(draft.phases) { phase in
@@ -600,27 +678,50 @@ private struct DraftEditor: View {
         Section {
             Button {
                 guard let phase = draft.phases.first else { return }
-                draft.sessions.append(
-                    CoursePlanDraftSession(
-                        id: "session-\(UUID().uuidString)",
-                        phaseID: phase.id,
-                        title: "New study session",
-                        actionType: .course,
-                        expectedProof: planInput.expectedOutcome,
-                        durationMinutes: planInput.preferredSessionMinutes,
-                        deadline: planInput.deadline,
-                        planningWindow: try? PlanningWindow(
-                            start: phase.targetStart,
-                            end: phase.targetEnd,
-                            granularity: .dateRange
+                apply { draft in
+                    CoursePlanDraftEditingService.addSession(
+                        draft,
+                        session: CoursePlanDraftSession(
+                            id: "session-\(UUID().uuidString)",
+                            phaseID: phase.id,
+                            title: "New study session",
+                            actionType: .course,
+                            expectedProof: planInput.expectedOutcome,
+                            durationMinutes: planInput.preferredSessionMinutes,
+                            deadline: planInput.deadline,
+                            planningWindow: try? PlanningWindow(
+                                start: phase.targetStart,
+                                end: phase.targetEnd,
+                                granularity: .dateRange
+                            )
                         )
                     )
-                )
+                }
             } label: {
                 Label("Add Session", systemImage: "plus")
             }
             .disabled(draft.phases.isEmpty)
         }
+    }
+
+    /// Structural edits route through the editing service so cross-object
+    /// consistency (ordinals, session cleanup) never lives in the view; each
+    /// edit pushes an undo snapshot.
+    private func apply(_ transform: (CoursePlanDraft) -> CoursePlanDraft) {
+        undoStack.append(draft)
+        draft = transform(draft)
+    }
+
+    private func deletePhase(_ index: Int) {
+        guard draft.phases.indices.contains(index) else { return }
+        let phaseID = draft.phases[index].id
+        apply { CoursePlanDraftEditingService.deletePhase($0, phaseID: phaseID) }
+    }
+
+    private func deleteSession(_ index: Int) {
+        guard draft.sessions.indices.contains(index) else { return }
+        let sessionID = draft.sessions[index].id
+        apply { CoursePlanDraftEditingService.deleteSession($0, sessionID: sessionID) }
     }
 
     private func optionalTextBinding(for index: Int) -> Binding<String> {
@@ -702,17 +803,14 @@ private struct DraftEditor: View {
     }
 
     private func movePhase(_ index: Int, by offset: Int) {
-        let target = index + offset
-        guard draft.phases.indices.contains(target) else { return }
-        draft.phases.swapAt(index, target)
-        for index in draft.phases.indices {
-            draft.phases[index].ordinal = index
-        }
+        guard draft.phases.indices.contains(index) else { return }
+        let phaseID = draft.phases[index].id
+        apply { CoursePlanDraftEditingService.movePhase($0, phaseID: phaseID, by: offset) }
     }
 
     private func moveSession(_ index: Int, by offset: Int) {
-        let target = index + offset
-        guard draft.sessions.indices.contains(target) else { return }
-        draft.sessions.swapAt(index, target)
+        guard draft.sessions.indices.contains(index) else { return }
+        let sessionID = draft.sessions[index].id
+        apply { CoursePlanDraftEditingService.moveSession($0, sessionID: sessionID, by: offset) }
     }
 }

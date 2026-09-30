@@ -321,6 +321,67 @@ final class TodayAgendaServiceTests: XCTestCase {
         XCTAssertTrue(agenda.cadenceSignals.contains { $0.routineID == routine.id && $0.isMissed })
     }
 
+    func testTodayPracticeOnlyIncludesEnabledValidRoutinesWithLiveProjects() throws {
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 10, hour: 10)))
+        let project = activeProject(name: "Practice", createdAt: day.addingTimeInterval(-100))
+        let weekday = calendar.component(.weekday, from: day)
+        let valid = PracticeRoutine(
+            projectId: project.id,
+            name: "Valid routine",
+            symbolName: "timer",
+            color: .teal,
+            targetMinutes: 20,
+            weekdays: [weekday],
+            createdAt: day.addingTimeInterval(-100),
+            updatedAt: day.addingTimeInterval(-100)
+        )
+        let archived = PracticeRoutine(
+            projectId: project.id,
+            name: "Archived routine",
+            symbolName: "timer",
+            color: .teal,
+            targetMinutes: 20,
+            weekdays: [weekday],
+            isArchived: true,
+            createdAt: day.addingTimeInterval(-100),
+            updatedAt: day.addingTimeInterval(-100)
+        )
+        let orphaned = PracticeRoutine(
+            projectId: UUID(),
+            name: "Orphaned routine",
+            symbolName: "timer",
+            color: .teal,
+            targetMinutes: 20,
+            weekdays: [weekday],
+            createdAt: day.addingTimeInterval(-100),
+            updatedAt: day.addingTimeInterval(-100)
+        )
+        let malformed = PracticeRoutine(
+            projectId: project.id,
+            name: "Malformed routine",
+            symbolName: "timer",
+            color: .teal,
+            targetMinutes: 0,
+            weekdays: [weekday],
+            createdAt: day.addingTimeInterval(-100),
+            updatedAt: day.addingTimeInterval(-100)
+        )
+
+        let agenda = TodayAgendaService(calendar: calendar).agenda(
+            snapshot: JournalSnapshot(
+                projects: [project],
+                practiceRoutines: [valid, archived, orphaned, malformed]
+            ),
+            day: day,
+            now: day
+        )
+
+        XCTAssertEqual(
+            agenda.items.filter { $0.source == .practiceRoutine }.map(\.sourceID),
+            [valid.id]
+        )
+    }
+
     func testDailyOverrideRepositionsOnlyTheProjection() throws {
         let day = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 10, hour: 10)))
         let first = activeProject(name: "First", createdAt: day.addingTimeInterval(-200))
@@ -335,6 +396,47 @@ final class TodayAgendaServiceTests: XCTestCase {
         XCTAssertEqual(snapshot, JournalSnapshot(projects: [first, second]))
         XCTAssertEqual(after.items.first(where: { $0.sourceID == target.sourceID })?.position, .skipToday)
         XCTAssertTrue(after.items.filter { $0.position != .skipToday }.allSatisfy { $0.position == .upNext || $0.position == .optional || $0.position == .laterToday })
+    }
+
+    func testTemporaryDurationOverrideChangesOnlyTodayProjection() throws {
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 10, hour: 10)))
+        var project = activeProject(name: "Temporary", createdAt: day.addingTimeInterval(-100))
+        let plan = try makePlan(projectID: project.id, startsOn: day.addingTimeInterval(-86_400))
+        project.activeCoursePlanId = plan.id
+        let phase = try makePhase(
+            plan: plan,
+            targetStart: day.addingTimeInterval(-86_400),
+            targetEnd: day.addingTimeInterval(86_400)
+        )
+        let session = try PlannedSession(
+            planId: plan.id,
+            planRevisionID: plan.revisionID,
+            planSeriesID: plan.planSeriesID,
+            phaseId: phase.id,
+            projectId: project.id,
+            title: "Short checkpoint",
+            actionType: .course,
+            durationMinutes: 30,
+            deadline: day.addingTimeInterval(3_600),
+            status: .scheduled,
+            createdAt: day.addingTimeInterval(-60),
+            updatedAt: day.addingTimeInterval(-60)
+        )
+        let snapshot = JournalSnapshot(
+            projects: [project],
+            coursePlans: [plan],
+            planPhases: [phase],
+            plannedSessions: [session]
+        )
+        let agenda = TodayAgendaService(calendar: calendar).agenda(
+            snapshot: snapshot,
+            day: day,
+            now: day,
+            temporaryDurationOverrides: [session.id: 45]
+        )
+
+        XCTAssertEqual(agenda.items.first(where: { $0.sourceID == session.id })?.durationMinutes, 45)
+        XCTAssertEqual(snapshot.plannedSessions.first?.durationMinutes, 30)
     }
 
     func testEmptyAgendaIsExplicit() throws {

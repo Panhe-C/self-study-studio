@@ -182,7 +182,8 @@ public struct TodayAgendaService: Sendable {
         snapshot: JournalSnapshot,
         day: Date = Date(),
         now: Date? = nil,
-        overrides: [TodayAgendaOverride] = []
+        overrides: [TodayAgendaOverride] = [],
+        temporaryDurationOverrides: [UUID: Int] = [:]
     ) -> TodayAgenda {
         let dayStart = calendar.startOfDay(for: day)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
@@ -230,7 +231,8 @@ public struct TodayAgendaService: Sendable {
                         projectID: project.id,
                         title: session.title,
                         detail: detail,
-                        durationMinutes: session.durationMinutes,
+                        durationMinutes: temporaryDurationOverrides[session.id]
+                            ?? session.durationMinutes,
                         originalDeadline: session.deadline,
                         windowStart: windowStart,
                         windowEnd: windowEnd,
@@ -247,7 +249,13 @@ public struct TodayAgendaService: Sendable {
 
         let weekday = calendar.component(.weekday, from: dayStart)
         for routine in snapshot.operationalPracticeRoutines where
-            !routine.isArchived && routine.deletedAt == nil && routine.weekdays.contains(weekday) {
+            !routine.isArchived &&
+            routine.deletedAt == nil &&
+            routine.weekdays.contains(weekday) {
+            // Today only offers executable routines. Legacy flat routines
+            // validate with an empty block list, while malformed imported
+            // records stay out of the agenda until repaired in Practice.
+            guard (try? routine.validated()) != nil else { continue }
             guard let projectID = routine.projectId,
                   projectByID[projectID] != nil,
                   routine.createdAt < dayEnd else { continue }
@@ -324,6 +332,7 @@ public struct TodayAgendaService: Sendable {
         guard dayStart <= todayStart else { return [] }
         let routines = snapshot.operationalPracticeRoutines.filter {
             !$0.isArchived && $0.deletedAt == nil &&
+            (try? $0.validated()) != nil &&
             $0.projectId.flatMap { projects[$0] } != nil
         }
         let sessions = snapshot.practiceSessions.filter { $0.deletedAt == nil }

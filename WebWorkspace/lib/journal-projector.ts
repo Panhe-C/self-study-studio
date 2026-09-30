@@ -1,4 +1,6 @@
 import type {
+  ConfirmedRecordSummary,
+  PendingAdjustmentSummary,
   PlanPhase,
   PlanSession,
   PlanningWindow,
@@ -356,6 +358,80 @@ function canonicalRecordsByKind(records: RecordLike[]) {
   return groups;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Latest confirmed learning records for a project (spec 4.5/4.6). Sessions
+ * without a confirmed assessment stay out; amendment info comes from the
+ * newest learningRecordRevision for the session. Unknown payload fields are
+ * ignored so newer journal versions keep projecting. */
+function projectConfirmedRecords(
+  projectID: string,
+  sessions: RecordLike[],
+  recordRevisions: RecordLike[],
+): ConfirmedRecordSummary[] {
+  return sessions
+    .filter((record) => {
+      const value = payload(record);
+      return value.projectId === projectID && isRecord(value.assessment) && !value.deletedAt;
+    })
+    .sort(byNewest)
+    .map((record) => {
+      const value = payload(record);
+      const assessment = value.assessment as Record<string, unknown>;
+      const sessionID = stringValue(value.id, record.recordName);
+      const lastRevision = recordRevisions
+        .filter((candidate) => {
+          const revision = payload(candidate);
+          return revision.sessionID === sessionID && !revision.deletedAt;
+        })
+        .sort((left, right) =>
+          timestamp(payload(right).revisedAt) - timestamp(payload(left).revisedAt) ||
+          left.recordName.localeCompare(right.recordName)
+        )[0];
+      return {
+        id: sessionID,
+        date: iso(value.endedAt ?? value.updatedAt).slice(0, 10) || "Date unavailable",
+        summary: stringValue(value.note, "No confirmed summary recorded."),
+        progress: stringValue(assessment.progress, "unknown"),
+        ...(typeof assessment.understanding === "string"
+          ? { understanding: assessment.understanding }
+          : {}),
+        revision: Math.max(1, numberValue(assessment.revision, 1)),
+        confirmedAt: iso(assessment.confirmedAt),
+        ...(lastRevision ? { lastAmendedAt: iso(payload(lastRevision).revisedAt) } : {}),
+      } satisfies ConfirmedRecordSummary;
+    });
+}
+
+/** Pending adjustment suggestions for a project, read-only (spec 4.7).
+ * Decided or deleted suggestions never surface on the web reader. */
+function projectPendingSuggestions(
+  projectID: string,
+  suggestions: RecordLike[],
+): PendingAdjustmentSummary[] {
+  return suggestions
+    .filter((record) => {
+      const value = payload(record);
+      return (value.projectID ?? value.projectId) === projectID &&
+        value.decision === "pending" &&
+        !value.deletedAt;
+    })
+    .sort(byNewest)
+    .map((record) => {
+      const value = payload(record);
+      return {
+        id: stringValue(value.id, record.recordName),
+        kind: stringValue(value.kind, "unknown"),
+        title: stringValue(value.title, "Adjustment suggestion"),
+        rationale: stringValue(value.rationale, "No rationale recorded."),
+        proposedValue: stringValue(value.proposedValue, "No proposal recorded."),
+        createdAt: iso(value.createdAt),
+      } satisfies PendingAdjustmentSummary;
+    });
+}
+
 export function projectJournalRecords(
   records: RecordLike[],
   options: { asOf?: string } = {},
@@ -375,6 +451,9 @@ export function projectJournalRecords(
   const reviews = groups.get("review") ?? [];
   const availabilityRules = groups.get("availabilityRule") ?? [];
   const evidenceAcceptances = groups.get("evidenceAcceptance") ?? [];
+  const sessions = groups.get("session") ?? [];
+  const recordRevisions = groups.get("learningRecordRevision") ?? [];
+  const adjustmentSuggestions = groups.get("learningAdjustmentSuggestion") ?? [];
   const unavailable = new Set<DashboardSection>();
   const demos: ProjectDemo[] = [];
 
@@ -489,6 +568,8 @@ export function projectJournalRecords(
         : { lastSessionLabel: "No Practice Session recorded" }),
       trail: projectTrailValue,
       proofs: projectProofsValue,
+      confirmedRecords: projectConfirmedRecords(projectID, sessions, recordRevisions),
+      pendingSuggestions: projectPendingSuggestions(projectID, adjustmentSuggestions),
       review,
       capacity,
     });

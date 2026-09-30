@@ -31,6 +31,17 @@ public final class CoursePlanningService {
         return try saveDraft(input: input, draft: draft)
     }
 
+    /// Regenerates a single draft phase through the provider. The caller
+    /// splices the result into the editable draft; nothing is persisted here.
+    @MainActor
+    public func regeneratePhase(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext,
+        phase: CoursePlanDraftPhase
+    ) async throws -> CoursePlanPhaseRegeneration {
+        try await provider.regeneratePhase(input: input, context: context, phase: phase)
+    }
+
     @discardableResult
     public func saveDraft(
         input: CoursePlanningInput,
@@ -120,6 +131,8 @@ public final class CoursePlanningService {
                             granularity: .dateRange
                         )
                     },
+                completionCriteria: draftSession.completionCriteria,
+                recommendationReason: draftSession.recommendationReason,
                 deadline: draftSession.deadline,
                 createdAt: createdAt,
                 updatedAt: createdAt
@@ -178,12 +191,6 @@ public final class CoursePlanningService {
         let activatedAt = now()
         let existingPlan = snapshot.coursePlans[planIndex]
 
-        try validateActivationExpectation(
-            expectation,
-            draftPlan: existingPlan,
-            snapshot: snapshot
-        )
-
         // Activation is idempotent. In particular, do not create another
         // outbox mutation or trail event when a retry observes the already
         // active revision.
@@ -196,6 +203,12 @@ public final class CoursePlanningService {
                 reason: "First session in the activated learning plan"
             )
         }
+
+        try validateActivationExpectation(
+            expectation,
+            draftPlan: existingPlan,
+            snapshot: snapshot
+        )
 
         let capacityResult = capacityCheckService.check(
             plan: existingPlan,
@@ -372,18 +385,22 @@ public final class CoursePlanningService {
         guard let plan = snapshot.coursePlans.first(where: { $0.id == planID }) else {
             throw JournalValidationError.missingProject
         }
+        if let baseRevisionID = plan.baseRevisionID {
+            let baseReference = JournalEntityReference(.coursePlan, baseRevisionID)
+            let targetMetadata = try repository.metadata(for: plan.reference)
+            return RevisionGuardExpectation(
+                baseRevisionID: baseRevisionID,
+                baseRecordChangeTag: try repository.metadata(for: baseReference)?.recordChangeTag,
+                targetRecordChangeTag: targetMetadata?.recordChangeTag,
+                recordState: .existingRecord,
+                targetRecordState: targetMetadata == nil ? .newRecord : .existingRecord
+            )
+        }
         let targetMetadata = try repository.metadata(for: plan.reference)
         if let targetMetadata {
             return .existingTarget(
                 revisionID: plan.revisionID,
                 recordChangeTag: targetMetadata.recordChangeTag
-            )
-        }
-        if let baseRevisionID = plan.baseRevisionID {
-            let baseReference = JournalEntityReference(.coursePlan, baseRevisionID)
-            return .existing(
-                baseRevisionID: baseRevisionID,
-                recordChangeTag: try repository.metadata(for: baseReference)?.recordChangeTag
             )
         }
         return .newRecord()
@@ -447,7 +464,19 @@ public final class CoursePlanningService {
     ) throws -> PlanRevisionDraft {
         let plan = try revise(planID: planID, input: input, draft: draft)
         let snapshot = try repository.snapshot()
-        let expectation = try revisionGuardExpectation(for: plan.id)
+        // A revision draft must guard the active base revision, not merely
+        // the newly-created draft record. Otherwise an edit made elsewhere
+        // after prepare could still activate a stale copy over newer work.
+        let expectation: RevisionGuardExpectation
+        if let baseRevisionID = plan.baseRevisionID {
+            let baseReference = JournalEntityReference(.coursePlan, baseRevisionID)
+            expectation = .existing(
+                baseRevisionID: baseRevisionID,
+                recordChangeTag: try repository.metadata(for: baseReference)?.recordChangeTag
+            )
+        } else {
+            expectation = .newRecord()
+        }
         return PlanRevisionDraft(
             plan: plan,
             phases: snapshot.planPhases.filter { $0.planId == plan.id },
@@ -474,11 +503,15 @@ public final class CoursePlanningService {
     /// Reschedules one execution record without creating a new plan revision.
     /// The phase window and every sibling session remain untouched; the prior
     /// window is retained in a schedule-change Trail event for carryover audit.
+    /// `additionalUpserts` rides the same transaction so callers (e.g. the
+    /// adjustment service folding in a suggestion decision) never expose a
+    /// rescheduled session without its sibling write.
     @discardableResult
     public func reschedule(
         plannedSessionID: UUID,
         newDeadline: Date,
-        capacityAcknowledged: Bool = false
+        capacityAcknowledged: Bool = false,
+        additionalUpserts: [JournalEntity] = []
     ) throws -> PlannedSession {
         let snapshot = try repository.snapshot()
         guard let index = snapshot.plannedSessions.firstIndex(where: { $0.id == plannedSessionID }) else {
@@ -535,7 +568,7 @@ public final class CoursePlanningService {
         }
         try repository.commit(
             JournalTransaction(
-                upserts: [.plannedSession(session), .trailEvent(event)],
+                upserts: [.plannedSession(session), .trailEvent(event)] + additionalUpserts,
                 origin: .user,
                 revisionExpectations: expectations
             )

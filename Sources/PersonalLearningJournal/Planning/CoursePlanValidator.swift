@@ -79,6 +79,19 @@ public struct CoursePlanValidator: Sendable {
             if session.durationMinutes <= 0 {
                 errors.append(.invalidDuration)
             }
+            if session.completionCriteria.count > 5 {
+                errors.append(.tooManyCompletionCriteria(session.id))
+            }
+            if session.completionCriteria.contains(where: { $0.trimmedForJournal.isEmpty }) {
+                errors.append(.blankCompletionCriterion(session.id))
+            }
+            if session.completionCriteria.isEmpty {
+                // Legacy drafts carry no criteria; a deterministic fallback
+                // generates a check from the title and expected proof later.
+                warnings.append(
+                    "Session \"\(session.title)\" has no completion criteria; a fallback check will be generated."
+                )
+            }
             if let deadline = session.deadline,
                deadline < input.startsOn || input.deadline.map({ deadline > $0 }) == true {
                 errors.append(.invalidDateRange)

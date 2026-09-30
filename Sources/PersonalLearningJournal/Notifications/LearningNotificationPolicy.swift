@@ -4,6 +4,8 @@ public enum LearningNotificationCategory: String, CaseIterable, Codable, Sendabl
     case confirmedStudyTime
     case contractBoundary
     case pendingReview
+    case pendingCompletionCheck
+    case pendingRecordConfirmation
 }
 
 public struct LearningNotificationPayload: Equatable, Sendable {
@@ -29,6 +31,10 @@ public struct LearningNotificationPolicy: Sendable {
             "A learning commitment needs attention."
         case .pendingReview:
             "A learning review is ready for your decision."
+        case .pendingCompletionCheck:
+            "A study session is waiting for its completion check."
+        case .pendingRecordConfirmation:
+            "Your learning record draft is ready to confirm."
         }
         return LearningNotificationPayload(
             category: category,

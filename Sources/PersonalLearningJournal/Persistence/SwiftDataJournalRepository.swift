@@ -52,6 +52,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
             schedulingPreferences: try decodedRecords(StoredSchedulingPreferencesV2.self, as: SchedulingPreferences.self),
             practiceRoutines: try decodedRecords(StoredPracticeRoutineV2.self, as: PracticeRoutine.self),
             practiceSessions: try decodedRecords(StoredPracticeSessionV2.self, as: PracticeSession.self),
+            learningRecordRevisions: try decodedRecords(StoredLearningRecordRevisionV2.self, as: LearningRecordRevision.self),
+            learningAdjustmentSuggestions: try decodedRecords(StoredLearningAdjustmentSuggestionV2.self, as: LearningAdjustmentSuggestion.self),
             hasCompletedOnboarding: metadata?.hasCompletedOnboarding,
             pendingFirstRecordProjectId: metadata?.pendingFirstRecordProjectId
         )
@@ -307,6 +309,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
         case .schedulingPreferences: return try entity(reference.id, in: StoredSchedulingPreferencesV2.self, as: SchedulingPreferences.self).map(JournalEntity.schedulingPreferences)
         case .practiceRoutine: return try entity(reference.id, in: StoredPracticeRoutineV2.self, as: PracticeRoutine.self).map(JournalEntity.practiceRoutine)
         case .practiceSession: return try entity(reference.id, in: StoredPracticeSessionV2.self, as: PracticeSession.self).map(JournalEntity.practiceSession)
+        case .learningRecordRevision: return try entity(reference.id, in: StoredLearningRecordRevisionV2.self, as: LearningRecordRevision.self).map(JournalEntity.learningRecordRevision)
+        case .learningAdjustmentSuggestion: return try entity(reference.id, in: StoredLearningAdjustmentSuggestionV2.self, as: LearningAdjustmentSuggestion.self).map(JournalEntity.learningAdjustmentSuggestion)
         }
     }
 
@@ -516,6 +520,10 @@ public final class SwiftDataJournalRepository: JournalRepository {
             try upsert(value, in: StoredPracticeRoutineV2.self)
         case let .practiceSession(value):
             try upsert(value, in: StoredPracticeSessionV2.self)
+        case let .learningRecordRevision(value):
+            try upsert(value, in: StoredLearningRecordRevisionV2.self)
+        case let .learningAdjustmentSuggestion(value):
+            try upsert(value, in: StoredLearningAdjustmentSuggestionV2.self)
         }
     }
 
@@ -639,6 +647,18 @@ public final class SwiftDataJournalRepository: JournalRepository {
                 var value = $0
                 value.deletedAt = now()
                 value.updatedAt = value.deletedAt!
+                return value
+            }
+        case .learningRecordRevision:
+            try markDeleted(reference.id, in: StoredLearningRecordRevisionV2.self, as: LearningRecordRevision.self) {
+                var value = $0
+                value.deletedAt = now()
+                return value
+            }
+        case .learningAdjustmentSuggestion:
+            try markDeleted(reference.id, in: StoredLearningAdjustmentSuggestionV2.self, as: LearningAdjustmentSuggestion.self) {
+                var value = $0
+                value.deletedAt = now()
                 return value
             }
         }
@@ -796,6 +816,8 @@ public final class SwiftDataJournalRepository: JournalRepository {
             StoredSchedulingPreferencesV2.self,
             StoredPracticeRoutineV2.self,
             StoredPracticeSessionV2.self,
+            StoredLearningRecordRevisionV2.self,
+            StoredLearningAdjustmentSuggestionV2.self,
             StoredPendingMutationV2.self,
             StoredSyncMetadataV2.self,
             StoredSyncConflictV2.self,
@@ -833,6 +855,8 @@ extension AvailabilityRule: DeletionDated { fileprivate var journalDeletedAt: Da
 extension SchedulingPreferences: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension PracticeRoutine: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 extension PracticeSession: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension LearningRecordRevision: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
+extension LearningAdjustmentSuggestion: DeletionDated { fileprivate var journalDeletedAt: Date? { deletedAt } }
 
 private protocol StoredEntityV2: PersistentModel {
     var id: UUID { get set }
@@ -1035,6 +1059,26 @@ private protocol StoredEntityV2: PersistentModel {
         self.ordinal = ordinal
         self.payload = payload
         self.deletedAt = deletedAt
+    }
+}
+
+@Model private final class StoredLearningRecordRevisionV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id; self.ordinal = ordinal; self.payload = payload; self.deletedAt = deletedAt
+    }
+}
+
+@Model private final class StoredLearningAdjustmentSuggestionV2: StoredEntityV2 {
+    @Attribute(.unique) var id: UUID
+    var ordinal: Int
+    var payload: Data
+    var deletedAt: Date?
+    init(id: UUID, ordinal: Int, payload: Data, deletedAt: Date?) {
+        self.id = id; self.ordinal = ordinal; self.payload = payload; self.deletedAt = deletedAt
     }
 }
 

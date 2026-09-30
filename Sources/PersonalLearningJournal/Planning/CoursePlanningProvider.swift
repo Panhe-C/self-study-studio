@@ -16,6 +16,27 @@ public protocol CoursePlanningProvider: Sendable {
         input: CoursePlanningInput,
         context: CoursePlanningContext
     ) async throws -> CoursePlanDraft
+
+    /// Regenerates a single phase and its sessions. The caller splices the
+    /// result into the draft with
+    /// `CoursePlanDraftEditingService.replacingPhase`, so the output may only
+    /// replace the target phase and its sessions.
+    func regeneratePhase(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext,
+        phase: CoursePlanDraftPhase
+    ) async throws -> CoursePlanPhaseRegeneration
+}
+
+/// A regenerated single phase plus its replacement sessions.
+public struct CoursePlanPhaseRegeneration: Equatable, Sendable {
+    public var phase: CoursePlanDraftPhase
+    public var sessions: [CoursePlanDraftSession]
+
+    public init(phase: CoursePlanDraftPhase, sessions: [CoursePlanDraftSession]) {
+        self.phase = phase
+        self.sessions = sessions
+    }
 }
 
 public struct CoursePlanningContext: Codable, Equatable, Sendable {
@@ -77,8 +98,78 @@ public struct OpenAICompatibleCoursePlanningProvider: CoursePlanningProvider {
         }
     }
 
+    public func regeneratePhase(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext,
+        phase: CoursePlanDraftPhase
+    ) async throws -> CoursePlanPhaseRegeneration {
+        do {
+            let response: CoursePhaseRegenerationResponse = try await client.completeJSON(
+                system: Self.phaseRegenerationSystemPrompt,
+                user: try Self.phaseRegenerationRequestPreview(
+                    input: input,
+                    context: context,
+                    phase: phase,
+                    model: model
+                ).encodedText
+            )
+            let regeneration = response.regeneration
+            // Reuse the validator's phase- and session-level rules on a
+            // synthetic single-phase draft.
+            let validation = validator.validate(
+                CoursePlanDraft(
+                    title: input.courseTitle,
+                    summary: "",
+                    phases: [regeneration.phase],
+                    sessions: regeneration.sessions
+                ),
+                input: input
+            )
+            guard validation.isValid else {
+                throw CoursePlanningError.invalidDraft(validation.errors)
+            }
+            return regeneration
+        } catch let error as CoursePlanningError {
+            throw error
+        } catch {
+            throw CoursePlanningError.providerUnavailable
+        }
+    }
+
+    private static let phaseRegenerationSystemPrompt = """
+    You regenerate one phase of a practical, editable personal Learning Plan. Return one JSON object with phase and sessions. Do not wrap the JSON in Markdown or add explanatory text. The phase needs string id, string title, string objective, string expectedProof, integer ordinal, targetStart, and targetEnd. Each session needs string id, string phaseID, string title, actionType, optional string expectedProof, integer durationMinutes, optional deadline, completionCriteria, and optional recommendationReason. actionType must be exactly "course" or "practice". All dates must be ISO-8601 UTC timestamps like "2026-08-12T14:30:00Z"; use null for an optional date instead of an empty string. completionCriteria must contain 1 to 5 observable string checks the learner can judge as done or not done (concrete behaviors or results, never vague outcomes like "understand the chapter"). Replace only the supplied phase; do not include any other phase or its sessions. Use only the supplied optional course outline, prerequisites, constraints, and learning context. Do not invent course-page content. Fit sessions within the provided weekly budget, preferred duration, and study period or deadline. Do not use or request calendar event content, contacts, location, or any data beyond the request.
+    """
+
+    private static func phaseRegenerationRequestBody(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext,
+        phase: CoursePlanDraftPhase
+    ) throws -> String {
+        let request = CoursePhaseRegenerationRequest(input: input, context: context, phase: phase)
+        return String(decoding: try JSONEncoder.journal.encode(request), as: UTF8.self)
+    }
+
+    public static func phaseRegenerationRequestPreview(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext,
+        phase: CoursePlanDraftPhase,
+        model: String
+    ) throws -> AIRequestPackage {
+        AIRequestPackage(
+            encodedText: try phaseRegenerationRequestBody(input: input, context: context, phase: phase),
+            artifacts: [],
+            model: model,
+            sourceMetadata: [
+                "source": "course-planning-phase-regeneration",
+                "courseText": "exact-user-supplied",
+                "phase": "target-phase-only",
+                "authorization": "one-request"
+            ]
+        )
+    }
+
     private static let systemPrompt = """
-    You create a practical, editable personal Learning Plan. Return only a JSON object with title, summary, phases, sessions, assumptions, and warnings. Each phase needs id, title, objective, expectedProof, ordinal, targetStart, and targetEnd. Each session needs id, phaseID, title, actionType, expectedProof, durationMinutes, and deadline. Use only the supplied optional course outline and learning context. Do not invent course-page content. State an assumption whenever the supplied outline is incomplete. Fit sessions within the provided weekly budget and preferred duration. Do not use or request calendar event content, contacts, location, or any data beyond the request.
+    You create a practical, editable personal Learning Plan. Return one JSON object with title, summary, phases, sessions, assumptions, and warnings. Do not wrap the JSON in Markdown or add explanatory text. title and summary are strings; assumptions and warnings are arrays of strings. Each phase needs string id, string title, string objective, string expectedProof, integer ordinal, targetStart, and targetEnd. Each session needs string id, string phaseID, string title, actionType, optional string expectedProof, integer durationMinutes, optional deadline, completionCriteria, and optional recommendationReason. actionType must be exactly "course" or "practice". All dates must be ISO-8601 UTC timestamps like "2026-08-12T14:30:00Z"; use null for an optional date instead of an empty string. completionCriteria must contain 1 to 5 observable string checks the learner can judge as done or not done (concrete behaviors or results, never vague outcomes like "understand the chapter"). Use only the supplied optional course outline, prerequisites, constraints, and learning context. Do not invent course-page content. State an assumption whenever the supplied outline is incomplete. Fit sessions within the provided weekly budget, preferred duration, and study period or deadline. Do not use or request calendar event content, contacts, location, or any data beyond the request.
     """
 
     private static func requestBody(
@@ -139,11 +230,51 @@ public struct AdaptiveCoursePlanningProvider: CoursePlanningProvider {
             validator: validator
         ).makeDraft(input: input, context: context)
     }
+
+    public func regeneratePhase(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext,
+        phase: CoursePlanDraftPhase
+    ) async throws -> CoursePlanPhaseRegeneration {
+        guard let settings = settingsStore.settings(),
+              let apiKey = settingsStore.apiKey(),
+              !apiKey.isEmpty
+        else {
+            throw CoursePlanningError.configurationRequired
+        }
+        return try await OpenAICompatibleCoursePlanningProvider(
+            settings: settings,
+            apiKey: apiKey,
+            transport: transport,
+            validator: validator
+        ).regeneratePhase(input: input, context: context, phase: phase)
+    }
 }
 
 private struct CoursePlanningRequest: Encodable {
     var input: CoursePlanningInput
     var context: CoursePlanningContext
+}
+
+private struct CoursePhaseRegenerationRequest: Encodable {
+    var input: CoursePlanningInput
+    var context: CoursePlanningContext
+    var phase: CoursePlanDraftPhase
+}
+
+private struct CoursePhaseRegenerationResponse: Decodable, Sendable {
+    var phase: CoursePlanDraftPhase
+    var sessions: [CoursePlanDraftSession]
+
+    /// Sessions are bound to the regenerated phase regardless of the id the
+    /// provider echoed back.
+    var regeneration: CoursePlanPhaseRegeneration {
+        var boundSessions = sessions
+        for index in boundSessions.indices {
+            boundSessions[index].phaseID = phase.id
+        }
+        return CoursePlanPhaseRegeneration(phase: phase, sessions: boundSessions)
+    }
 }
 
 private struct CoursePlanningResponse: Decodable, Sendable {
@@ -153,6 +284,20 @@ private struct CoursePlanningResponse: Decodable, Sendable {
     var sessions: [CoursePlanDraftSession]
     var assumptions: [String]
     var warnings: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case title, summary, phases, sessions, assumptions, warnings
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decode(String.self, forKey: .title)
+        summary = try container.decode(String.self, forKey: .summary)
+        phases = try container.decode([CoursePlanDraftPhase].self, forKey: .phases)
+        sessions = try container.decode([CoursePlanDraftSession].self, forKey: .sessions)
+        assumptions = try container.decodeIfPresent([String].self, forKey: .assumptions) ?? []
+        warnings = try container.decodeIfPresent([String].self, forKey: .warnings) ?? []
+    }
 
     var draft: CoursePlanDraft {
         CoursePlanDraft(

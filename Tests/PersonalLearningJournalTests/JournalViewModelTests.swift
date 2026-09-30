@@ -52,6 +52,67 @@ final class JournalViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.shouldShowMainTabs)
     }
 
+    func testAdjustmentProviderIsWiredIntoViewModelAndPersistsPendingDrafts() async throws {
+        let provider = FixedViewModelAdjustmentProvider(drafts: [
+            LearningAdjustmentSuggestionDraft(
+                kind: .nextStep,
+                title: "Provider suggestion",
+                rationale: "A focused follow-up",
+                proposedValue: "Review the next example"
+            )
+        ])
+        let viewModel = makeViewModel(adjustmentProvider: provider)
+        let project = try viewModel.createIdea(name: "Provider course", area: "Test")
+
+        let created = try await viewModel.requestAdjustmentSuggestions(
+            projectID: project.id,
+            userRequest: "Help me choose the next step"
+        )
+
+        XCTAssertEqual(created.count, 1)
+        XCTAssertEqual(created.first?.decision, .pending)
+        XCTAssertEqual(viewModel.adjustmentSuggestions(for: project.id).count, 1)
+    }
+
+    func testAdjustmentProviderFailureUsesDeterministicFallback() async throws {
+        let viewModel = makeViewModel(adjustmentProvider: FailingViewModelAdjustmentProvider())
+        let project = try viewModel.createIdea(name: "Fallback course", area: "Test")
+
+        let created = try await viewModel.requestAdjustmentSuggestions(
+            projectID: project.id,
+            userRequest: "Find any adjustment"
+        )
+
+        XCTAssertTrue(created.isEmpty)
+        XCTAssertTrue(viewModel.adjustmentSuggestions(for: project.id).isEmpty)
+    }
+
+    func testProjectOnlyQuickLogViaViewModelMustResolvePendingCapture() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let captureStore = PendingStudyCaptureStore(directory: root)
+        let viewModel = makeViewModel(pendingCaptureStore: captureStore)
+        let project = try viewModel.createIdea(name: "Guided project", area: "Test")
+        let pending = try captureStore.begin(projectID: project.id, source: .timer)
+
+        XCTAssertThrowsError(try viewModel.quickLog(
+            projectId: project.id,
+            durationMinutes: 20,
+            note: "Bypass project-only capture"
+        )) { error in
+            XCTAssertEqual(error as? LearningRecordError, .pendingCaptureExists(pending.id))
+        }
+
+        try captureStore.discard(id: pending.id)
+        _ = try viewModel.quickLog(
+            projectId: project.id,
+            durationMinutes: 20,
+            note: "Historical backfill after discard"
+        )
+        XCTAssertEqual(viewModel.sessionsForProject(project.id).count, 1)
+    }
+
     func testPermanentDeleteRefreshesAfterCleanupFailureAndRetry() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -815,24 +876,50 @@ final class JournalViewModelTests: XCTestCase {
 
     private func makeViewModel(
         attachmentRoot: URL? = nil,
-        now: @escaping @MainActor @Sendable () -> Date = Date.init
+        now: @escaping @MainActor @Sendable () -> Date = Date.init,
+        adjustmentProvider: (any LearningAdjustmentProvider)? = nil,
+        pendingCaptureStore: PendingStudyCaptureStore? = nil
     ) -> JournalViewModel {
         let repository = InMemoryJournalRepository(now: now)
-        let journalService = JournalService(repository: repository, now: now)
+        let journalService = JournalService(
+            repository: repository,
+            now: now,
+            pendingCaptureStore: pendingCaptureStore
+        )
         let attachmentStore = attachmentRoot.map { AttachmentStore(rootDirectory: $0) }
         return JournalViewModel(
             journalService: journalService,
             reviewService: ReviewService(journalService: journalService),
             exportService: ExportService(),
             attachmentStore: attachmentStore ?? .defaultStore(),
+            pendingCaptureStore: pendingCaptureStore,
             practiceService: PracticeService(repository: repository, now: now),
-            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore(), now: now)
+            practiceTimer: PracticeTimerRuntime(store: ViewModelPracticeTimerStateStore(), now: now),
+            adjustmentProvider: adjustmentProvider
         )
     }
 }
 
 private struct InjectedAttachmentDeletionFailure: Error {}
 private struct InjectedLegacyQueueQuarantineFailure: Error {}
+
+private struct FixedViewModelAdjustmentProvider: LearningAdjustmentProvider {
+    let drafts: [LearningAdjustmentSuggestionDraft]
+
+    func makeSuggestions(
+        input: LearningAdjustmentInput
+    ) async throws -> [LearningAdjustmentSuggestionDraft] {
+        drafts
+    }
+}
+
+private struct FailingViewModelAdjustmentProvider: LearningAdjustmentProvider {
+    func makeSuggestions(
+        input: LearningAdjustmentInput
+    ) async throws -> [LearningAdjustmentSuggestionDraft] {
+        throw LearningAdjustmentProviderError.providerUnavailable
+    }
+}
 
 @MainActor
 private final class ViewModelPracticeTimerStateStore: PracticeTimerStateStore {
@@ -922,5 +1009,13 @@ private struct StubCoursePlanningProvider: CoursePlanningProvider {
                 )
             ]
         )
+    }
+
+    func regeneratePhase(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext,
+        phase: CoursePlanDraftPhase
+    ) async throws -> CoursePlanPhaseRegeneration {
+        CoursePlanPhaseRegeneration(phase: phase, sessions: [])
     }
 }

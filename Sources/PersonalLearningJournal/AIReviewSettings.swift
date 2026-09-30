@@ -4,13 +4,91 @@ import Foundation
 import Security
 #endif
 
+public enum AIProviderPreset: String, Codable, CaseIterable, Identifiable, Sendable {
+    case openAI
+    case kimi
+    case miniMax
+    case deepSeek
+    case openRouter
+    case custom
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .openAI: "OpenAI"
+        case .kimi: "Kimi"
+        case .miniMax: "MiniMax"
+        case .deepSeek: "DeepSeek"
+        case .openRouter: "OpenRouter"
+        case .custom: "Custom"
+        }
+    }
+
+    public var endpoint: URL? {
+        switch self {
+        case .openAI: URL(string: "https://api.openai.com/v1")
+        case .kimi: URL(string: "https://api.moonshot.cn/v1")
+        case .miniMax: URL(string: "https://api.minimaxi.com/v1")
+        case .deepSeek: URL(string: "https://api.deepseek.com")
+        case .openRouter: URL(string: "https://openrouter.ai/api/v1")
+        case .custom: nil
+        }
+    }
+
+    public var models: [String] {
+        switch self {
+        case .openAI: ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+        case .kimi: ["kimi-k3"]
+        case .miniMax: ["MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5"]
+        case .deepSeek: ["deepseek-v4-flash", "deepseek-v4-pro"]
+        case .openRouter: ["~openai/gpt-latest"]
+        case .custom: []
+        }
+    }
+
+    public var defaultModel: String? { models.first }
+
+    public func makeSettings(model: String? = nil) -> AIReviewSettings? {
+        guard let endpoint, let defaultModel else { return nil }
+        let resolvedModel = model ?? defaultModel
+        guard models.contains(resolvedModel) else { return nil }
+        return AIReviewSettings(
+            endpoint: endpoint,
+            model: resolvedModel,
+            providerID: rawValue
+        )
+    }
+
+    public static func infer(from endpoint: URL) -> AIProviderPreset {
+        let normalized = endpoint.absoluteString
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
+        return allCases.first { preset in
+            guard preset != .custom, let presetEndpoint = preset.endpoint else { return false }
+            return normalized == presetEndpoint.absoluteString
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                .lowercased()
+        } ?? .custom
+    }
+}
+
 public struct AIReviewSettings: Codable, Equatable, Sendable {
     public var endpoint: URL
     public var model: String
+    public var providerID: String?
 
-    public init(endpoint: URL, model: String) {
+    public init(endpoint: URL, model: String, providerID: String? = nil) {
         self.endpoint = endpoint
         self.model = model
+        self.providerID = providerID
+    }
+
+    public var provider: AIProviderPreset {
+        if let providerID, let provider = AIProviderPreset(rawValue: providerID) {
+            return provider
+        }
+        return AIProviderPreset.infer(from: endpoint)
     }
 
     public var chatCompletionsURL: URL {

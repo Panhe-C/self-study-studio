@@ -45,6 +45,42 @@ final class CoursePlanValidatorTests: XCTestCase {
         XCTAssertEqual(result.warnings.count, 1)
     }
 
+    func testValidatorRejectsBlankCompletionCriterion() {
+        var draft = validDraft
+        draft.sessions[0].completionCriteria = ["Running tokenizer notebook", "   "]
+
+        let result = CoursePlanValidator().validate(draft, input: validInput)
+
+        XCTAssertEqual(result.errors, [.blankCompletionCriterion("tokenizer")])
+    }
+
+    func testValidatorRejectsMoreThanFiveCompletionCriteria() {
+        var draft = validDraft
+        draft.sessions[0].completionCriteria = ["one", "two", "three", "four", "five", "six"]
+
+        let result = CoursePlanValidator().validate(draft, input: validInput)
+
+        XCTAssertEqual(result.errors, [.tooManyCompletionCriteria("tokenizer")])
+    }
+
+    func testValidatorWarnsWhenSessionHasNoCompletionCriteria() {
+        var draft = validDraft
+        draft.sessions[0].completionCriteria = []
+
+        let result = CoursePlanValidator().validate(draft, input: validInput)
+
+        XCTAssertTrue(result.errors.isEmpty)
+        XCTAssertEqual(result.warnings.count, 1)
+        XCTAssertTrue(result.warnings.first?.contains("completion criteria") == true)
+    }
+
+    func testValidatorAcceptsDraftWithCompletionCriteria() {
+        let result = CoursePlanValidator().validate(validDraft, input: validInput)
+
+        XCTAssertTrue(result.errors.isEmpty)
+        XCTAssertTrue(result.warnings.isEmpty)
+    }
+
     private var validInput: CoursePlanningInput {
         CoursePlanningInput(
             projectId: UUID(),
@@ -79,7 +115,8 @@ final class CoursePlanValidatorTests: XCTestCase {
                     phaseID: "foundations",
                     title: "Implement tokenizer",
                     actionType: .course,
-                    durationMinutes: 45
+                    durationMinutes: 45,
+                    completionCriteria: ["Running tokenizer notebook"]
                 )
             ]
         )

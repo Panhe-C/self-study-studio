@@ -217,6 +217,7 @@ public final class PracticeService {
         sessionId: UUID = UUID(),
         routineId: UUID,
         recoverDeletedRoutine: Bool = false,
+        recoveryRoutine: PracticeRoutine? = nil,
         linkedProjectId: UUID?,
         startedAt: Date,
         endedAt: Date,
@@ -237,6 +238,16 @@ public final class PracticeService {
             tombstone.isArchived = true
             tombstone.updatedAt = now()
             recoveredRoutine = tombstone
+        }
+        if liveRoutine == nil,
+           recoveredRoutine == nil,
+           recoverDeletedRoutine,
+           var recoveryRoutine,
+           recoveryRoutine.id == routineId {
+            recoveryRoutine.deletedAt = nil
+            recoveryRoutine.isArchived = true
+            recoveryRoutine.updatedAt = now()
+            recoveredRoutine = recoveryRoutine
         }
         if liveRoutine == nil, recoveredRoutine == nil {
             throw PracticeServiceError.missingRoutine
@@ -311,6 +322,19 @@ public final class PracticeService {
             learningSession: learningSession,
             didDropMissingProjectLink: requestedDifferentProject
         )
+    }
+
+    /// Returns the last persisted shape of a remotely deleted routine so a
+    /// device-local timer can explain and safely finish its pending session.
+    /// The routine remains deleted until `saveSession` restores it as archived
+    /// in the same transaction as the completed practice.
+    public func recoverableRoutine(_ routineId: UUID) -> PracticeRoutine? {
+        guard case let .practiceRoutine(tombstone)? = try? repository.entity(
+            for: .init(.practiceRoutine, routineId)
+        ), tombstone.deletedAt != nil else {
+            return nil
+        }
+        return tombstone
     }
 
     /// Applies post-save reflection to an existing PracticeSession. The

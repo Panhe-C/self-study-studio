@@ -58,6 +58,86 @@ final class CloudRecordMapperTests: XCTestCase {
         }
     }
 
+    func testLearningRecordRevisionRoundTripsAsStablePayloadRecord() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let revision = LearningRecordRevision(
+            id: fixedID,
+            sessionID: UUID(),
+            revision: 2,
+            previousNote: "Read chapter one",
+            previousAssessment: LearningRecordAssessment(
+                progress: .partial,
+                completedCriterionIDs: ["criterion-1"],
+                understanding: .needsReview,
+                blocker: "Missing example",
+                aiDraftedSummary: false,
+                userEditedSummary: true,
+                confirmedAt: timestamp,
+                revision: 1
+            ),
+            revisedAt: timestamp
+        )
+        let entity = JournalEntity.learningRecordRevision(revision)
+        let mapper = CloudRecordMapper()
+
+        let record = try mapper.record(for: entity, zoneID: zoneID)
+
+        XCTAssertEqual(record.recordType, "LearningRecordRevision")
+        XCTAssertNotNil(record["payload"] as? Data)
+        XCTAssertEqual(try mapper.entity(from: record), entity)
+    }
+
+    func testSessionAssessmentRoundTripsThroughCloudRecords() throws {
+        let timestamp = Date(timeIntervalSince1970: 10_000)
+        let assessed = try LearningSession(
+            id: fixedID,
+            projectId: UUID(),
+            source: .timer,
+            actionType: .course,
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(1_800),
+            durationMinutes: 30,
+            note: "Implemented the merge loop",
+            nextStepBefore: "Write the merge loop",
+            nextStepAfter: "Add tests",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            assessment: LearningRecordAssessment(
+                progress: .completed,
+                completedCriterionIDs: ["criterion-1", "criterion-2"],
+                understanding: .canExplainOrApply,
+                blocker: nil,
+                aiDraftedSummary: true,
+                userEditedSummary: false,
+                confirmedAt: timestamp,
+                revision: 1
+            )
+        )
+        let legacy = try LearningSession(
+            id: fixedID,
+            projectId: assessed.projectId,
+            source: .quickLog,
+            actionType: .reading,
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(1_800),
+            durationMinutes: 30,
+            note: "Read chapter one",
+            nextStepBefore: "Start",
+            nextStepAfter: "Continue",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let mapper = CloudRecordMapper()
+
+        let assessedRecord = try mapper.record(for: .session(assessed), zoneID: zoneID)
+        XCTAssertNotNil(assessedRecord["assessment"] as? Data)
+        XCTAssertEqual(try mapper.entity(from: assessedRecord), .session(assessed))
+
+        let legacyRecord = try mapper.record(for: .session(legacy), zoneID: zoneID)
+        XCTAssertNil(legacyRecord["assessment"])
+        XCTAssertEqual(try mapper.entity(from: legacyRecord), .session(legacy))
+    }
+
     func testStageReviewAndPhaseProgressRoundTripThroughCloudRecords() throws {
         let timestamp = Date(timeIntervalSince1970: 10_000)
         let projectID = UUID()

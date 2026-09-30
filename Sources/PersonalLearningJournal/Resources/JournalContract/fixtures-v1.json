@@ -639,6 +639,7 @@
         "projectId": "00000000-0000-0000-0000-000000000001",
         "title": "Implement BPE merge loop",
         "actionType": "course",
+        "completionCriteria": [],
         "durationMinutes": 60,
         "status": "scheduled",
         "createdAt": "2026-01-01T00:00:00Z",
@@ -677,6 +678,7 @@
         "projectId": "00000000-0000-0000-0000-000000000001",
         "title": "Review the merge loop",
         "actionType": "review",
+        "completionCriteria": [],
         "durationMinutes": 30,
         "planningWindow": {
           "start": "2026-01-05T00:00:00Z",
@@ -925,6 +927,122 @@
         "updatedAt": "2026-01-02T19:05:00Z",
         "schemaVersion": 3
       }
+    },
+    {
+      "id": "session-with-assessment",
+      "kind": "session",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000030",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "source": "timer",
+        "actionType": "course",
+        "startedAt": "2026-01-03T10:00:00Z",
+        "endedAt": "2026-01-03T10:30:00Z",
+        "durationMinutes": 30,
+        "note": "Implemented the merge loop",
+        "nextStepBefore": "Write the merge loop",
+        "nextStepAfter": "Add tests",
+        "createdAt": "2026-01-03T10:30:00Z",
+        "updatedAt": "2026-01-03T10:30:00Z",
+        "schemaVersion": 3,
+        "assessment": {
+          "progress": "mostlyCompleted",
+          "completedCriterionIDs": ["criterion-1", "criterion-2"],
+          "understanding": "mostlyUnderstood",
+          "blocker": "  Need an example for the edge case  ",
+          "aiDraftedSummary": true,
+          "userEditedSummary": true,
+          "confirmedAt": "2026-01-03T10:30:00Z",
+          "revision": 1
+        }
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000030",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "source": "timer",
+        "actionType": "course",
+        "startedAt": "2026-01-03T10:00:00Z",
+        "endedAt": "2026-01-03T10:30:00Z",
+        "durationMinutes": 30,
+        "note": "Implemented the merge loop",
+        "nextStepBefore": "Write the merge loop",
+        "nextStepAfter": "Add tests",
+        "createdAt": "2026-01-03T10:30:00Z",
+        "updatedAt": "2026-01-03T10:30:00Z",
+        "schemaVersion": 3,
+        "assessment": {
+          "progress": "mostlyCompleted",
+          "completedCriterionIDs": ["criterion-1", "criterion-2"],
+          "understanding": "mostlyUnderstood",
+          "blocker": "Need an example for the edge case",
+          "aiDraftedSummary": true,
+          "userEditedSummary": true,
+          "confirmedAt": "2026-01-03T10:30:00Z",
+          "revision": 1
+        }
+      }
+    },
+    {
+      "id": "learning-record-revision",
+      "kind": "learningRecordRevision",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000031",
+        "sessionID": "00000000-0000-0000-0000-000000000030",
+        "revision": 2,
+        "previousNote": "Read chapter one",
+        "previousAssessment": {
+          "progress": "partial",
+          "completedCriterionIDs": [],
+          "blocker": "Missing example",
+          "aiDraftedSummary": false,
+          "userEditedSummary": false,
+          "confirmedAt": "2026-01-03T10:30:00Z",
+          "revision": 1
+        },
+        "revisedAt": "2026-01-04T09:00:00Z"
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000031",
+        "sessionID": "00000000-0000-0000-0000-000000000030",
+        "revision": 2,
+        "previousNote": "Read chapter one",
+        "previousAssessment": {
+          "progress": "partial",
+          "completedCriterionIDs": [],
+          "blocker": "Missing example",
+          "aiDraftedSummary": false,
+          "userEditedSummary": false,
+          "confirmedAt": "2026-01-03T10:30:00Z",
+          "revision": 1
+        },
+        "revisedAt": "2026-01-04T09:00:00Z"
+      }
+    },
+    {
+      "id": "learning-adjustment-suggestion",
+      "kind": "learningAdjustmentSuggestion",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000041",
+        "projectID": "00000000-0000-0000-0000-000000000001",
+        "sourceSessionIDs": ["00000000-0000-0000-0000-000000000030"],
+        "kind": "nextStep",
+        "title": "Repeated partial progress on Read Chapter 3",
+        "rationale": "The last 2 confirmed records ended partially.",
+        "proposedValue": "Review \"Read Chapter 3\" and split it into a smaller checkpoint",
+        "decision": "pending",
+        "createdAt": "2026-01-05T09:00:00Z"
+      },
+      "expectedNormalized": {
+        "id": "00000000-0000-0000-0000-000000000041",
+        "projectID": "00000000-0000-0000-0000-000000000001",
+        "sourceSessionIDs": ["00000000-0000-0000-0000-000000000030"],
+        "kind": "nextStep",
+        "title": "Repeated partial progress on Read Chapter 3",
+        "rationale": "The last 2 confirmed records ended partially.",
+        "proposedValue": "Review \"Read Chapter 3\" and split it into a smaller checkpoint",
+        "decision": "pending",
+        "createdAt": "2026-01-05T09:00:00Z"
+      }
     }
   ],
   "invalid": [
@@ -1029,6 +1147,43 @@
       "id": "practice-session-missing-required",
       "kind": "practiceSession",
       "payload": {}
+    },
+    {
+      "id": "learning-record-revision-missing-required",
+      "kind": "learningRecordRevision",
+      "payload": {}
+    },
+    {
+      "id": "learning-adjustment-suggestion-missing-required",
+      "kind": "learningAdjustmentSuggestion",
+      "payload": {}
+    },
+    {
+      "id": "session-invalid-assessment",
+      "kind": "session",
+      "payload": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "source": "timer",
+        "actionType": "course",
+        "startedAt": "2026-01-01T10:00:00Z",
+        "endedAt": "2026-01-01T10:30:00Z",
+        "durationMinutes": 30,
+        "note": "Read chapter one",
+        "nextStepBefore": "Start",
+        "nextStepAfter": "Continue",
+        "createdAt": "2026-01-01T10:30:00Z",
+        "updatedAt": "2026-01-01T10:30:00Z",
+        "schemaVersion": 3,
+        "assessment": {
+          "progress": "nailedIt",
+          "completedCriterionIDs": [],
+          "aiDraftedSummary": false,
+          "userEditedSummary": false,
+          "confirmedAt": "2026-01-01T10:30:00Z",
+          "revision": 1
+        }
+      }
     },
     {
       "id": "project-unknown-field",

@@ -212,6 +212,161 @@ final class SyncMergeServiceTests: XCTestCase {
         XCTAssertEqual(conflict.conflictingFields, ["objective"])
     }
 
+    func testDisjointSessionAssessmentAndNextStepEditsMergeWithoutConflict() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_000)
+        let base = try LearningSession(
+            projectId: UUID(),
+            source: .timer,
+            actionType: .course,
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(1_800),
+            durationMinutes: 30,
+            note: "Read chapter one",
+            nextStepBefore: "Start",
+            nextStepAfter: "Continue",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        var local = base
+        local.assessment = LearningRecordAssessment(
+            progress: .completed,
+            completedCriterionIDs: ["criterion-1"],
+            understanding: nil,
+            blocker: nil,
+            aiDraftedSummary: false,
+            userEditedSummary: false,
+            confirmedAt: timestamp.addingTimeInterval(60),
+            revision: 1
+        )
+        local.updatedAt = timestamp.addingTimeInterval(60)
+        var server = base
+        server.nextStepAfter = "Write tests"
+        server.updatedAt = timestamp.addingTimeInterval(120)
+
+        let result = try SyncMergeService().merge(
+            base: .session(base),
+            local: .session(local),
+            server: .session(server)
+        )
+
+        guard case let .merged(.session(merged)) = result else {
+            return XCTFail("Expected merged session")
+        }
+        XCTAssertEqual(merged.assessment, local.assessment)
+        XCTAssertEqual(merged.nextStepAfter, "Write tests")
+        XCTAssertEqual(merged.updatedAt, server.updatedAt)
+    }
+
+    func testConcurrentSessionAssessmentEditsCreateConflictWithoutSilentOverwrite() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_000)
+        let base = try LearningSession(
+            projectId: UUID(),
+            source: .timer,
+            actionType: .course,
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(1_800),
+            durationMinutes: 30,
+            note: "Read chapter one",
+            nextStepBefore: "Start",
+            nextStepAfter: "Continue",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        var local = base
+        local.assessment = LearningRecordAssessment(
+            progress: .completed,
+            completedCriterionIDs: ["criterion-1"],
+            understanding: nil,
+            blocker: nil,
+            aiDraftedSummary: false,
+            userEditedSummary: false,
+            confirmedAt: timestamp.addingTimeInterval(60),
+            revision: 1
+        )
+        local.updatedAt = timestamp.addingTimeInterval(60)
+        var server = base
+        server.assessment = LearningRecordAssessment(
+            progress: .partial,
+            completedCriterionIDs: [],
+            understanding: .unclear,
+            blocker: "Missing example",
+            aiDraftedSummary: true,
+            userEditedSummary: false,
+            confirmedAt: timestamp.addingTimeInterval(120),
+            revision: 1
+        )
+        server.updatedAt = timestamp.addingTimeInterval(120)
+
+        let result = try SyncMergeService().merge(
+            base: .session(base),
+            local: .session(local),
+            server: .session(server)
+        )
+
+        guard case let .conflict(conflict) = result else {
+            return XCTFail("Expected conflict, not silent overwrite")
+        }
+        XCTAssertEqual(conflict.entity, .init(.session, base.id))
+        XCTAssertEqual(conflict.conflictingFields, ["assessment"])
+        XCTAssertFalse(conflict.localPayload.isEmpty)
+        XCTAssertFalse(conflict.serverPayload.isEmpty)
+    }
+
+    func testIdenticalLearningRecordRevisionsMergeCleanly() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_000)
+        let revision = LearningRecordRevision(
+            sessionID: UUID(),
+            revision: 1,
+            previousNote: "Read chapter one",
+            previousAssessment: nil,
+            revisedAt: timestamp
+        )
+
+        let result = try SyncMergeService().merge(
+            base: .learningRecordRevision(revision),
+            local: .learningRecordRevision(revision),
+            server: .learningRecordRevision(revision)
+        )
+
+        guard case let .merged(.learningRecordRevision(merged)) = result else {
+            return XCTFail("Expected merged learning record revision")
+        }
+        XCTAssertEqual(merged, revision)
+    }
+
+    func testDivergentLearningRecordRevisionPayloadsConflictWithoutDroppingEither() throws {
+        // Revision snapshots are immutable and create-once, so the same id
+        // should never carry two payloads. If corruption ever produces that,
+        // the merge must fail safe (conflict review) instead of silently
+        // rewriting history.
+        let timestamp = Date(timeIntervalSince1970: 1_000)
+        let base = LearningRecordRevision(
+            sessionID: UUID(),
+            revision: 1,
+            previousNote: "Read chapter one",
+            previousAssessment: nil,
+            revisedAt: timestamp
+        )
+        var local = base
+        local.previousNote = "Local note"
+        var server = base
+        server.previousNote = "Server note"
+
+        let result = try SyncMergeService().merge(
+            base: .learningRecordRevision(base),
+            local: .learningRecordRevision(local),
+            server: .learningRecordRevision(server)
+        )
+
+        guard case let .conflict(conflict) = result else {
+            return XCTFail("Expected conflict for divergent revision payloads")
+        }
+        XCTAssertEqual(conflict.entity, .init(.learningRecordRevision, base.id))
+        XCTAssertEqual(conflict.conflictingFields, ["previousNote"])
+        XCTAssertFalse(conflict.localPayload.isEmpty)
+        XCTAssertFalse(conflict.serverPayload.isEmpty)
+    }
+
     func testRemotePracticeRoutineTombstoneWinsOverOlderLocalValue() throws {
         let base = PracticeRoutine(
             id: UUID(),

@@ -4,6 +4,12 @@ Personal Learning Journal is a SwiftUI-first, evidence-first learning system. A 
 
 ## Product Documentation
 
+- [代码结构与维护入口](docs/CODE_MAP.md)
+- [产品功能树与完成状态](docs/FEATURE_TREE.md)
+- [项目维护 Skill](skills/self-study-maintenance/SKILL.md)
+- [Self Study Studio vNext 产品定义](docs/PRODUCT_VNEXT.md)
+- [vNext AI 引导式学习执行 Spec](docs/superpowers/specs/2026-08-10-ai-guided-learning-vnext-design.md)
+- [vNext 实施计划](docs/superpowers/plans/2026-08-10-ai-guided-learning-vnext.md)
 - [产品功能演示页（单文件 HTML）](docs/product-guide/self-study-studio-product-tour.html)
 - [产品功能手册](docs/PRODUCT_GUIDE.md)
 - [Web Workspace MVP 产品规格](docs/web-workspace-mvp-spec.md)
@@ -77,6 +83,43 @@ remain separate D1 release gates.
 - Account-space transfer previews with Copy, Move, and Keep Local choices; account switching never automatically merges or deletes another space
 - Optional device-owner App Lock with a foreground unlock gate and background privacy cover
 - English and Simplified Chinese resources for the core evidence loop
+
+## vNext Guided Learning (Current Capabilities and Limitations)
+
+The vNext loop — plan a course, study from Today, confirm the record, correct it later, and
+receive adjustments — is implemented in the package with deterministic service-level tests
+(`VNextEndToEndTests` covers acceptance scenarios A–F plus a legacy lossless-read fixture).
+
+Capabilities:
+
+- Course plan drafts (AI or fully manual) stay invisible in Today until explicitly activated;
+  activation produces exactly one Up Next.
+- The guided study flow keeps timer end, completion check, and record draft device-local until
+  confirmation; confirm publishes Session + assessment + planned-session completion + Trail in
+  one atomic commit.
+- Save-for-later captures survive relaunch via a file-backed pending-capture store and surface
+  as Today's recovery card without touching the journal.
+- Record corrections append immutable `LearningRecordRevision` snapshots; plans are never
+  silently rewritten.
+- Adjustment detection (repeated partial progress, repeated blockers, phase-window risk)
+  produces pending suggestions; ordinary suggestions apply in one commit and structural ones
+  only take effect through explicit plan-revision activation, keeping the prior revision
+  archived and readable.
+- Unconfigured or failing AI always falls back to deterministic rule-based check and record
+  drafts; the full loop works offline.
+
+Known limitations:
+
+- The Web Workspace is contract-compatible only: it encodes/decodes the vNext records
+  (`session.assessment`, `learningRecordRevision`, `learningAdjustmentSuggestion`) but does not
+  implement the guided study flow.
+- Local notifications and deep links for pending captures are implemented but require physical
+  device verification; they are not covered by automation.
+- Pending-capture recovery after a real system kill, live CloudKit two-device convergence of
+  vNext records, attachment staging in the guided flow, maximum Dynamic Type, VoiceOver, and
+  AI-unconfigured/provider-failure device runs remain REQUIRED MANUAL gates tracked by
+  `scripts/d1-release-check.mjs` (see `docs/d1-acceptance-runbook.md`). Simulator runs and unit
+  tests are never device or CloudKit acceptance.
 
 ## Current Shape
 

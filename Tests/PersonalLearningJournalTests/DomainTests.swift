@@ -18,6 +18,7 @@ final class DomainTests: XCTestCase {
         let snapshot = try JSONDecoder().decode(JournalSnapshot.self, from: data)
         XCTAssertEqual(snapshot.practiceRoutines, [])
         XCTAssertEqual(snapshot.practiceSessions, [])
+        XCTAssertEqual(snapshot.learningRecordRevisions, [])
     }
 
     func testLegacyJournalEntitiesDecodeWithCurrentSchemaAndNoDeletion() throws {
@@ -137,6 +138,81 @@ final class DomainTests: XCTestCase {
                 statement: " "
             )
         )
+    }
+
+    func testLegacySessionWithoutAssessmentDecodesAsUnassessed() throws {
+        let data = Data(
+            #"{"id":"00000000-0000-0000-0000-000000000002","projectId":"00000000-0000-0000-0000-000000000001","source":"quickLog","actionType":"course","startedAt":"2026-01-01T10:00:00Z","endedAt":"2026-01-01T10:30:00Z","durationMinutes":30,"note":"Read chapter one","nextStepBefore":"Start","nextStepAfter":"Continue","createdAt":"2026-01-01T10:30:00Z","updatedAt":"2026-01-01T10:30:00Z","schemaVersion":3}"#.utf8
+        )
+
+        let session = try JSONDecoder.journal.decode(LearningSession.self, from: data)
+
+        XCTAssertNil(session.assessment)
+        XCTAssertEqual(session.note, "Read chapter one")
+        XCTAssertEqual(session.schemaVersion, 3)
+    }
+
+    func testSessionAssessmentRoundTripsThroughJournalCoding() throws {
+        let confirmedAt = Date(timeIntervalSince1970: 1_000)
+        let assessment = LearningRecordAssessment(
+            progress: .mostlyCompleted,
+            completedCriterionIDs: ["criterion-1", "criterion-2"],
+            understanding: .mostlyUnderstood,
+            blocker: nil,
+            aiDraftedSummary: true,
+            userEditedSummary: true,
+            confirmedAt: confirmedAt,
+            revision: 1
+        )
+        let session = try LearningSession(
+            projectId: UUID(),
+            source: .timer,
+            actionType: .course,
+            startedAt: confirmedAt,
+            endedAt: confirmedAt.addingTimeInterval(1_800),
+            durationMinutes: 30,
+            note: "Implemented the merge loop",
+            nextStepBefore: "Write the merge loop",
+            nextStepAfter: "Add tests",
+            createdAt: confirmedAt,
+            updatedAt: confirmedAt,
+            assessment: assessment
+        )
+
+        let decoded = try JSONDecoder.journal.decode(
+            LearningSession.self,
+            from: JSONEncoder.journal.encode(session)
+        )
+
+        XCTAssertEqual(decoded, session)
+        XCTAssertEqual(decoded.assessment, assessment)
+    }
+
+    func testLearningRecordRevisionRoundTripsThroughJournalCoding() throws {
+        let revisedAt = Date(timeIntervalSince1970: 2_000)
+        let revision = LearningRecordRevision(
+            sessionID: UUID(),
+            revision: 2,
+            previousNote: "Read chapter one",
+            previousAssessment: LearningRecordAssessment(
+                progress: .partial,
+                completedCriterionIDs: [],
+                understanding: nil,
+                blocker: "Missing example",
+                aiDraftedSummary: false,
+                userEditedSummary: false,
+                confirmedAt: Date(timeIntervalSince1970: 1_000),
+                revision: 1
+            ),
+            revisedAt: revisedAt
+        )
+
+        let decoded = try JSONDecoder.journal.decode(
+            LearningRecordRevision.self,
+            from: JSONEncoder.journal.encode(revision)
+        )
+
+        XCTAssertEqual(decoded, revision)
     }
 
     private func legacyData<T: Encodable>(for value: T) throws -> Data {

@@ -86,6 +86,7 @@
 		100000000000000000000151 /* ProductHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000252 /* ProductHealthView.swift */; };
 		100000000000000000000152 /* ProofSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000253 /* ProofSearchIndex.swift */; };
 		100000000000000000000153 /* LearningNotificationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000254 /* LearningNotificationPolicy.swift */; };
+		100000000000000000000302 /* PendingCaptureNotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000303 /* PendingCaptureNotificationCoordinator.swift */; };
 		100000000000000000000154 /* JournalArchiveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000255 /* JournalArchiveService.swift */; };
 		100000000000000000000155 /* TrashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000256 /* TrashView.swift */; };
 		100000000000000000000156 /* AppLockController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000257 /* AppLockController.swift */; };
@@ -104,6 +105,27 @@
 		100000000000000000000166 /* SyncConflictRecoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000268 /* SyncConflictRecoveryService.swift */; };
 		100000000000000000000167 /* PracticeBlocksMigrationReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000269 /* PracticeBlocksMigrationReviewView.swift */; };
 		100000000000000000000168 /* StageReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000026A /* StageReviewView.swift */; };
+		100000000000000000000169 /* CoursePlanDraftEditingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000026B /* CoursePlanDraftEditingService.swift */; };
+		10000000000000000000016A /* StudyFlowDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000026C /* StudyFlowDomain.swift */; };
+		10000000000000000000016B /* PendingStudyCaptureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000026D /* PendingStudyCaptureStore.swift */; };
+		10000000000000000000016C /* CompletionCheckProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000026E /* CompletionCheckProvider.swift */; };
+		10000000000000000000016D /* LearningRecordDraftProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000026F /* LearningRecordDraftProvider.swift */; };
+		100000000000000000000170 /* LearningRecordRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000270 /* LearningRecordRevision.swift */; };
+		100000000000000000000171 /* LearningRecordService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000271 /* LearningRecordService.swift */; };
+		100000000000000000000172 /* StudyFlowViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000272 /* StudyFlowViewState.swift */; };
+		100000000000000000000173 /* StudyFlowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000273 /* StudyFlowController.swift */; };
+		100000000000000000000174 /* ActiveStudyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000274 /* ActiveStudyView.swift */; };
+		100000000000000000000175 /* CompletionCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000275 /* CompletionCheckView.swift */; };
+		100000000000000000000176 /* LearningRecordDraftView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000276 /* LearningRecordDraftView.swift */; };
+		100000000000000000000177 /* LearningRecordDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000277 /* LearningRecordDetailView.swift */; };
+		100000000000000000000178 /* LearningAdjustmentDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000278 /* LearningAdjustmentDomain.swift */; };
+		100000000000000000000179 /* LearningAdjustmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000279 /* LearningAdjustmentService.swift */; };
+		10000000000000000000017A /* PlanRevisionDiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000027A /* PlanRevisionDiffView.swift */; };
+		10000000000000000000017B /* VNextTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000027B /* VNextTodayView.swift */; };
+		10000000000000000000017C /* CoursesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000027C /* CoursesView.swift */; };
+		10000000000000000000017D /* ProjectTrailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000027D /* ProjectTrailView.swift */; };
+		10000000000000000000017E /* LearningCoachService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000027E /* LearningCoachService.swift */; };
+		10000000000000000000017F /* LearningCoachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000027F /* LearningCoachView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -187,6 +209,7 @@
 		100000000000000000000252 /* ProductHealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ProductHealthView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000253 /* ProofSearchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Search/ProofSearchIndex.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000254 /* LearningNotificationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Notifications/LearningNotificationPolicy.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000303 /* PendingCaptureNotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Notifications/PendingCaptureNotificationCoordinator.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000255 /* JournalArchiveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Archive/JournalArchiveService.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000256 /* TrashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/TrashView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000257 /* AppLockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Security/AppLockController.swift; sourceTree = SOURCE_ROOT; };
@@ -204,6 +227,27 @@
 		100000000000000000000268 /* SyncConflictRecoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Sync/SyncConflictRecoveryService.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000269 /* PracticeBlocksMigrationReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/PracticeBlocksMigrationReviewView.swift; sourceTree = SOURCE_ROOT; };
 		10000000000000000000026A /* StageReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/StageReviewView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000026B /* CoursePlanDraftEditingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Planning/CoursePlanDraftEditingService.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000026C /* StudyFlowDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/StudyFlow/StudyFlowDomain.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000026D /* PendingStudyCaptureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/StudyFlow/PendingStudyCaptureStore.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000026E /* CompletionCheckProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/StudyFlow/CompletionCheckProvider.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000026F /* LearningRecordDraftProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/StudyFlow/LearningRecordDraftProvider.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000270 /* LearningRecordRevision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/StudyFlow/LearningRecordRevision.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000271 /* LearningRecordService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/StudyFlow/LearningRecordService.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000272 /* StudyFlowViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/StudyFlow/StudyFlowViewState.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000273 /* StudyFlowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/StudyFlow/StudyFlowController.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000274 /* ActiveStudyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ActiveStudyView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000275 /* CompletionCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CompletionCheckView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000276 /* LearningRecordDraftView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/LearningRecordDraftView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000277 /* LearningRecordDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/LearningRecordDetailView.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000278 /* LearningAdjustmentDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Adjustments/LearningAdjustmentDomain.swift; sourceTree = SOURCE_ROOT; };
+		100000000000000000000279 /* LearningAdjustmentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Adjustments/LearningAdjustmentService.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000027A /* PlanRevisionDiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/PlanRevisionDiffView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000027B /* VNextTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/VNextTodayView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000027C /* CoursesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/CoursesView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000027D /* ProjectTrailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/ProjectTrailView.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000027E /* LearningCoachService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/AI/LearningCoachService.swift; sourceTree = SOURCE_ROOT; };
+		10000000000000000000027F /* LearningCoachView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/Views/LearningCoachView.swift; sourceTree = SOURCE_ROOT; };
 		100000000000000000000258 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		100000000000000000000259 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -262,6 +306,27 @@
 				100000000000000000000225 /* JournalApplicationSession.swift */,
 				100000000000000000000226 /* CoursePlanningDomain.swift */,
 				100000000000000000000227 /* CoursePlanValidator.swift */,
+				10000000000000000000026B /* CoursePlanDraftEditingService.swift */,
+				10000000000000000000026C /* StudyFlowDomain.swift */,
+				10000000000000000000026D /* PendingStudyCaptureStore.swift */,
+				10000000000000000000026E /* CompletionCheckProvider.swift */,
+				10000000000000000000026F /* LearningRecordDraftProvider.swift */,
+				100000000000000000000270 /* LearningRecordRevision.swift */,
+				100000000000000000000271 /* LearningRecordService.swift */,
+				100000000000000000000272 /* StudyFlowViewState.swift */,
+				100000000000000000000273 /* StudyFlowController.swift */,
+				100000000000000000000274 /* ActiveStudyView.swift */,
+				100000000000000000000275 /* CompletionCheckView.swift */,
+				100000000000000000000276 /* LearningRecordDraftView.swift */,
+				100000000000000000000277 /* LearningRecordDetailView.swift */,
+				100000000000000000000278 /* LearningAdjustmentDomain.swift */,
+				100000000000000000000279 /* LearningAdjustmentService.swift */,
+				10000000000000000000027A /* PlanRevisionDiffView.swift */,
+				10000000000000000000027B /* VNextTodayView.swift */,
+				10000000000000000000027C /* CoursesView.swift */,
+				10000000000000000000027D /* ProjectTrailView.swift */,
+				10000000000000000000027E /* LearningCoachService.swift */,
+				10000000000000000000027F /* LearningCoachView.swift */,
 				100000000000000000000228 /* CoursePlanningService.swift */,
 				100000000000000000000229 /* StructuredAIClient.swift */,
 				100000000000000000000230 /* CoursePlanningProvider.swift */,
@@ -303,6 +368,7 @@
 				100000000000000000000252 /* ProductHealthView.swift */,
 				100000000000000000000253 /* ProofSearchIndex.swift */,
 				100000000000000000000254 /* LearningNotificationPolicy.swift */,
+				100000000000000000000303 /* PendingCaptureNotificationCoordinator.swift */,
 				100000000000000000000255 /* JournalArchiveService.swift */,
 				100000000000000000000256 /* TrashView.swift */,
 				100000000000000000000257 /* AppLockController.swift */,
@@ -452,6 +518,27 @@
 				100000000000000000000124 /* JournalApplicationSession.swift in Sources */,
 				100000000000000000000125 /* CoursePlanningDomain.swift in Sources */,
 				100000000000000000000126 /* CoursePlanValidator.swift in Sources */,
+				100000000000000000000169 /* CoursePlanDraftEditingService.swift in Sources */,
+				10000000000000000000016A /* StudyFlowDomain.swift in Sources */,
+				10000000000000000000016B /* PendingStudyCaptureStore.swift in Sources */,
+				10000000000000000000016C /* CompletionCheckProvider.swift in Sources */,
+				10000000000000000000016D /* LearningRecordDraftProvider.swift in Sources */,
+				100000000000000000000170 /* LearningRecordRevision.swift in Sources */,
+				100000000000000000000171 /* LearningRecordService.swift in Sources */,
+				100000000000000000000172 /* StudyFlowViewState.swift in Sources */,
+				100000000000000000000173 /* StudyFlowController.swift in Sources */,
+				100000000000000000000174 /* ActiveStudyView.swift in Sources */,
+				100000000000000000000175 /* CompletionCheckView.swift in Sources */,
+				100000000000000000000176 /* LearningRecordDraftView.swift in Sources */,
+				100000000000000000000177 /* LearningRecordDetailView.swift in Sources */,
+				100000000000000000000178 /* LearningAdjustmentDomain.swift in Sources */,
+				100000000000000000000179 /* LearningAdjustmentService.swift in Sources */,
+				10000000000000000000017A /* PlanRevisionDiffView.swift in Sources */,
+				10000000000000000000017B /* VNextTodayView.swift in Sources */,
+				10000000000000000000017C /* CoursesView.swift in Sources */,
+				10000000000000000000017D /* ProjectTrailView.swift in Sources */,
+				10000000000000000000017E /* LearningCoachService.swift in Sources */,
+				10000000000000000000017F /* LearningCoachView.swift in Sources */,
 				100000000000000000000127 /* CoursePlanningService.swift in Sources */,
 				100000000000000000000128 /* StructuredAIClient.swift in Sources */,
 				100000000000000000000129 /* CoursePlanningProvider.swift in Sources */,
@@ -493,6 +580,7 @@
 				100000000000000000000151 /* ProductHealthView.swift in Sources */,
 				100000000000000000000152 /* ProofSearchIndex.swift in Sources */,
 				100000000000000000000153 /* LearningNotificationPolicy.swift in Sources */,
+				100000000000000000000302 /* PendingCaptureNotificationCoordinator.swift in Sources */,
 				100000000000000000000154 /* JournalArchiveService.swift in Sources */,
 				100000000000000000000155 /* TrashView.swift in Sources */,
 				100000000000000000000156 /* AppLockController.swift in Sources */,

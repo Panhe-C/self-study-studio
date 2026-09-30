@@ -119,6 +119,32 @@ export type ProofItem = {
   previewDetail: string;
 };
 
+/** Latest user-confirmed summary of a learning record (spec 4.5/4.6). Only
+ * sessions whose assessment was confirmed appear here; unconfirmed drafts
+ * and pending captures never enter the journal contract. */
+export type ConfirmedRecordSummary = {
+  id: string;
+  date: string;
+  summary: string;
+  progress: string;
+  understanding?: string;
+  revision: number;
+  confirmedAt: string;
+  /** Newest LearningRecordRevision timestamp when the record was amended. */
+  lastAmendedAt?: string;
+};
+
+/** A reviewable adjustment suggestion (spec 4.7). The web reader is
+ * read-only: only pending suggestions surface here. */
+export type PendingAdjustmentSummary = {
+  id: string;
+  kind: string;
+  title: string;
+  rationale: string;
+  proposedValue: string;
+  createdAt: string;
+};
+
 export type ProjectDemo = {
   project: ProjectSummary;
   sourceLabel: string;
@@ -140,6 +166,10 @@ export type ProjectDemo = {
   lastSessionLabel: string;
   trail: TrailItem[];
   proofs: ProofItem[];
+  /** Confirmed learning records; populated by the canonical projector. */
+  confirmedRecords?: ConfirmedRecordSummary[];
+  /** Pending adjustment suggestions awaiting review (read-only on web). */
+  pendingSuggestions?: PendingAdjustmentSummary[];
   review: {
     ready: boolean;
     headline: string;

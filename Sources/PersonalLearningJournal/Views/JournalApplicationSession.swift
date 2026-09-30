@@ -1,5 +1,8 @@
 import Combine
 import Foundation
+#if canImport(UIKit)
+import UserNotifications
+#endif
 
 @MainActor
 public final class JournalApplicationSession: ObservableObject {
@@ -10,6 +13,18 @@ public final class JournalApplicationSession: ObservableObject {
     @Published public private(set) var pendingPracticeBlocksMigration: PracticeBlocksMigrationDryRun?
     @Published public private(set) var migrationError: String?
     @Published public private(set) var migrationGateBlocked = false
+
+    /// Device-local store for unconfirmed study captures (spec 3.4). Kept out
+    /// of the journal snapshot, export, and CloudKit outbox.
+    public let pendingCaptureStore: PendingStudyCaptureStore
+
+    /// Schedules/cancels reminders for pending captures (spec 13). Shares the
+    /// session's capture store; permission denial never affects the store.
+    public let pendingCaptureNotificationCoordinator: PendingCaptureNotificationCoordinator
+
+    #if canImport(UIKit)
+    private var notificationDeepLinkDelegate: PendingCaptureNotificationDelegate?
+    #endif
 
     private let documentsDirectory: URL
     private let accountCoordinator: CloudAccountCoordinator
@@ -25,9 +40,20 @@ public final class JournalApplicationSession: ObservableObject {
     public init(
         documentsDirectory: URL,
         accountProvider: any CloudAccountProviding = SystemCloudAccountProvider(),
-        repositoryOverride: (any JournalRepository)? = nil
+        repositoryOverride: (any JournalRepository)? = nil,
+        pendingCaptureStore: PendingStudyCaptureStore? = nil
     ) {
         self.documentsDirectory = documentsDirectory
+        self.pendingCaptureStore = pendingCaptureStore ?? PendingStudyCaptureStore()
+        #if canImport(UIKit)
+        self.pendingCaptureNotificationCoordinator = PendingCaptureNotificationCoordinator(
+            scheduler: UserNotificationCenterScheduler()
+        )
+        #else
+        self.pendingCaptureNotificationCoordinator = PendingCaptureNotificationCoordinator(
+            scheduler: NullNotificationScheduler()
+        )
+        #endif
         self.accountCoordinator = CloudAccountCoordinator(rootDirectory: documentsDirectory)
         self.accountProvider = accountProvider
         self.repositoryOverride = repositoryOverride
@@ -54,9 +80,22 @@ public final class JournalApplicationSession: ObservableObject {
         self.viewModel = Self.makeViewModel(
             repository: repository,
             accountCoordinator: accountCoordinator,
-            practiceTimer: practiceTimer
+            practiceTimer: practiceTimer,
+            pendingCaptureStore: self.pendingCaptureStore
         )
+        self.viewModel.pendingCaptureNotificationCoordinator = pendingCaptureNotificationCoordinator
         prepareMigrationGate(for: repository)
+
+        #if canImport(UIKit)
+        // Tapping a pending-capture notification routes through the same
+        // deep-link handling as `onOpenURL`. Set once, at launch, so cold
+        // starts from a notification also resolve.
+        let deepLinkDelegate = PendingCaptureNotificationDelegate { [weak self] url in
+            self?.openPendingCaptureDeepLink(url)
+        }
+        notificationDeepLinkDelegate = deepLinkDelegate
+        UNUserNotificationCenter.current().delegate = deepLinkDelegate
+        #endif
 
         Task { [weak self] in
             await self?.refreshAccount()
@@ -126,6 +165,36 @@ public final class JournalApplicationSession: ObservableObject {
 
     public func clearMigrationError() {
         migrationError = nil
+    }
+
+    /// Lifecycle save point for pending study captures. Call before the app
+    /// backgrounds or terminates: persists every capture's current state,
+    /// including accumulated timer seconds and the last resume time. Timer
+    /// ticks update the store in memory only, so this is where a running
+    /// capture's progress reaches disk. Best-effort: a failed write must not
+    /// block backgrounding.
+    public func pendingCaptureCheckpoint() {
+        try? pendingCaptureStore.persist()
+    }
+
+    /// Reconciles pending-capture reminders with the store (spec 13). Called
+    /// on scene-phase changes and after flow transitions; scheduling is
+    /// best-effort and permission denial is silent, so the store-driven
+    /// recovery card is never affected.
+    public func refreshPendingCaptureNotifications() {
+        Task { await pendingCaptureNotificationCoordinator.refresh(from: pendingCaptureStore) }
+    }
+
+    /// Routes a pending-capture deep link (a notification tap or
+    /// `selfstudystudio://pending-capture/<uuid>`) to the capture's own step.
+    /// Unknown, discarded, or confirmed captures resolve to `nil`: the app
+    /// stays on Today and nothing changes.
+    public func openPendingCaptureDeepLink(_ url: URL) {
+        guard let captureID = PendingCaptureDeepLink.parse(url),
+              let capture = PendingCaptureDeepLink.resolve(captureID, in: pendingCaptureStore) else {
+            return
+        }
+        viewModel.requestedCaptureReopen = capture
     }
 
     public func continueMigration() {
@@ -355,16 +424,22 @@ public final class JournalApplicationSession: ObservableObject {
         viewModel = Self.makeViewModel(
             repository: repository,
             accountCoordinator: accountCoordinator,
-            practiceTimer: practiceTimer
+            practiceTimer: practiceTimer,
+            pendingCaptureStore: pendingCaptureStore
         )
+        viewModel.pendingCaptureNotificationCoordinator = pendingCaptureNotificationCoordinator
     }
 
     private static func makeViewModel(
         repository: any JournalRepository,
         accountCoordinator: CloudAccountCoordinator,
-        practiceTimer: PracticeTimerRuntime
+        practiceTimer: PracticeTimerRuntime,
+        pendingCaptureStore: PendingStudyCaptureStore
     ) -> JournalViewModel {
-        let journalService = JournalService(repository: repository)
+        let journalService = JournalService(
+            repository: repository,
+            pendingCaptureStore: pendingCaptureStore
+        )
         let syncCoordinator: (any CloudSyncCoordinating)?
         if case .cloud = accountCoordinator.state.mode {
             let stateSerializationData = try? repository.syncChangeToken()
@@ -385,6 +460,7 @@ public final class JournalApplicationSession: ObservableObject {
                 provider: AdaptiveAIReviewProvider()
             ),
             exportService: ExportService(),
+            pendingCaptureStore: pendingCaptureStore,
             practiceService: PracticeService(repository: repository),
             practiceTimer: practiceTimer,
             coursePlanningService: CoursePlanningService(repository: repository),

@@ -1,5 +1,8 @@
 import Combine
 import Foundation
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
 
 @MainActor
 public protocol PracticeTimerStateStore: AnyObject {
@@ -90,11 +93,17 @@ public struct PracticeTimerBlockSnapshot: Codable, Equatable, Identifiable, Send
     }
 }
 
+public enum PracticeTimerMode: String, Codable, CaseIterable, Equatable, Sendable {
+    case countUp
+    case countdown
+}
+
 public struct PracticeTimerSnapshot: Equatable, Sendable {
     public let activeRoutineId: UUID?
     public let startedAt: Date?
     public let activeElapsedSeconds: Int
     public let isRunning: Bool
+    public let mode: PracticeTimerMode
     public let targetSeconds: Int
     public let blocks: [PracticeTimerBlockSnapshot]
     public let activeBlockID: UUID?
@@ -110,6 +119,7 @@ public struct PracticeTimerSnapshot: Equatable, Sendable {
         startedAt: Date?,
         activeElapsedSeconds: Int,
         isRunning: Bool,
+        mode: PracticeTimerMode = .countdown,
         targetSeconds: Int,
         blocks: [PracticeTimerBlockSnapshot] = [],
         activeBlockID: UUID? = nil
@@ -118,6 +128,7 @@ public struct PracticeTimerSnapshot: Equatable, Sendable {
         self.startedAt = startedAt
         self.activeElapsedSeconds = activeElapsedSeconds
         self.isRunning = isRunning
+        self.mode = mode
         self.targetSeconds = targetSeconds
         self.blocks = blocks
         self.activeBlockID = activeBlockID
@@ -128,6 +139,7 @@ public struct PracticeTimerSnapshot: Equatable, Sendable {
         startedAt: nil,
         activeElapsedSeconds: 0,
         isRunning: false,
+        mode: .countUp,
         targetSeconds: 0
     )
 }
@@ -241,20 +253,91 @@ public enum PracticeTimerRuntimeError: Error, Equatable, Sendable {
 public final class PracticeTimerLifecycleCoordinator {
     private let runtime: PracticeTimerRuntime
     private let feedback: @MainActor () -> Void
+    private let targetReached: @MainActor () -> Void
 
     public init(
         runtime: PracticeTimerRuntime,
-        feedback: @escaping @MainActor () -> Void = {}
+        feedback: @escaping @MainActor () -> Void = {},
+        targetReached: @escaping @MainActor () -> Void = {}
     ) {
         self.runtime = runtime
         self.feedback = feedback
+        self.targetReached = targetReached
     }
+
+    public var snapshot: PracticeTimerSnapshot { runtime.snapshot }
+    public var lastRefreshDate: Date { runtime.lastRefreshDate }
 
     public func refresh(deliverFeedback: Bool) {
         runtime.refresh()
+        let reachedTarget = runtime.snapshot.mode == .countdown
+            && runtime.snapshot.isRunning
+            && runtime.snapshot.activeRoutineId != nil
+            && runtime.snapshot.activeElapsedSeconds >= runtime.snapshot.targetSeconds
         if deliverFeedback, runtime.consumeTargetCrossing() {
             feedback()
         }
+        if reachedTarget {
+            targetReached()
+        }
+    }
+}
+
+@MainActor
+public final class PracticeTimerAlertCoordinator {
+    public nonisolated static let notificationID = "practice-timer.target"
+    private var scheduledRoutineID: UUID?
+    private var scheduledDate: Date?
+
+    public init() {}
+
+    public func reconcile(snapshot: PracticeTimerSnapshot, now: Date) async {
+        guard snapshot.mode == .countdown,
+              snapshot.isRunning,
+              let routineID = snapshot.activeRoutineId else {
+            cancel()
+            return
+        }
+        let remaining = max(0, snapshot.targetSeconds - snapshot.activeElapsedSeconds)
+        guard remaining > 0 else {
+            cancel()
+            return
+        }
+        let targetDate = now.addingTimeInterval(TimeInterval(remaining))
+        if scheduledRoutineID == routineID,
+           let scheduledDate,
+           abs(scheduledDate.timeIntervalSince(targetDate)) < 1.5 {
+            return
+        }
+        #if canImport(UserNotifications)
+        let center = UNUserNotificationCenter.current()
+        guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else {
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "practice.notification.title")
+        content.body = String(localized: "practice.notification.body")
+        content.sound = .default
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: max(1, targetDate.timeIntervalSinceNow),
+            repeats: false
+        )
+        try? await center.add(
+            UNNotificationRequest(identifier: Self.notificationID, content: content, trigger: trigger)
+        )
+        #endif
+        scheduledRoutineID = routineID
+        scheduledDate = targetDate
+    }
+
+    public func cancel() {
+        #if canImport(UserNotifications)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: [Self.notificationID]
+        )
+        #endif
+        scheduledRoutineID = nil
+        scheduledDate = nil
     }
 }
 
@@ -263,6 +346,7 @@ struct PersistedPracticeTimerState: Codable, Equatable {
     let startedAt: Date
     var accumulatedActiveSeconds: Int
     var resumedAt: Date?
+    let mode: PracticeTimerMode
     let targetSeconds: Int
     var targetFeedbackConsumed: Bool
     let routinePresentation: PracticeRoutinePresentationSnapshot?
@@ -276,6 +360,7 @@ struct PersistedPracticeTimerState: Codable, Equatable {
         startedAt: Date,
         accumulatedActiveSeconds: Int,
         resumedAt: Date?,
+        mode: PracticeTimerMode = .countdown,
         targetSeconds: Int,
         targetFeedbackConsumed: Bool,
         routinePresentation: PracticeRoutinePresentationSnapshot? = nil,
@@ -288,6 +373,7 @@ struct PersistedPracticeTimerState: Codable, Equatable {
         self.startedAt = startedAt
         self.accumulatedActiveSeconds = accumulatedActiveSeconds
         self.resumedAt = resumedAt
+        self.mode = mode
         self.targetSeconds = targetSeconds
         self.targetFeedbackConsumed = targetFeedbackConsumed
         self.routinePresentation = routinePresentation
@@ -298,7 +384,7 @@ struct PersistedPracticeTimerState: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case routineId, startedAt, accumulatedActiveSeconds, resumedAt, targetSeconds
+        case routineId, startedAt, accumulatedActiveSeconds, resumedAt, mode, targetSeconds
         case targetFeedbackConsumed, routinePresentation, blocks, currentBlockID
         case segments, skippedBlockIDs
     }
@@ -310,6 +396,7 @@ struct PersistedPracticeTimerState: Codable, Equatable {
             startedAt: try container.decode(Date.self, forKey: .startedAt),
             accumulatedActiveSeconds: try container.decode(Int.self, forKey: .accumulatedActiveSeconds),
             resumedAt: try container.decodeIfPresent(Date.self, forKey: .resumedAt),
+            mode: try container.decodeIfPresent(PracticeTimerMode.self, forKey: .mode) ?? .countdown,
             targetSeconds: try container.decode(Int.self, forKey: .targetSeconds),
             targetFeedbackConsumed: try container.decodeIfPresent(Bool.self, forKey: .targetFeedbackConsumed) ?? false,
             routinePresentation: try container.decodeIfPresent(
@@ -392,11 +479,13 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     public func start(
         routineId: UUID,
+        mode: PracticeTimerMode = .countdown,
         targetSeconds: Int,
         routinePresentation: PracticeRoutinePresentationSnapshot? = nil
     ) throws {
         try start(
             routineId: routineId,
+            mode: mode,
             targetSeconds: targetSeconds,
             blocks: [],
             routinePresentation: routinePresentation
@@ -413,6 +502,7 @@ public final class PracticeTimerRuntime: ObservableObject {
         }
         try start(
             routineId: routine.id,
+            mode: .countdown,
             targetSeconds: routine.targetMinutes * 60,
             blocks: blocks,
             routinePresentation: routinePresentation ?? PracticeRoutinePresentationSnapshot(routine: routine)
@@ -421,11 +511,13 @@ public final class PracticeTimerRuntime: ObservableObject {
 
     private func start(
         routineId: UUID,
+        mode: PracticeTimerMode,
         targetSeconds: Int,
         blocks: [PracticeBlock],
         routinePresentation: PracticeRoutinePresentationSnapshot?
     ) throws {
-        guard targetSeconds > 0 else {
+        guard (mode == .countUp && targetSeconds == 0)
+                || (mode == .countdown && targetSeconds > 0) else {
             throw PracticeTimerRuntimeError.invalidTargetSeconds
         }
         guard Set(blocks.map(\.id)).count == blocks.count else {
@@ -450,6 +542,7 @@ public final class PracticeTimerRuntime: ObservableObject {
             startedAt: timestamp,
             accumulatedActiveSeconds: 0,
             resumedAt: timestamp,
+            mode: mode,
             targetSeconds: targetSeconds,
             targetFeedbackConsumed: false,
             routinePresentation: routinePresentation,
@@ -594,6 +687,7 @@ public final class PracticeTimerRuntime: ObservableObject {
         let timestamp = now()
         lastRefreshDate = timestamp
         guard var state = validActiveState(at: timestamp),
+              state.mode == .countdown,
               !state.targetFeedbackConsumed,
               Self.elapsedSeconds(for: state, at: timestamp) >= state.targetSeconds else {
             return false
@@ -609,6 +703,31 @@ public final class PracticeTimerRuntime: ObservableObject {
         guard let state = validActiveState(at: timestamp) else {
             return nil
         }
+
+        return finish(state: state, at: timestamp)
+    }
+
+    /// Completes a running countdown at the exact target instant. This keeps
+    /// time accurate when iOS suspended the app and the next refresh happens
+    /// after the notification already fired.
+    public func finishCountdownAtTarget() -> PracticeTimerCompletion? {
+        let timestamp = now()
+        lastRefreshDate = timestamp
+        guard let state = validActiveState(at: timestamp),
+              state.mode == .countdown,
+              state.resumedAt != nil,
+              Self.elapsedSeconds(for: state, at: timestamp) >= state.targetSeconds else {
+            return nil
+        }
+        let remainingAtResume = max(0, state.targetSeconds - state.accumulatedActiveSeconds)
+        let targetDate = state.resumedAt?.addingTimeInterval(TimeInterval(remainingAtResume)) ?? timestamp
+        return finish(state: state, at: min(timestamp, targetDate))
+    }
+
+    private func finish(
+        state: PersistedPracticeTimerState,
+        at timestamp: Date
+    ) -> PracticeTimerCompletion? {
 
         var finishedState = state
         closeOpenSegment(&finishedState, at: timestamp)
@@ -811,6 +930,7 @@ public final class PracticeTimerRuntime: ObservableObject {
             startedAt: state.startedAt,
             activeElapsedSeconds: Self.elapsedSeconds(for: state, at: timestamp),
             isRunning: state.resumedAt != nil,
+            mode: state.mode,
             targetSeconds: state.targetSeconds,
             blocks: blockSnapshots(for: state, at: timestamp),
             activeBlockID: state.currentBlockID
@@ -932,7 +1052,8 @@ public final class PracticeTimerRuntime: ObservableObject {
     private static func isValid(_ state: PersistedPracticeTimerState, at now: Date) -> Bool {
         guard state.startedAt <= now,
               state.accumulatedActiveSeconds >= 0,
-              state.targetSeconds > 0,
+              ((state.mode == .countUp && state.targetSeconds == 0)
+                || (state.mode == .countdown && state.targetSeconds > 0)),
               state.routinePresentation.map({ $0.routineId == state.routineId }) ?? true else {
             return false
         }

@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// Legacy ad-hoc timer. Planned-session starts now route through the guided
+/// study flow (`StudyFlowSheet`); this view remains for project-only timing
+/// and writes sessions directly through `saveTimerSession`.
 public struct TimerSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var viewModel: JournalViewModel

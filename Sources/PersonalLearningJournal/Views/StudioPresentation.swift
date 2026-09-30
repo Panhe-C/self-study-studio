@@ -2,9 +2,14 @@ import Foundation
 
 public enum StudioPrimaryTab: String, Equatable, CaseIterable, Sendable {
     case today
+    case trail
+    case coach
     case projects
     case calendar
     case library
+    /// vNext navigation collapses Projects/Calendar/Library into a single
+    /// Courses tab. The legacy cases stay until RootView migrates.
+    case courses
 }
 
 public struct StudioWeekDay: Equatable, Identifiable, Sendable {
@@ -150,14 +155,15 @@ public enum StudioPresentation {
         sessions: [PracticeSession],
         activeRoutineId: UUID?,
         now: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        scheduledOnly: Bool = true
     ) -> [StudioPracticeCard] {
         let weekday = calendar.component(.weekday, from: now)
         return routines
             .filter {
                 !$0.isArchived
                     && $0.deletedAt == nil
-                    && $0.weekdays.contains(weekday)
+                    && (!scheduledOnly || $0.weekdays.contains(weekday))
             }
             .map { routine in
                 StudioPracticeCard(
@@ -180,5 +186,37 @@ public enum StudioPresentation {
                 }
                 return left.routine.name.localizedCaseInsensitiveCompare(right.routine.name) == .orderedAscending
             }
+    }
+}
+
+/// The vNext Today first screen: one Up Next card plus at most two
+/// alternatives. Skipped items never appear.
+public struct StudioFirstScreen: Equatable, Sendable {
+    public let upNext: TodayAgendaItem?
+    public let alternatives: [TodayAgendaItem]
+
+    public init(upNext: TodayAgendaItem?, alternatives: [TodayAgendaItem]) {
+        self.upNext = upNext
+        self.alternatives = alternatives
+    }
+}
+
+/// Non-regressible vNext product contract. Expresses only navigation shape
+/// and first-screen count limits; domain behavior stays in
+/// `TodayAgendaService`, whose deterministic ordering this type projects.
+public enum StudioExperienceContract {
+    /// vNext primary navigation: execution, projects, progress, and coaching.
+    public static var vNextPrimaryTabs: [StudioPrimaryTab] { [.today, .courses, .trail, .coach] }
+
+    public static let maximumAlternatives = 2
+
+    /// Projects agenda items (already ordered by `TodayAgendaService`) into
+    /// the Today first screen.
+    public static func firstScreen(agenda items: [TodayAgendaItem]) -> StudioFirstScreen {
+        let upNext = items.first { $0.position == .upNext }
+        let alternatives = items
+            .filter { $0.position != .upNext && $0.position != .skipToday }
+            .prefix(maximumAlternatives)
+        return StudioFirstScreen(upNext: upNext, alternatives: Array(alternatives))
     }
 }

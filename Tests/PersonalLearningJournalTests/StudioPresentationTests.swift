@@ -14,6 +14,13 @@ final class StudioPresentationTests: XCTestCase {
         )
     }
 
+    func testLegacyPrimaryTabsDoNotExposeTheVNextCoursesTab() {
+        // RootView still renders the legacy tabs; the vNext `courses` case
+        // must not leak into them until the navigation migrates.
+        XCTAssertFalse(StudioPresentation.primaryTabs(calendarEnabled: false).contains(.courses))
+        XCTAssertFalse(StudioPresentation.primaryTabs(calendarEnabled: true).contains(.courses))
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "en_US_POSIX")
@@ -127,6 +134,24 @@ final class StudioPresentationTests: XCTestCase {
 
         XCTAssertEqual(cards.map(\.routine.id), [mondayRoutine.id])
         XCTAssertTrue(cards[0].isActiveTimer)
+    }
+
+    func testSkillPracticeCardsCanRemainVisibleOutsideScheduledWeekday() throws {
+        let monday = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 13, hour: 10))
+        )
+        let tuesdayRoutine = makeRoutine(name: "Guitar", weekdays: [3])
+
+        let cards = StudioPresentation.practiceCards(
+            routines: [tuesdayRoutine],
+            sessions: [],
+            activeRoutineId: nil,
+            now: monday,
+            calendar: calendar,
+            scheduledOnly: false
+        )
+
+        XCTAssertEqual(cards.map(\.routine.id), [tuesdayRoutine.id])
     }
 
     func testPracticeCardsExcludeArchivedAndDeletedRoutinesAndSortActiveFirst() throws {

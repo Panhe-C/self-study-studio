@@ -113,6 +113,8 @@ public final class InMemoryJournalRepository: JournalRepository {
             + snapshot.schedulingPreferences.map(JournalEntity.schedulingPreferences)
             + snapshot.practiceRoutines.map(JournalEntity.practiceRoutine)
             + snapshot.practiceSessions.map(JournalEntity.practiceSession)
+            + snapshot.learningRecordRevisions.map(JournalEntity.learningRecordRevision)
+            + snapshot.learningAdjustmentSuggestions.map(JournalEntity.learningAdjustmentSuggestion)
         self.entities = Dictionary(
             uniqueKeysWithValues: initialEntities.map { ($0.reference, $0) }
         )
@@ -197,6 +199,14 @@ public final class InMemoryJournalRepository: JournalRepository {
                 },
                 practiceSessions: visibleEntities.compactMap {
                     guard case let .practiceSession(value) = $0 else { return nil }
+                    return value
+                },
+                learningRecordRevisions: visibleEntities.compactMap {
+                    guard case let .learningRecordRevision(value) = $0 else { return nil }
+                    return value
+                },
+                learningAdjustmentSuggestions: visibleEntities.compactMap {
+                    guard case let .learningAdjustmentSuggestion(value) = $0 else { return nil }
                     return value
                 },
                 hasCompletedOnboarding: stateMetadata.hasCompletedOnboarding,

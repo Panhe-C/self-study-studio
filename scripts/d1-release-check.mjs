@@ -309,6 +309,33 @@ checks.push(sourceCheck("swift_acceptance_manifest", [
   },
 ]));
 
+checks.push(sourceCheck("swift_vnext_acceptance_manifest", [
+  {
+    file: "Tests/PersonalLearningJournalTests/VNextEndToEndTests.swift",
+    patterns: [
+      "testScenarioANewCourseDraftHiddenFromTodayUntilActivatedThenExactlyOneUpNext",
+      "testScenarioBConfirmPublishesSessionAssessmentPlannedCompletionAndTrailInOneCommit",
+      "testScenarioCSaveForLaterSurvivesStoreRecreationAndStaysOutOfJournalUntilConfirm",
+      "testScenarioDAmendBumpsRevisionKeepsSnapshotAndLeavesPlanUntouched",
+      "testScenarioEDetectAdoptNextStepAndStructuralRevisionLifecycle",
+      "testScenarioFUnconfiguredAIStillCompletesLoopAndManualPlanAppearsInToday",
+      "testLegacySnapshotDecodesLosslesslyWithoutFabricatedAssessments",
+    ],
+  },
+  {
+    file: "Tests/PersonalLearningJournalTests/PendingStudyCaptureStoreTests.swift",
+    patterns: ["PendingStudyCaptureStore"],
+  },
+  {
+    file: "Tests/PersonalLearningJournalTests/LearningRecordServiceTests.swift",
+    patterns: ["testConfirmCreatesSessionCompletesPlannedSessionAndAppliesNextStepInOneCommit", "testConfirmCommitFailureLeavesJournalUnchangedAndCapturePreserved"],
+  },
+  {
+    file: "Tests/PersonalLearningJournalTests/LearningAdjustmentServiceTests.swift",
+    patterns: ["testStructuralPrepareCreatesDraftKeepsBaseActiveAndNeverActivates", "testAdoptNextStepAppliesProjectTrailAndDecisionInOneCommit"],
+  },
+]));
+
 checks.push(sourceCheck("web_acceptance_manifest", [
   {
     file: "WebWorkspace/app/workspace-app.tsx",
@@ -438,6 +465,64 @@ const scenarios = scenarioDefinitions.map((scenario) => ({
   },
 }));
 
+// vNext (spec 2026-08-10 section 17) acceptance scenarios A–F. The automated
+// evidence is the deterministic VNextEndToEndTests suite plus the targeted
+// service tests; every scenario still has a REQUIRED MANUAL gate that this
+// report never marks as passed.
+const vnextScenarioDefinitions = [
+  {
+    id: "A",
+    title: "New course: draft hidden from Today until activated, then exactly one Up Next",
+    evidence: ["VNextEndToEndTests.testScenarioANewCourseDraftHiddenFromTodayUntilActivatedThenExactlyOneUpNext"],
+    inputs: ["iPhone plan wizard walkthrough with editing and phase regeneration"],
+  },
+  {
+    id: "B",
+    title: "Complete a study: confirm publishes Session + assessment + planned completion + Trail in one commit",
+    evidence: ["VNextEndToEndTests.testScenarioBConfirmPublishesSessionAssessmentPlannedCompletionAndTrailInOneCommit", "LearningRecordServiceTests.testConfirmCreatesSessionCompletesPlannedSessionAndAppliesNextStepInOneCommit"],
+    inputs: ["physical iPhone guided study flow with real timer interaction"],
+  },
+  {
+    id: "C",
+    title: "Save-for-later recovery: pending capture survives relaunch and stays out of the journal until confirm",
+    evidence: ["VNextEndToEndTests.testScenarioCSaveForLaterSurvivesStoreRecreationAndStaysOutOfJournalUntilConfirm"],
+    inputs: ["system kill (jetsam/swipe-away) recovery of a pending capture on a physical device"],
+  },
+  {
+    id: "D",
+    title: "Record correction: amend bumps to revision 2, revision 1 snapshot viewable, plan untouched",
+    evidence: ["VNextEndToEndTests.testScenarioDAmendBumpsRevisionKeepsSnapshotAndLeavesPlanUntouched"],
+    inputs: ["iPhone record detail correction flow"],
+  },
+  {
+    id: "E",
+    title: "Adjustments: adopt a next-step suggestion in one commit; structural revision keeps v1 active until v2 activates",
+    evidence: ["VNextEndToEndTests.testScenarioEDetectAdoptNextStepAndStructuralRevisionLifecycle", "LearningAdjustmentServiceTests.testStructuralPrepareCreatesDraftKeepsBaseActiveAndNeverActivates"],
+    inputs: ["iPhone adjustment suggestion UI adopt/modify/ignore"],
+  },
+  {
+    id: "F",
+    title: "Degradation: unconfigured AI falls back to rule-based drafts and completes the loop; manual plan activates",
+    evidence: ["VNextEndToEndTests.testScenarioFUnconfiguredAIStillCompletesLoopAndManualPlanAppearsInToday"],
+    inputs: ["device run with AI unconfigured AND with a failing provider endpoint", "airplane-mode confirm"],
+  },
+];
+
+const vnextScenarios = vnextScenarioDefinitions.map((scenario) => ({
+  id: scenario.id,
+  title: scenario.title,
+  automated: {
+    status: localScenarioReady ? "PASS_LOCAL_AUTOMATED" : "NOT_RUN",
+    evidence: scenario.evidence,
+    caveat: "Deterministic service-level tests over in-memory repositories and temp-dir stores; not device, notification, or CloudKit evidence.",
+  },
+  manualLiveGate: {
+    status: "BLOCKED",
+    requiredInputs: scenario.inputs,
+    caveat: "Required manual acceptance; never inferred from Simulator runs or unit tests.",
+  },
+}));
+
 const manualGates = [
   {
     id: "physical_device_signed_install",
@@ -471,10 +556,56 @@ const manualGates = [
   },
 ];
 
+// vNext REQUIRED MANUAL gates. These are never automated away: the
+// deterministic suites above are service-level evidence only.
+const vnextManualGates = [
+  {
+    id: "vnext_physical_device_cs336_flow",
+    status: "BLOCKED",
+    requiredInputs: ["signed physical iPhone install", "full CS336 flow: plan, study, confirm, amend, adjust"],
+  },
+  {
+    id: "vnext_live_cloudkit_two_device_convergence",
+    status: "BLOCKED",
+    requiredInputs: ["two signed same-account devices", "confirmed records, revisions, and suggestions converge both ways"],
+  },
+  {
+    id: "vnext_pending_capture_kill_recovery",
+    status: "BLOCKED",
+    requiredInputs: ["physical device", "system kill (jetsam/swipe-away) with a pending capture", "relaunch shows the recovery card without journal writes"],
+  },
+  {
+    id: "vnext_local_notifications_and_deep_links",
+    status: "BLOCKED",
+    requiredInputs: ["physical device with notification permission", "pending-capture reminder fires", "deep link opens the pending confirmation"],
+  },
+  {
+    id: "vnext_attachments_image_audio_file",
+    status: "BLOCKED",
+    requiredInputs: ["physical device", "image, audio, and file attachments staged in the guided flow", "download and preview after sync"],
+  },
+  {
+    id: "vnext_max_dynamic_type",
+    status: "NOT_RUN",
+    requiredInputs: ["device or interactive inspection at the largest Dynamic Type size", "Today, study flow, and record draft screens remain usable"],
+  },
+  {
+    id: "vnext_voiceover",
+    status: "NOT_RUN",
+    requiredInputs: ["VoiceOver pass over Today, completion check, record draft, and plan review"],
+  },
+  {
+    id: "vnext_ai_unconfigured_and_provider_failure",
+    status: "NOT_RUN",
+    requiredInputs: ["device run with AI unconfigured", "device run against a failing provider endpoint", "airplane mode", "rule-based fallback completes the loop manually verifiable"],
+  },
+];
+
 const knownBaselineCount = checks.filter((check) => check.status === "PASS_KNOWN_BASELINE").length;
 const environmentBlockedCount = checks.filter((check) => check.status === "BLOCKED_ENVIRONMENT").length;
 const failedCount = checks.filter((check) => check.status === "FAIL").length;
 const blockedCount = manualGates.filter((gate) => gate.status === "BLOCKED").length;
+const vnextBlockedCount = vnextManualGates.filter((gate) => gate.status === "BLOCKED").length;
 const report = {
   schemaVersion: 1,
   generatedAt: new Date().toISOString(),
@@ -501,9 +632,14 @@ const report = {
   },
   scenarios,
   manualGates,
+  vnext: {
+    scenarios: vnextScenarios,
+    manualGates: vnextManualGates,
+    note: "vNext deterministic evidence comes from VNextEndToEndTests (scenarios A–F plus the legacy lossless-read fixture) and the targeted service suites; every listed manual gate remains REQUIRED and is not covered by automation.",
+  },
   releaseGate: {
-    status: failedCount > 0 || environmentBlockedCount > 0 || blockedCount > 0 ? "BLOCKED" : "PASS",
-    blockedManualGates: blockedCount,
+    status: failedCount > 0 || environmentBlockedCount > 0 || blockedCount > 0 || vnextBlockedCount > 0 ? "BLOCKED" : "PASS",
+    blockedManualGates: blockedCount + vnextBlockedCount,
     note: "A PASS here would still require the listed manual gates; no physical-device, live CloudKit, EventKit, browser visual, or VoiceOver claim is made by this report.",
   },
 };
@@ -521,6 +657,7 @@ if (jsonOutput) {
     `D1 release gate: ${report.releaseGate.status}`,
     `Automated checks: ${automated.status} (${automated.summary.pass} pass, ${automated.summary.knownBaseline} known-baseline, ${automated.summary.environmentBlocked} environment-blocked, ${automated.summary.fail} fail)`,
     `Scenarios: ${scenarios.filter((scenario) => scenario.automated.status === "PASS_LOCAL_AUTOMATED").length}/12 deterministic local coverage; ${blockedCount} manual gates blocked; ${manualGates.filter((gate) => gate.status === "NOT_RUN").length} not run`,
+    `vNext scenarios: ${vnextScenarios.filter((scenario) => scenario.automated.status === "PASS_LOCAL_AUTOMATED").length}/6 deterministic local coverage; ${vnextBlockedCount} vNext manual gates blocked; ${vnextManualGates.filter((gate) => gate.status === "NOT_RUN").length} not run`,
     reportPath ? `Machine-readable report: ${reportPath}` : "Use --json or --report <path> for machine-readable output.",
   ].join("\n") + "\n");
 }
