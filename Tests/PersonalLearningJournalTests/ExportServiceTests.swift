@@ -200,6 +200,136 @@ final class ExportServiceTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: expectedFile), Data("audio".utf8))
     }
 
+    func testExportJSONRoundTripsConfirmedSessionAssessmentAndRevisions() throws {
+        let confirmedAt = Date(timeIntervalSince1970: 1_000)
+        let project = Project(name: "CS336", area: "AI", goal: "Finish", currentNextStep: "Lecture 1")
+        let assessment = LearningRecordAssessment(
+            progress: .mostlyCompleted,
+            completedCriterionIDs: ["criterion-1", "criterion-2"],
+            understanding: .mostlyUnderstood,
+            blocker: "Need an example for the edge case",
+            aiDraftedSummary: true,
+            userEditedSummary: true,
+            confirmedAt: confirmedAt,
+            revision: 2
+        )
+        let session = try LearningSession(
+            projectId: project.id,
+            source: .timer,
+            actionType: .course,
+            startedAt: confirmedAt,
+            endedAt: confirmedAt.addingTimeInterval(1_800),
+            durationMinutes: 30,
+            note: "Implemented the merge loop",
+            nextStepBefore: "Write the merge loop",
+            nextStepAfter: "Add tests",
+            createdAt: confirmedAt,
+            updatedAt: confirmedAt,
+            assessment: assessment
+        )
+        let revision = LearningRecordRevision(
+            sessionID: session.id,
+            revision: 2,
+            previousNote: "Read chapter one",
+            previousAssessment: LearningRecordAssessment(
+                progress: .partial,
+                completedCriterionIDs: [],
+                blocker: "Missing example",
+                aiDraftedSummary: false,
+                userEditedSummary: false,
+                confirmedAt: confirmedAt,
+                revision: 1
+            ),
+            revisedAt: confirmedAt.addingTimeInterval(3_600)
+        )
+        let snapshot = JournalSnapshot(
+            projects: [project],
+            sessions: [session],
+            learningRecordRevisions: [revision]
+        )
+
+        let data = try ExportService().exportJSON(snapshot: snapshot)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let firstPass = try JSONDecoder.journal.decode(JournalExport.self, from: data)
+        let secondPass = try JSONDecoder.journal.decode(
+            JournalExport.self,
+            from: JSONEncoder.journal.encode(firstPass)
+        )
+
+        XCTAssertTrue(json.contains("\"assessment\""))
+        XCTAssertEqual(secondPass.sessions, [session])
+        XCTAssertEqual(secondPass.sessions.first?.assessment, assessment)
+        XCTAssertEqual(secondPass.learningRecordRevisions, [revision])
+        XCTAssertEqual(
+            secondPass.learningRecordRevisions.first?.previousAssessment,
+            revision.previousAssessment
+        )
+    }
+
+    func testExportJSONRoundTripsAdjustmentSuggestionDecisions() throws {
+        let createdAt = Date(timeIntervalSince1970: 4_000)
+        let decidedAt = Date(timeIntervalSince1970: 5_000)
+        let project = Project(name: "Guitar", area: "Music", goal: "Daily habit", currentNextStep: "Pentatonic")
+        let pending = LearningAdjustmentSuggestion(
+            projectID: project.id,
+            sourceSessionIDs: [UUID()],
+            kind: .nextStep,
+            title: "Repeated partial progress",
+            rationale: "The last 2 confirmed records ended partially.",
+            proposedValue: "Split the checkpoint",
+            createdAt: createdAt
+        )
+        let adopted = LearningAdjustmentSuggestion(
+            projectID: project.id,
+            kind: .temporaryDuration,
+            title: "Shorten late-night sessions",
+            rationale: "Late-night sessions keep slipping.",
+            proposedValue: "25 minutes for 3 days",
+            decision: .adopted,
+            createdAt: createdAt,
+            decidedAt: decidedAt
+        )
+        let snapshot = JournalSnapshot(
+            projects: [project],
+            learningAdjustmentSuggestions: [pending, adopted]
+        )
+
+        let data = try ExportService().exportJSON(snapshot: snapshot)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let firstPass = try JSONDecoder.journal.decode(JournalExport.self, from: data)
+        let secondPass = try JSONDecoder.journal.decode(
+            JournalExport.self,
+            from: JSONEncoder.journal.encode(firstPass)
+        )
+
+        XCTAssertTrue(json.contains("\"learningAdjustmentSuggestions\""))
+        XCTAssertEqual(secondPass.learningAdjustmentSuggestions, [pending, adopted])
+        XCTAssertEqual(secondPass.learningAdjustmentSuggestions.last?.decision, .adopted)
+        XCTAssertEqual(secondPass.learningAdjustmentSuggestions.last?.decidedAt, decidedAt)
+    }
+
+    func testExportJSONContainsNoPendingStudyCaptureContent() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let store = PendingStudyCaptureStore(directory: temporaryDirectory)
+        let capture = try store.begin(projectID: UUID(), source: .timer)
+        let project = Project(name: "CS336", area: "AI", goal: "Finish", currentNextStep: "Lecture 1")
+
+        let data = try ExportService().exportJSON(snapshot: JournalSnapshot(projects: [project]))
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        XCTAssertFalse(json.contains(capture.id.uuidString))
+        XCTAssertFalse(json.contains("pendingStudyCapture"))
+        XCTAssertFalse(json.contains("PendingStudyCapture"))
+        XCTAssertFalse(json.contains("pending-study-captures"))
+    }
+
     func testExportBundleWritesJournalJSONAndAttachmentsTogether() throws {
         let temporaryRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

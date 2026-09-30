@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// Manual catch-up log (legacy path, never AI-assisted). Planned sessions
+/// started from Today go through the guided study flow; this remains reachable
+/// from explicit Today/project history surfaces for historical backfilling.
 public struct QuickLogView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var viewModel: JournalViewModel

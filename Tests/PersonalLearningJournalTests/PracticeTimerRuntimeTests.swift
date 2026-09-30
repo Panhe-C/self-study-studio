@@ -5,6 +5,27 @@ import XCTest
 
 @MainActor
 final class PracticeTimerRuntimeTests: XCTestCase {
+    func testCountUpModeHasNoTargetAndSurvivesRelaunch() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let routineID = UUID()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+
+        try runtime.start(
+            routineId: routineID,
+            mode: .countUp,
+            targetSeconds: 0
+        )
+        clock.advance(by: 12)
+
+        let recovered = PracticeTimerRuntime(store: store, now: clock.now)
+        recovered.refresh()
+        XCTAssertEqual(recovered.snapshot.mode, .countUp)
+        XCTAssertEqual(recovered.snapshot.targetSeconds, 0)
+        XCTAssertEqual(recovered.snapshot.activeElapsedSeconds, 12)
+        XCTAssertFalse(recovered.consumeTargetCrossing())
+    }
+
     func testRefreshCoalescesDuplicateCallsWithinSameWallClockSecond() throws {
         let clock = TestClock(now: Date(timeIntervalSince1970: 100.1))
         let runtime = PracticeTimerRuntime(
@@ -96,6 +117,81 @@ final class PracticeTimerRuntimeTests: XCTestCase {
         XCTAssertEqual(runtime.snapshot.activeElapsedSeconds, 11)
         XCTAssertFalse(PracticeTimerRuntime(store: store, now: clock.now).consumeTargetCrossing())
         withExtendedLifetime(observation) {}
+    }
+
+    func testCountdownCanFinishAtExactTargetAfterLateForegroundRefresh() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let store = InMemoryPracticeTimerStateStore()
+        let runtime = PracticeTimerRuntime(store: store, now: clock.now)
+        let routineID = UUID()
+
+        try runtime.start(routineId: routineID, targetSeconds: 60)
+        clock.advance(by: 95)
+
+        let completion = try XCTUnwrap(runtime.finishCountdownAtTarget())
+
+        XCTAssertEqual(completion.routineId, routineID)
+        XCTAssertEqual(completion.activeDurationSeconds, 60)
+        XCTAssertEqual(completion.endedAt, Date(timeIntervalSince1970: 160))
+        XCTAssertNil(runtime.snapshot.activeRoutineId)
+        XCTAssertEqual(runtime.pendingCompletion?.completion, completion)
+        XCTAssertNil(runtime.finishCountdownAtTarget())
+    }
+
+    func testLifecycleCallsFeedbackAndAutomaticCompletionOnce() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let runtime = PracticeTimerRuntime(
+            store: InMemoryPracticeTimerStateStore(),
+            now: clock.now
+        )
+        var feedbackCount = 0
+        var completionCount = 0
+        let lifecycle = PracticeTimerLifecycleCoordinator(
+            runtime: runtime,
+            feedback: { feedbackCount += 1 },
+            targetReached: {
+                completionCount += 1
+                _ = runtime.finishCountdownAtTarget()
+            }
+        )
+
+        try runtime.start(routineId: UUID(), targetSeconds: 10)
+        clock.advance(by: 11)
+        lifecycle.refresh(deliverFeedback: true)
+        lifecycle.refresh(deliverFeedback: true)
+
+        XCTAssertEqual(feedbackCount, 1)
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertNil(runtime.snapshot.activeRoutineId)
+        XCTAssertNotNil(runtime.pendingCompletion)
+    }
+
+    func testLifecycleAutoCompletesLegacyTimerAfterFeedbackWasAlreadyConsumed() throws {
+        let clock = TestClock(now: Date(timeIntervalSince1970: 100))
+        let runtime = PracticeTimerRuntime(
+            store: InMemoryPracticeTimerStateStore(),
+            now: clock.now
+        )
+        var feedbackCount = 0
+        var completionCount = 0
+        let lifecycle = PracticeTimerLifecycleCoordinator(
+            runtime: runtime,
+            feedback: { feedbackCount += 1 },
+            targetReached: {
+                completionCount += 1
+                _ = runtime.finishCountdownAtTarget()
+            }
+        )
+        try runtime.start(routineId: UUID(), targetSeconds: 10)
+        clock.advance(by: 11)
+        XCTAssertTrue(runtime.consumeTargetCrossing())
+
+        lifecycle.refresh(deliverFeedback: true)
+
+        XCTAssertEqual(feedbackCount, 0)
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertNil(runtime.snapshot.activeRoutineId)
+        XCTAssertNotNil(runtime.pendingCompletion)
     }
 
     func testFinishReturnsImmutableCompletionAndPersistsPendingDraft() throws {

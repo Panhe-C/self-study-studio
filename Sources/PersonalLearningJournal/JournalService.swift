@@ -7,24 +7,36 @@ public enum EvidenceContractState: Equatable, Sendable {
 
 public final class JournalService {
     private let repository: any JournalRepository
+    /// When supplied by the app session, the legacy recording path can reject
+    /// a planned activity that already has an unresolved guided capture.
+    /// This keeps Quick Log useful for genuine historical backfills while
+    /// preventing a second record for the active guided flow.
+    private let pendingCaptureStore: PendingStudyCaptureStore?
     private let now: () -> Date
     private var state: JournalSnapshot
 
     public init(
         repository: any JournalRepository,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        pendingCaptureStore: PendingStudyCaptureStore? = nil
     ) {
         self.repository = repository
+        self.pendingCaptureStore = pendingCaptureStore
         self.now = now
         self.state = (try? repository.snapshot()) ?? JournalSnapshot()
     }
 
     public convenience init(
         store: any JournalStore,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        pendingCaptureStore: PendingStudyCaptureStore? = nil
     ) {
         let snapshot = (try? store.load()) ?? JournalSnapshot()
-        self.init(repository: InMemoryJournalRepository(snapshot: snapshot), now: now)
+        self.init(
+            repository: InMemoryJournalRepository(snapshot: snapshot),
+            now: now,
+            pendingCaptureStore: pendingCaptureStore
+        )
     }
 
     public func snapshot() -> JournalSnapshot {
@@ -379,6 +391,10 @@ public final class JournalService {
         return recentSessions.count + recentProofs.count >= evidenceThreshold
     }
 
+    /// Manual / legacy recording path: writes the session directly without
+    /// the guided completion check, AI record draft, or
+    /// `LearningRecordAssessment`. Guided study-flow records go through
+    /// `LearningRecordService.confirm(capture:)` instead.
     @discardableResult
     public func quickLog(
         projectId: UUID,
@@ -443,6 +459,15 @@ public final class JournalService {
         refreshFromRepository()
         guard let projectIndex = state.projects.firstIndex(where: { $0.id == projectId }) else {
             throw JournalValidationError.missingProject
+        }
+        if let pendingCapture = try pendingCaptureStore?.allCaptures().first(where: {
+            $0.projectID == projectId && !$0.stage.isTerminal
+        }) {
+            // Manual Quick Log remains the historical backfill path, but it
+            // must wait until every unresolved guided capture for this
+            // project is confirmed or explicitly discarded. This also
+            // covers project-only captures, which have no planned-session id.
+            throw LearningRecordError.pendingCaptureExists(pendingCapture.id)
         }
         let plannedSessionIndex = try plannedSessionId.map { id -> Int in
             guard let index = state.plannedSessions.firstIndex(where: { $0.id == id }),

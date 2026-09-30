@@ -17,6 +17,8 @@ public enum JournalEntityKind: String, Codable, CaseIterable, Sendable {
     case schedulingPreferences
     case practiceRoutine
     case practiceSession
+    case learningRecordRevision
+    case learningAdjustmentSuggestion
 }
 
 public struct JournalEntityReference: Codable, Equatable, Hashable, Sendable {
@@ -48,6 +50,8 @@ public enum JournalEntity: Codable, Equatable, Sendable {
     case schedulingPreferences(SchedulingPreferences)
     case practiceRoutine(PracticeRoutine)
     case practiceSession(PracticeSession)
+    case learningRecordRevision(LearningRecordRevision)
+    case learningAdjustmentSuggestion(LearningAdjustmentSuggestion)
 
     public var reference: JournalEntityReference {
         switch self {
@@ -67,6 +71,8 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .schedulingPreferences(value): .init(.schedulingPreferences, value.id)
         case let .practiceRoutine(value): .init(.practiceRoutine, value.id)
         case let .practiceSession(value): .init(.practiceSession, value.id)
+        case let .learningRecordRevision(value): .init(.learningRecordRevision, value.id)
+        case let .learningAdjustmentSuggestion(value): .init(.learningAdjustmentSuggestion, value.id)
         }
     }
 
@@ -94,6 +100,8 @@ public enum JournalEntity: Codable, Equatable, Sendable {
         case let .schedulingPreferences(value): value.deletedAt != nil
         case let .practiceRoutine(value): value.deletedAt != nil
         case let .practiceSession(value): value.deletedAt != nil
+        case let .learningRecordRevision(value): value.deletedAt != nil
+        case let .learningAdjustmentSuggestion(value): value.deletedAt != nil
         }
     }
 
@@ -166,6 +174,12 @@ public enum JournalEntity: Codable, Equatable, Sendable {
             value.deletedAt = date
             value.updatedAt = date
             return .practiceSession(value)
+        case var .learningRecordRevision(value):
+            value.deletedAt = date
+            return .learningRecordRevision(value)
+        case var .learningAdjustmentSuggestion(value):
+            value.deletedAt = date
+            return .learningAdjustmentSuggestion(value)
         }
     }
 }

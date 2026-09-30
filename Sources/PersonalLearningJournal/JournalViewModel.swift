@@ -27,6 +27,14 @@ public final class JournalViewModel: ObservableObject {
             .flatMap(\.paths)
     }
     @Published private var rememberedCoursePlanningInputs: [UUID: CoursePlanningInput]
+    /// Set by a pending-capture deep link (notification tap) to reopen that
+    /// capture directly at its step (spec 13). Consumed — cleared — by the
+    /// view that presents it; a stale id never reaches this point.
+    @Published public var requestedCaptureReopen: PendingStudyCapture?
+    /// Installed by the app session so flow transitions (confirm, and refresh
+    /// after the sheet closes) can reconcile pending-capture reminders.
+    /// Optional: scheduling stays best-effort and never blocks the flow.
+    public var pendingCaptureNotificationCoordinator: PendingCaptureNotificationCoordinator?
     /// Day-scoped Today presentation choices. These are intentionally kept
     /// outside Journal persistence: the derived agenda is never a second
     /// source of truth for plans, routines, completions, or Trail history.
@@ -38,6 +46,10 @@ public final class JournalViewModel: ObservableObject {
     private let attachmentStore: AttachmentStore
     private let archiveService: JournalArchiveService
     private let cleanupQueue: AttachmentCleanupQueue
+    private let learningRecordService: LearningRecordService
+    private let learningAdjustmentService: LearningAdjustmentService
+    private let learningAdjustmentProvider: any LearningAdjustmentProvider
+    private let deterministicAdjustmentProvider: any LearningAdjustmentProvider
     private let practiceService: PracticeService
     public let practiceTimer: PracticeTimerRuntime
     private let coursePlanningService: CoursePlanningService?
@@ -53,12 +65,15 @@ public final class JournalViewModel: ObservableObject {
         attachmentStore: AttachmentStore = .defaultStore(),
         archiveService: JournalArchiveService = JournalArchiveService(),
         cleanupQueue: AttachmentCleanupQueue? = nil,
+        learningRecordService: LearningRecordService? = nil,
+        pendingCaptureStore: PendingStudyCaptureStore? = nil,
         practiceService: PracticeService,
         practiceTimer: PracticeTimerRuntime,
         coursePlanningService: CoursePlanningService? = nil,
         syncCoordinator: (any CloudSyncCoordinating)? = nil,
         syncRepository: (any JournalRepository)? = nil,
-        accountCoordinator: CloudAccountCoordinator? = nil
+        accountCoordinator: CloudAccountCoordinator? = nil,
+        adjustmentProvider: (any LearningAdjustmentProvider)? = nil
     ) {
         self.journalService = journalService
         self.reviewService = reviewService
@@ -66,9 +81,25 @@ public final class JournalViewModel: ObservableObject {
         self.attachmentStore = attachmentStore
         self.archiveService = archiveService
         self.cleanupQueue = cleanupQueue ?? AttachmentCleanupQueue(rootDirectory: attachmentStore.rootDirectory)
+        self.learningRecordService = learningRecordService ?? LearningRecordService(
+            repository: journalService.journalRepository,
+            captureStore: pendingCaptureStore ?? PendingStudyCaptureStore(),
+            attachmentStore: attachmentStore,
+            cleanupQueue: self.cleanupQueue
+        )
         self.practiceService = practiceService
         self.practiceTimer = practiceTimer
         self.coursePlanningService = coursePlanningService
+        let adjustmentService = LearningAdjustmentService(
+            repository: journalService.journalRepository,
+            planningService: coursePlanningService
+        )
+        self.learningAdjustmentService = adjustmentService
+        let deterministicProvider = RuleBasedLearningAdjustmentProvider(detector: adjustmentService)
+        self.deterministicAdjustmentProvider = deterministicProvider
+        self.learningAdjustmentProvider = adjustmentProvider ?? AdaptiveLearningAdjustmentProvider(
+            fallback: deterministicProvider
+        )
         self.syncCoordinator = syncCoordinator
         self.syncRepository = syncRepository
         self.accountCoordinator = accountCoordinator
@@ -129,6 +160,10 @@ public final class JournalViewModel: ObservableObject {
     }
 
     public func applicationDidBecomeActive() async {
+        // The runtime owns its persisted active/pending state. Refreshing here
+        // makes scene re-entry publish the recovered elapsed snapshot before
+        // Today projects its recovery affordance, even when sync is local-only.
+        practiceTimer.refresh()
         guard syncCoordinator != nil else {
             refresh()
             await refreshSyncSummary()
@@ -282,8 +317,62 @@ public final class JournalViewModel: ObservableObject {
             snapshot: snapshot,
             day: now,
             now: now,
-            overrides: todayAgendaOverrides
+            // Persisted suggestion commands are replayed before ephemeral
+            // manual overrides. This keeps an adopted daily-order command
+            // visible after a view-model/app restart while still allowing a
+            // user action in the current process to supersede it.
+            overrides: persistedTodayAgendaOverrides + todayAgendaOverrides,
+            temporaryDurationOverrides: temporaryDurationOverrides
         )
+    }
+
+    /// Replays the concrete Today targets captured with adopted/modified
+    /// daily-order suggestions. The target is still only a projection
+    /// override: it never mutates a plan, completion, or Trail record.
+    private var persistedTodayAgendaOverrides: [TodayAgendaOverride] {
+        snapshot.learningAdjustmentSuggestions
+            .filter {
+                $0.deletedAt == nil
+                    && ($0.decision == .adopted || $0.decision == .modified)
+                    && $0.appliedCommand != nil
+            }
+            .sorted {
+                ($0.decidedAt ?? $0.createdAt, $0.id.uuidString)
+                    < ($1.decidedAt ?? $1.createdAt, $1.id.uuidString)
+            }
+            .compactMap { suggestion in
+                guard let command = suggestion.appliedCommand,
+                      case let .dailyOrder(target) = command else {
+                    return nil
+                }
+                return target.overrideValue
+            }
+    }
+
+    /// Replays adopted/modified temporary-duration commands from the synced
+    /// suggestion record. The active plan remains untouched; the override is
+    /// consumed only by the ephemeral Today projection until the planned
+    /// session is completed or the suggestion is superseded.
+    private var temporaryDurationOverrides: [UUID: Int] {
+        let decisions = snapshot.learningAdjustmentSuggestions
+            .filter {
+                $0.deletedAt == nil
+                    && ($0.decision == .adopted || $0.decision == .modified)
+                    && $0.appliedCommand != nil
+            }
+            .sorted {
+                ($0.decidedAt ?? $0.createdAt, $0.id.uuidString)
+                    < ($1.decidedAt ?? $1.createdAt, $1.id.uuidString)
+            }
+        var result: [UUID: Int] = [:]
+        for suggestion in decisions {
+            guard let command = suggestion.appliedCommand,
+                  case let .temporaryDuration(target) = command else {
+                continue
+            }
+            result[target.plannedSessionID] = target.minutes
+        }
+        return result
     }
 
     /// Applies a local, day-scoped ordering choice. Source records and Trail
@@ -320,6 +409,31 @@ public final class JournalViewModel: ObservableObject {
                 $0.source == source &&
                 $0.sourceID == sourceID
         }
+    }
+
+    /// vNext Today first screen (spec 7): assembles the deterministic agenda,
+    /// device-local pending captures, and snapshot joins into one projection.
+    /// Assembly only — all domain behavior stays in the underlying services.
+    public func vNextTodayProjection(
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> VNextTodayProjection {
+        let agenda = todayAgenda(now: now, calendar: calendar)
+        let capacityExceededCount = snapshot.coursePlans
+            .filter { $0.status == .active && $0.deletedAt == nil }
+            .filter { capacityCheck(for: $0.id, calendar: calendar).isOverCapacity }
+            .count
+        return VNextTodayProjector.project(
+            agenda: agenda,
+            pendingCaptures: pendingStudyCaptures(),
+            activeCapture: activeStudyCapture(),
+            snapshot: snapshot,
+            pendingReviewCount: projectsNeedingReview(referenceDate: now).count,
+            hasSyncIssue: syncSummary.title == "Needs Attention",
+            capacityExceededCount: capacityExceededCount,
+            practiceSnapshot: practiceTimer.snapshot,
+            pendingPracticeCompletion: practiceTimer.pendingCompletion
+        )
     }
 
     public func productHealth(now: Date = Date()) -> ProductHealthReport {
@@ -615,6 +729,11 @@ public final class JournalViewModel: ObservableObject {
         nextStep: String? = nil,
         plannedSessionId: UUID? = nil
     ) throws -> LearningSession {
+        if let pendingCapture = try learningRecordService.store.allCaptures().first(where: {
+            $0.projectID == projectId && !$0.stage.isTerminal
+        }) {
+            throw LearningRecordError.pendingCaptureExists(pendingCapture.id)
+        }
         let session = try journalService.quickLog(
             projectId: projectId,
             actionType: actionType,
@@ -627,6 +746,254 @@ public final class JournalViewModel: ObservableObject {
         refresh()
         captureNextStepProposal(after: plannedSessionId)
         return session
+    }
+
+    /// Confirms a pending study capture into the journal through the guided
+    /// study flow (one atomic transaction; the capture is removed only after
+    /// success). Distinct from `quickLog`, which stays the manual path.
+    @discardableResult
+    public func confirmPendingCapture(
+        _ capture: PendingStudyCapture,
+        editedDraft: LearningRecordDraft? = nil,
+        userEditedSummary: Bool = false,
+        confirmedNextStep: String? = nil
+    ) throws -> LearningSession {
+        let session = try learningRecordService.confirm(
+            capture: capture,
+            editedDraft: editedDraft,
+            userEditedSummary: userEditedSummary,
+            confirmedNextStep: confirmedNextStep
+        )
+        refresh()
+        refreshPendingCaptureNotifications()
+        return session
+    }
+
+    /// Reconciles pending-capture reminders with the capture store (spec 13):
+    /// confirms/discards cancel, still-pending captures get one reminder.
+    /// No-op when no coordinator is installed; failures never surface.
+    public func refreshPendingCaptureNotifications() {
+        guard let pendingCaptureNotificationCoordinator else { return }
+        Task {
+            await pendingCaptureNotificationCoordinator.refresh(
+                from: learningRecordService.store
+            )
+        }
+    }
+
+    /// Amends a confirmed guided-flow record. Appends the previous revision
+    /// snapshot first, then updates the session; never mutates plan or Next
+    /// Step state.
+    @discardableResult
+    public func amendLearningRecord(
+        sessionID: UUID,
+        note: String,
+        progress: CompletionProgress,
+        completedCriterionIDs: [String] = [],
+        understanding: UnderstandingLevel? = nil,
+        blocker: String? = nil
+    ) throws -> LearningSession {
+        let session = try learningRecordService.amend(
+            sessionID: sessionID,
+            note: note,
+            progress: progress,
+            completedCriterionIDs: completedCriterionIDs,
+            understanding: understanding,
+            blocker: blocker
+        )
+        refresh()
+        return session
+    }
+
+    /// Captures waiting on user confirmation (awaiting check, awaiting record
+    /// confirmation, or saved for later). Device-local; never part of the
+    /// journal snapshot.
+    public func pendingStudyCaptures() -> [PendingStudyCapture] {
+        (try? learningRecordService.pendingConfirmations()) ?? []
+    }
+
+    /// The capture currently holding the timer slot (active, paused, or
+    /// recovered after a crash), if any.
+    public func activeStudyCapture() -> PendingStudyCapture? {
+        try? learningRecordService.store.activeCapture()
+    }
+
+    /// Builds a study-flow controller bound to the same device-local capture
+    /// store the confirmation service uses. Providers follow the other
+    /// adaptive providers: AI when configured, deterministic fallback
+    /// otherwise.
+    public func makeStudyFlowController() -> StudyFlowController {
+        StudyFlowController(
+            store: learningRecordService.store,
+            checkProvider: AdaptiveCompletionCheckProvider(),
+            recordDraftGenerator: LearningRecordDraftGenerator(
+                provider: AdaptiveLearningRecordDraftProvider()
+            ),
+            viewModel: self
+        )
+    }
+
+    /// Revision history for a confirmed guided-flow record, newest first.
+    public func learningRecordRevisions(for sessionID: UUID) -> [LearningRecordRevision] {
+        snapshot.learningRecordRevisions
+            .filter { $0.sessionID == sessionID && $0.deletedAt == nil }
+            .sorted { $0.revision > $1.revision }
+    }
+
+    // MARK: - Learning Adjustments (spec 11)
+
+    /// Persisted adjustment suggestions for one project, newest first.
+    public func adjustmentSuggestions(for projectID: UUID) -> [LearningAdjustmentSuggestion] {
+        (try? learningAdjustmentService.suggestions(for: projectID)) ?? []
+    }
+
+    /// Explicit detection trigger (user request or post-confirm request).
+    /// Never runs automatically on confirm.
+    @discardableResult
+    public func detectAdjustmentSuggestions(projectID: UUID) throws -> [LearningAdjustmentSuggestion] {
+        let created = try learningAdjustmentService.detectSuggestions(projectID: projectID)
+        refresh()
+        return created
+    }
+
+    /// Post-confirm convenience; detection stays callable standalone.
+    @discardableResult
+    public func recordConfirmedAndDetectAdjustments(projectID: UUID) throws -> [LearningAdjustmentSuggestion] {
+        let created = try learningAdjustmentService.recordConfirmedAndDetect(projectID: projectID)
+        refresh()
+        return created
+    }
+
+    /// Requests provider-authored adjustment drafts for one project. The
+    /// provider receives only the active-plan/current-phase digest, up to ten
+    /// confirmed records, blocker summaries, and this explicit request. AI
+    /// output is persisted as pending suggestions; it is never auto-adopted.
+    /// Configuration, transport, parsing, or injected-provider failures fall
+    /// back to the same deterministic detector used by the offline path.
+    @discardableResult
+    public func requestAdjustmentSuggestions(
+        projectID: UUID,
+        userRequest: String
+    ) async throws -> [LearningAdjustmentSuggestion] {
+        let input = LearningAdjustmentInput(
+            snapshot: snapshot,
+            projectID: projectID,
+            userRequest: userRequest,
+            maximumRecentSessions: 10
+        )
+        let drafts: [LearningAdjustmentSuggestionDraft]
+        do {
+            drafts = try await learningAdjustmentProvider.makeSuggestions(input: input)
+        } catch {
+            drafts = try await deterministicAdjustmentProvider.makeSuggestions(input: input)
+        }
+        let created = try learningAdjustmentService.persistSuggestions(drafts, projectID: projectID)
+        refresh()
+        return created
+    }
+
+    public func ignoreAdjustmentSuggestion(_ suggestionID: UUID) throws {
+        try learningAdjustmentService.ignore(suggestionID: suggestionID)
+        refresh()
+    }
+
+    /// Adopts a pending suggestion with one type-safe command. For a local
+    /// daily-order command, the override is applied only after the decision
+    /// commit succeeds; a failed write therefore leaves no half-state.
+    public func adoptAdjustmentSuggestion(
+        _ suggestionID: UUID,
+        command: LearningAdjustmentCommand
+    ) throws {
+        try learningAdjustmentService.adopt(suggestionID: suggestionID, command: command)
+        if case let .dailyOrder(target) = command {
+            applyTodayAgendaOverride(target.overrideValue)
+        }
+        refresh()
+    }
+
+    public func modifyAdjustmentSuggestion(
+        _ suggestionID: UUID,
+        command: LearningAdjustmentCommand
+    ) throws {
+        try learningAdjustmentService.modify(suggestionID: suggestionID, command: command)
+        if case let .dailyOrder(target) = command {
+            applyTodayAgendaOverride(target.overrideValue)
+        }
+        refresh()
+    }
+
+    /// Structural suggestions produce a plan revision DRAFT only; activation
+    /// stays on the existing revision path. The diff UI renders base vs draft
+    /// via `PlanRevisionDiffEngine`.
+    @discardableResult
+    public func prepareStructuralAdjustmentDraft(suggestionID: UUID) throws -> PlanRevisionDraft {
+        let draft = try learningAdjustmentService.prepareStructuralDraft(suggestionID: suggestionID)
+        refresh()
+        return draft
+    }
+
+    /// Field-level diff between the base revision and the structural draft a
+    /// suggestion points at. Returns nil when the suggestion has no draft.
+    public func adjustmentDiff(
+        for suggestion: LearningAdjustmentSuggestion
+    ) -> (diff: PlanRevisionDiff, sources: [LearningSession])? {
+        guard let draftID = suggestion.planRevisionDraftID else { return nil }
+        let aggregates = snapshot.learningPlanAggregates(for: suggestion.projectID)
+        guard let aggregate = aggregates.first(where: {
+            $0.revisions.contains { $0.plan.id == draftID }
+        }),
+            let candidate = aggregate.revisions.first(where: { $0.plan.id == draftID }),
+            let base = aggregate.activeRevision ?? aggregate.revisions.first(where: {
+                $0.revisionID == candidate.baseRevisionID
+            })
+        else { return nil }
+        let sources = suggestion.sourceSessionIDs.compactMap { id in
+            snapshot.sessions.first { $0.id == id && $0.deletedAt == nil }
+        }
+        return (
+            PlanRevisionDiffEngine.compute(base: base, candidate: candidate),
+            sources
+        )
+    }
+
+    /// Called after the user activated the structural draft through the
+    /// existing activation path.
+    public func markAdjustmentAdoptedAfterActivation(suggestionID: UUID) throws {
+        try learningAdjustmentService.markAdoptedAfterActivation(suggestionID: suggestionID)
+        refresh()
+    }
+
+    /// Enables a prepared structural revision and then marks its suggestion
+    /// adopted. Course-plan activation remains guarded and idempotent; if the
+    /// final suggestion write is interrupted, calling this method again
+    /// observes the active draft and safely completes the decision.
+    public func activateStructuralAdjustment(
+        suggestionID: UUID,
+        capacityAcknowledged: Bool = false
+    ) throws {
+        let suggestion = try learningAdjustmentService.suggestion(id: suggestionID)
+        if suggestion.decision == .adopted {
+            return
+        }
+        guard suggestion.decision == .pending else {
+            throw LearningAdjustmentError.alreadyDecided
+        }
+        guard let draftID = suggestion.planRevisionDraftID else {
+            throw LearningAdjustmentError.structuralRevisionRequiresDraftActivation
+        }
+        let expectation: RevisionGuardExpectation
+        if let captured = suggestion.revisionGuardExpectation {
+            expectation = captured
+        } else {
+            expectation = try revisionGuardExpectation(for: draftID)
+        }
+        _ = try activateCoursePlan(
+            draftPlanID: draftID,
+            expectation: expectation,
+            capacityAcknowledged: capacityAcknowledged
+        )
+        try learningAdjustmentService.markAdoptedAfterActivation(suggestionID: suggestionID)
+        refresh()
     }
 
     @discardableResult
@@ -689,12 +1056,37 @@ public final class JournalViewModel: ObservableObject {
         }
     }
 
+    /// Regenerates one phase of an editable draft through the provider and
+    /// splices the result back, replacing only that phase and its sessions.
+    /// The draft stays unsaved until the learner activates or saves it.
+    public func regenerateCoursePlanPhase(
+        input: CoursePlanningInput,
+        draft: CoursePlanDraft,
+        phaseID: String
+    ) async throws -> CoursePlanDraft {
+        guard let coursePlanningService else {
+            throw CoursePlanningError.providerUnavailable
+        }
+        guard let phase = draft.phases.first(where: { $0.id == phaseID }) else {
+            throw CoursePlanningValidationError.unknownPhaseReference(phaseID)
+        }
+        let regeneration = try await coursePlanningService.regeneratePhase(
+            input: input,
+            context: coursePlanningContext(for: input.projectId),
+            phase: phase
+        )
+        return CoursePlanDraftEditingService.replacingPhase(
+            draft,
+            phaseID: phaseID,
+            with: regeneration
+        )
+    }
+
     @discardableResult
     public func saveManualDraft(
         input: CoursePlanningInput,
         draft: CoursePlanDraft
-    ) throws -> LearningPlan {
-        guard let coursePlanningService else {
+    ) throws -> LearningPlan {        guard let coursePlanningService else {
             throw CoursePlanningError.providerUnavailable
         }
         rememberCoursePlanningInput(input)
@@ -1059,7 +1451,8 @@ public final class JournalViewModel: ObservableObject {
 
     public func practiceCards(
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        scheduledOnly: Bool = true
     ) -> [StudioPracticeCard] {
         let timerSnapshot = practiceTimer.snapshot
         var presentedRoutines = practiceRoutines
@@ -1088,7 +1481,8 @@ public final class JournalViewModel: ObservableObject {
             sessions: presentedSessions,
             activeRoutineId: timerSnapshot.activeRoutineId,
             now: now,
-            calendar: calendar
+            calendar: calendar,
+            scheduledOnly: scheduledOnly
         ).map { card in
             guard card.isActiveTimer else { return card }
             return StudioPracticeCard(
@@ -1098,6 +1492,45 @@ public final class JournalViewModel: ObservableObject {
                 targetSeconds: timerSnapshot.targetSeconds
             )
         }
+    }
+
+    /// Resolves the routine needed to reopen a device-local practice timer.
+    /// A routine may have been archived or superseded after the timer was
+    /// persisted, so the runtime presentation/completion snapshot is a
+    /// compatibility fallback rather than a reason to lose the recovery path.
+    public func practiceRoutineForTimer(
+        _ routineID: UUID,
+        now: Date = Date()
+    ) -> PracticeRoutine? {
+        if let routine = practiceRoutines.first(where: { $0.id == routineID }) {
+            return routine
+        }
+        if practiceTimer.snapshot.activeRoutineId == routineID {
+            return activePracticePresentationRoutine(
+                timerSnapshot: practiceTimer.snapshot,
+                now: now
+            )
+        }
+        if let pending = practiceTimer.pendingCompletion,
+           pending.completion.routineId == routineID {
+            if let recoverableRoutine = practiceService.recoverableRoutine(routineID) {
+                return recoverableRoutine
+            }
+            let presentation = pending.routinePresentation
+            return PracticeRoutine(
+                id: routineID,
+                projectId: pending.linkedProjectId,
+                name: presentation?.name ?? "Practice",
+                symbolName: presentation?.symbolName ?? "timer",
+                color: presentation?.color ?? .teal,
+                targetMinutes: max(1, (pending.completion.activeDurationSeconds + 59) / 60),
+                weekdays: Set(1...7),
+                blocks: pending.completion.blocks,
+                createdAt: pending.completion.startedAt,
+                updatedAt: pending.completion.endedAt
+            )
+        }
+        return nil
     }
 
     private func activePracticePresentationRoutine(
@@ -1248,6 +1681,44 @@ public final class JournalViewModel: ObservableObject {
         }
     }
 
+    /// Starts the common practice path without exposing routine authoring.
+    /// A project keeps at most one operational routine; the first start creates
+    /// a neutral project-owned routine and later starts simply reuse it.
+    @discardableResult
+    public func startSimplePractice(
+        projectId: UUID,
+        mode: PracticeTimerMode,
+        countdownMinutes: Int = 25
+    ) throws -> PracticeRoutine {
+        guard let project = projects.first(where: {
+            $0.id == projectId && $0.deletedAt == nil && !$0.isTrashed
+        }) else {
+            throw PracticeValidationError.missingProject
+        }
+        let routine: PracticeRoutine
+        if let existing = snapshot.operationalPracticeRoutines.first(where: {
+            $0.projectId == projectId && !$0.isArchived && $0.deletedAt == nil
+        }) {
+            routine = existing
+        } else {
+            routine = try createPracticeRoutine(
+                projectId: projectId,
+                name: project.name,
+                symbolName: "timer",
+                color: .teal,
+                targetMinutes: mode == .countdown ? countdownMinutes : 30,
+                weekdays: Set(1...7)
+            )
+        }
+        try practiceTimer.start(
+            routineId: routine.id,
+            mode: mode,
+            targetSeconds: mode == .countdown ? countdownMinutes * 60 : 0,
+            routinePresentation: PracticeRoutinePresentationSnapshot(routine: routine)
+        )
+        return routine
+    }
+
     @discardableResult
     public func persistPracticeCompletionBase(
         _ completion: PracticeTimerCompletion,
@@ -1258,8 +1729,11 @@ public final class JournalViewModel: ObservableObject {
         let result = try practiceService.saveSession(
             sessionId: pendingMatchesCompletion ? pending!.id : UUID(),
             routineId: completion.routineId,
-            recoverDeletedRoutine: pendingMatchesCompletion
-                && pending?.routinePresentation?.routineId == completion.routineId,
+            recoverDeletedRoutine: pendingMatchesCompletion,
+            recoveryRoutine: practiceRecoveryRoutine(
+                for: completion,
+                linkedProjectId: linkedProjectId
+            ),
             linkedProjectId: linkedProjectId,
             startedAt: completion.startedAt,
             endedAt: completion.endedAt,
@@ -1298,7 +1772,7 @@ public final class JournalViewModel: ObservableObject {
             result = try practiceService.updateSessionReflection(
                 sessionId: pending!.id,
                 routineId: completion.routineId,
-                recoverDeletedRoutine: pending?.routinePresentation?.routineId == completion.routineId,
+                recoverDeletedRoutine: pendingMatchesCompletion,
                 linkedProjectId: linkedProjectId,
                 startedAt: completion.startedAt,
                 endedAt: completion.endedAt,
@@ -1311,8 +1785,11 @@ public final class JournalViewModel: ObservableObject {
             result = try practiceService.saveSession(
                 sessionId: pendingMatchesCompletion ? pending!.id : UUID(),
                 routineId: completion.routineId,
-                recoverDeletedRoutine: pendingMatchesCompletion
-                    && pending?.routinePresentation?.routineId == completion.routineId,
+                recoverDeletedRoutine: pendingMatchesCompletion,
+                recoveryRoutine: practiceRecoveryRoutine(
+                    for: completion,
+                    linkedProjectId: linkedProjectId
+                ),
                 linkedProjectId: linkedProjectId,
                 startedAt: completion.startedAt,
                 endedAt: completion.endedAt,
@@ -1327,6 +1804,32 @@ public final class JournalViewModel: ObservableObject {
             throw PracticeTimerRuntimeError.pendingCompletionCouldNotClear
         }
         return result
+    }
+
+    private func practiceRecoveryRoutine(
+        for completion: PracticeTimerCompletion,
+        linkedProjectId: UUID?
+    ) -> PracticeRoutine? {
+        guard let pending = practiceTimer.pendingCompletion,
+              pending.completion == completion,
+              let linkedProjectId,
+              projects.contains(where: { $0.id == linkedProjectId && $0.deletedAt == nil }) else {
+            return nil
+        }
+        let presentation = pending.routinePresentation
+        return PracticeRoutine(
+            id: completion.routineId,
+            projectId: linkedProjectId,
+            name: presentation?.name ?? "Practice",
+            symbolName: presentation?.symbolName ?? "timer",
+            color: presentation?.color ?? .teal,
+            targetMinutes: max(1, (completion.activeDurationSeconds + 59) / 60),
+            weekdays: Set(1...7),
+            blocks: completion.blocks,
+            isArchived: true,
+            createdAt: completion.startedAt,
+            updatedAt: completion.endedAt
+        )
     }
 
     /// Finishes a guided session by persisting its base outcome first. Optional
@@ -1350,6 +1853,18 @@ public final class JournalViewModel: ObservableObject {
                 attentionMarker: attentionMarker
             )
         }
+        guard practiceTimer.clearPendingCompletion() else {
+            throw PracticeTimerRuntimeError.pendingCompletionCouldNotClear
+        }
+        return base
+    }
+
+    /// Used by the app-wide timer lifecycle when a countdown reaches zero.
+    /// Runtime completion remains recoverable if journal persistence fails.
+    @discardableResult
+    public func finishCountdownAndSavePractice() throws -> PracticeSessionSaveResult? {
+        guard let completion = practiceTimer.finishCountdownAtTarget() else { return nil }
+        let base = try persistPracticeCompletionBase(completion, linkedProjectId: nil)
         guard practiceTimer.clearPendingCompletion() else {
             throw PracticeTimerRuntimeError.pendingCompletionCouldNotClear
         }
@@ -1635,6 +2150,10 @@ public final class JournalViewModel: ObservableObject {
             return .practiceRoutine(try JSONDecoder.journal.decode(PracticeRoutine.self, from: payload))
         case .practiceSession:
             return .practiceSession(try JSONDecoder.journal.decode(PracticeSession.self, from: payload))
+        case .learningRecordRevision:
+            return .learningRecordRevision(try JSONDecoder.journal.decode(LearningRecordRevision.self, from: payload))
+        case .learningAdjustmentSuggestion:
+            return .learningAdjustmentSuggestion(try JSONDecoder.journal.decode(LearningAdjustmentSuggestion.self, from: payload))
         }
     }
 

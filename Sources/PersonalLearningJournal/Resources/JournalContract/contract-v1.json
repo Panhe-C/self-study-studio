@@ -57,7 +57,22 @@
         "createdAt": { "type": "date", "required": true },
         "updatedAt": { "type": "date", "required": true },
         "deletedAt": { "type": "date", "required": false },
-        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+        "schemaVersion": { "type": "integer", "required": true, "minimum": 1 },
+        "assessment": {
+          "type": "object",
+          "required": false,
+          "objectFields": {
+            "progress": { "type": "enum", "required": true, "values": ["notStarted", "partial", "mostlyCompleted", "completed"] },
+            "completedCriterionIDs": { "type": "stringArray", "required": true },
+            "captureID": { "type": "uuid", "required": false },
+            "understanding": { "type": "enum", "required": false, "values": ["unclear", "needsReview", "mostlyUnderstood", "canExplainOrApply"] },
+            "blocker": { "type": "string", "required": false, "trim": true },
+            "aiDraftedSummary": { "type": "boolean", "required": true },
+            "userEditedSummary": { "type": "boolean", "required": true },
+            "confirmedAt": { "type": "date", "required": true },
+            "revision": { "type": "integer", "required": true, "minimum": 1 }
+          }
+        }
       }
     },
     "proof": {
@@ -288,6 +303,8 @@
           }
         },
         "deadline": { "type": "date", "required": false },
+        "completionCriteria": { "type": "stringArray", "required": false, "trim": true },
+        "recommendationReason": { "type": "string", "required": false, "trim": true },
         "status": { "type": "enum", "required": true, "values": ["unscheduled", "scheduled", "completed", "skipped", "cancelled"] },
         "completedSessionId": { "type": "uuid", "required": false },
         "createdAt": { "type": "date", "required": true },
@@ -432,6 +449,120 @@
         "updatedAt": { "type": "date", "required": true },
         "deletedAt": { "type": "date", "required": false },
         "schemaVersion": { "type": "integer", "required": true, "minimum": 1 }
+      }
+    },
+    "learningRecordRevision": {
+      "recordType": "LearningRecordRevision",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "sessionID": { "type": "uuid", "required": true },
+        "revision": { "type": "integer", "required": true, "minimum": 1 },
+        "previousNote": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "previousAssessment": {
+          "type": "object",
+          "required": false,
+          "objectFields": {
+            "progress": { "type": "enum", "required": true, "values": ["notStarted", "partial", "mostlyCompleted", "completed"] },
+            "completedCriterionIDs": { "type": "stringArray", "required": true },
+            "captureID": { "type": "uuid", "required": false },
+            "understanding": { "type": "enum", "required": false, "values": ["unclear", "needsReview", "mostlyUnderstood", "canExplainOrApply"] },
+            "blocker": { "type": "string", "required": false, "trim": true },
+            "aiDraftedSummary": { "type": "boolean", "required": true },
+            "userEditedSummary": { "type": "boolean", "required": true },
+            "confirmedAt": { "type": "date", "required": true },
+            "revision": { "type": "integer", "required": true, "minimum": 1 }
+          }
+        },
+        "revisedAt": { "type": "date", "required": true },
+        "deletedAt": { "type": "date", "required": false }
+      }
+    },
+    "learningAdjustmentSuggestion": {
+      "recordType": "LearningAdjustmentSuggestion",
+      "fields": {
+        "id": { "type": "uuid", "required": true },
+        "projectID": { "type": "uuid", "required": true },
+        "sourceSessionIDs": { "type": "uuidArray", "required": true },
+        "kind": { "type": "enum", "required": true, "values": ["nextStep", "dailyOrder", "reschedule", "temporaryDuration", "structuralRevision"] },
+        "title": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "rationale": { "type": "string", "required": true, "trim": true },
+        "proposedValue": { "type": "string", "required": true, "trim": true, "nonEmpty": true },
+        "structuralChange": {
+          "type": "object",
+          "required": false,
+          "objectFields": {
+            "deadline": { "type": "date", "required": false },
+            "weeklyBudgetMinutes": { "type": "integer", "required": false, "minimum": 1 },
+            "phaseID": { "type": "uuid", "required": false },
+            "phaseTargetEnd": { "type": "date", "required": false },
+            "phaseObjective": { "type": "string", "required": false, "trim": true },
+            "sessionID": { "type": "uuid", "required": false },
+            "sessionDurationMinutes": { "type": "integer", "required": false, "minimum": 1 }
+          }
+        },
+        "decision": { "type": "enum", "required": true, "values": ["pending", "adopted", "modified", "ignored"] },
+        "planRevisionDraftID": { "type": "uuid", "required": false },
+        "revisionGuardExpectation": {
+          "type": "object",
+          "required": false,
+          "objectFields": {
+            "baseRevisionID": { "type": "uuid", "required": false },
+            "recordChangeTag": { "type": "string", "required": false, "trim": true },
+            "baseRecordChangeTag": { "type": "string", "required": false, "trim": true },
+            "targetRecordChangeTag": { "type": "string", "required": false, "trim": true },
+            "recordState": { "type": "enum", "required": true, "values": ["newRecord", "existingRecord"] },
+            "targetRecordState": { "type": "enum", "required": true, "values": ["newRecord", "existingRecord"] }
+          }
+        },
+        "appliedCommand": {
+          "type": "taggedUnion",
+          "required": false,
+          "variants": ["nextStep", "dailyOrder", "reschedule", "temporaryDuration", "structuralRevision"],
+          "variantFields": {
+            "nextStep": {
+              "value": { "type": "string", "required": true, "trim": true, "nonEmpty": true }
+            },
+            "dailyOrder": {
+              "target": {
+                "type": "object",
+                "required": true,
+                "objectFields": {
+                  "day": { "type": "date", "required": true },
+                  "source": { "type": "enum", "required": true, "values": ["plannedSession", "practiceRoutine", "nextStep"] },
+                  "sourceID": { "type": "uuid", "required": true },
+                  "position": { "type": "enum", "required": true, "values": ["upNext", "laterToday", "optional", "skipToday"] }
+                }
+              }
+            },
+            "reschedule": {
+              "target": {
+                "type": "object",
+                "required": true,
+                "objectFields": {
+                  "plannedSessionID": { "type": "uuid", "required": true },
+                  "newDeadline": { "type": "date", "required": true },
+                  "capacityAcknowledged": { "type": "boolean", "required": true }
+                }
+              }
+            },
+            "temporaryDuration": {
+              "target": {
+                "type": "object",
+                "required": true,
+                "objectFields": {
+                  "plannedSessionID": { "type": "uuid", "required": true },
+                  "minutes": { "type": "integer", "required": true, "minimum": 1 }
+                }
+              }
+            },
+            "structuralRevision": {
+              "draftID": { "type": "uuid", "required": true }
+            }
+          }
+        },
+        "createdAt": { "type": "date", "required": true },
+        "decidedAt": { "type": "date", "required": false },
+        "deletedAt": { "type": "date", "required": false }
       }
     }
   }

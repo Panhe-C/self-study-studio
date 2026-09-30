@@ -467,6 +467,65 @@ final class PlanLifecycleGuardTests: XCTestCase {
         XCTAssertFalse(cards.contains { $0.routine.id == superseded.id })
     }
 
+    func testStructuralAdjustmentDraftActivationArchivesBaseAndKeepsItReadable() throws {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let project = Project(
+            name: "Adjustments", area: "AI", goal: "Learn", currentNextStep: "Read",
+            createdAt: timestamp, updatedAt: timestamp
+        )
+        let repository = InMemoryJournalRepository(snapshot: JournalSnapshot(projects: [project]))
+        let planning = CoursePlanningService(repository: repository, now: { timestamp })
+        let v1 = try planning.saveDraft(input: planningInput(project.id), draft: planningDraft)
+        _ = try planning.activate(draftPlanID: v1.id)
+        let activePhase = try XCTUnwrap(
+            try repository.snapshot().planPhases.first { $0.planId == v1.id }
+        )
+
+        let suggestion = LearningAdjustmentSuggestion(
+            projectID: project.id,
+            kind: .structuralRevision,
+            title: "Phase needs structural revision",
+            rationale: "Window closing with most sessions incomplete.",
+            proposedValue: "Revise the plan.",
+            structuralChange: LearningAdjustmentStructuralChange(
+                phaseID: activePhase.id,
+                phaseObjective: "A revised recovery objective"
+            ),
+            createdAt: timestamp
+        )
+        try repository.commit(
+            JournalTransaction(upserts: [.learningAdjustmentSuggestion(suggestion)], origin: .user)
+        )
+        let adjustments = LearningAdjustmentService(
+            repository: repository, planningService: planning, now: { timestamp }
+        )
+
+        let draft = try adjustments.prepareStructuralDraft(suggestionID: suggestion.id)
+
+        // Before activation: v1 stays active, v2 is a draft, suggestion pending.
+        var snapshot = try repository.snapshot()
+        XCTAssertEqual(snapshot.coursePlans.first { $0.id == v1.id }?.status, .active)
+        XCTAssertEqual(snapshot.coursePlans.first { $0.id == draft.plan.id }?.status, .draft)
+        XCTAssertEqual(
+            snapshot.learningAdjustmentSuggestions.first?.decision, .pending
+        )
+
+        _ = try planning.activate(
+            draftPlanID: draft.plan.id, expectation: draft.guardExpectation
+        )
+        try adjustments.markAdoptedAfterActivation(suggestionID: suggestion.id)
+
+        // After activation: v2 active, v1 archived but still readable.
+        snapshot = try repository.snapshot()
+        let archived = try XCTUnwrap(snapshot.coursePlans.first { $0.id == v1.id })
+        XCTAssertEqual(archived.status, .archived)
+        XCTAssertEqual(archived.courseTitle, v1.courseTitle)
+        XCTAssertEqual(snapshot.coursePlans.first { $0.id == draft.plan.id }?.status, .active)
+        let decided = try XCTUnwrap(snapshot.learningAdjustmentSuggestions.first)
+        XCTAssertEqual(decided.decision, .adopted)
+        XCTAssertEqual(decided.planRevisionDraftID, draft.plan.id)
+    }
+
     private var planningDraft: CoursePlanDraft {
         CoursePlanDraft(
             title: "Plan",

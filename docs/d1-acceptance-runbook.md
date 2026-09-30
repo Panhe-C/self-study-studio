@@ -62,3 +62,42 @@ required inputs, and explicit caveats.
 
 Until these inputs exist, the release gate is intentionally `BLOCKED`; no report should claim
 physical-device, live CloudKit, EventKit, browser visual, or VoiceOver acceptance.
+
+## vNext acceptance (spec 2026-08-10, section 17)
+
+The vNext guided-learning loop has deterministic, service-level automated evidence plus a
+separate set of REQUIRED MANUAL gates. The automated evidence composes the real services
+(`CoursePlanningService`, `CoursePlanDraftEditingService`, `PendingStudyCaptureStore`,
+rule-based and adaptive providers, `LearningRecordService`, `LearningAdjustmentService`,
+`TodayAgendaService`, `VNextTodayProjector`) over `InMemoryJournalRepository` and temp-dir
+capture stores — no network, no CloudKit, no UI.
+
+| # | Deterministic automated evidence | Manual gate (not covered by automation) |
+|---|---|---|
+| A | `VNextEndToEndTests.testScenarioANewCourseDraftHiddenFromTodayUntilActivatedThenExactlyOneUpNext` — draft invisible in Today; edit + single-phase regeneration leaves other phases untouched; activation yields exactly one Up Next | iPhone plan wizard walkthrough (edit, regenerate, activate) |
+| B | `VNextEndToEndTests.testScenarioBConfirmPublishesSessionAssessmentPlannedCompletionAndTrailInOneCommit` — ending the timer writes nothing; the check has no preselected answers; confirm publishes Session + assessment + planned completion + Trail in ONE commit | Physical-device guided study flow with a real timer |
+| C | `VNextEndToEndTests.testScenarioCSaveForLaterSurvivesStoreRecreationAndStaysOutOfJournalUntilConfirm` — a fresh store instance recovers the saved-for-later capture; Today recovery card surfaces it; no journal session before confirm | System kill (jetsam/swipe-away) recovery of a pending capture on a physical device |
+| D | `VNextEndToEndTests.testScenarioDAmendBumpsRevisionKeepsSnapshotAndLeavesPlanUntouched` — amend produces revision 2, keeps an immutable revision-1 snapshot, and never rewrites plan revisions | iPhone record-detail correction flow |
+| E | `VNextEndToEndTests.testScenarioEDetectAdoptNextStepAndStructuralRevisionLifecycle` — repeated-partial detection, one-commit adopt, structural v2 draft with v1 active, archived v1 still readable after activation | iPhone adjustment suggestion UI (adopt / modify / ignore) |
+| F | `VNextEndToEndTests.testScenarioFUnconfiguredAIStillCompletesLoopAndManualPlanAppearsInToday` — unconfigured adaptive providers fall back to rule-based drafts and complete the loop; a fully manual plan activates and appears in Today | Device run with AI unconfigured AND against a failing provider endpoint; airplane-mode confirm |
+| Legacy | `VNextEndToEndTests.testLegacySnapshotDecodesLosslesslyWithoutFabricatedAssessments` — legacy Sessions/Plans/Phases/PlannedSessions decode losslessly; no assessment is fabricated | Import of a real pre-vNext `journal.json` on device |
+
+### vNext manual gates required before release
+
+None of the following is covered by automation; each must be run and recorded separately:
+
+- A signed physical iPhone install running the full CS336 flow (plan, study, confirm, amend, adjust).
+- Live CloudKit two-device convergence of confirmed records, record revisions, and adjustment
+  suggestions.
+- Pending-capture recovery after a real system kill on a physical device.
+- Local notification delivery for pending captures and the deep link into the pending
+  confirmation.
+- Image, audio, and file attachments staged in the guided flow, including download and preview
+  after sync.
+- Maximum Dynamic Type pass over Today, the study flow, and the record draft screens.
+- VoiceOver pass over Today, the completion check, the record draft, and plan review.
+- AI-unconfigured and provider-failure runs on device, including airplane mode.
+
+The JSON report carries these as `vnext.scenarios` and `vnext.manualGates` with `BLOCKED` /
+`NOT_RUN` statuses. Simulator runs and unit tests must never be presented as device or CloudKit
+acceptance.

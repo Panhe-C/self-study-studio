@@ -145,6 +145,33 @@ test("wires the shared contract source and resources into the unsigned app targe
   assert.match(project, /path = Sources\/PersonalLearningJournal\/Resources\/JournalContract\/fixtures-v1\.json/);
 });
 
+test("keeps vNext confirmed records decodable on Web", () => {
+  const sessionFixture = fixtureSuite.valid.find((candidate) => candidate.id === "session-with-assessment");
+  const revisionFixture = fixtureSuite.valid.find((candidate) => candidate.id === "learning-record-revision");
+  const suggestionFixture = fixtureSuite.valid.find((candidate) => candidate.id === "learning-adjustment-suggestion");
+  assert.ok(sessionFixture && revisionFixture && suggestionFixture);
+
+  const session = decodeJournalRecord(sessionFixture.payload, sessionFixture.kind).payload;
+  assert.equal(session.assessment.progress, "mostlyCompleted");
+  // Nested trim normalization matches the iPhone decoder.
+  assert.equal(session.assessment.blocker, "Need an example for the edge case");
+  assert.equal(session.assessment.revision, 1);
+
+  const revision = decodeJournalRecord(revisionFixture.payload, revisionFixture.kind).payload;
+  assert.equal(revision.sessionID, session.id);
+  assert.equal(revision.previousAssessment.progress, "partial");
+
+  const suggestion = decodeJournalRecord(suggestionFixture.payload, suggestionFixture.kind).payload;
+  assert.equal(suggestion.decision, "pending");
+  assert.equal(suggestion.kind, "nextStep");
+
+  // Confirmed-record fixtures reject drifted shapes.
+  const invalidIDs = new Set(fixtureSuite.invalid.map((fixture) => fixture.id));
+  assert.ok(invalidIDs.has("session-invalid-assessment"));
+  assert.ok(fixtureSuite.invalid.some((fixture) => fixture.kind === "learningRecordRevision"));
+  assert.ok(fixtureSuite.invalid.some((fixture) => fixture.kind === "learningAdjustmentSuggestion"));
+});
+
 test("includes explicit nested/date invalid fixtures", () => {
   const expected = new Set([
     "project-invalid-safe-integer",

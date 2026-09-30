@@ -19,6 +19,8 @@ public struct JournalExport: Codable, Equatable, Sendable {
     public var schedulingPreferences: [SchedulingPreferences]
     public var practiceRoutines: [PracticeRoutine]
     public var practiceSessions: [PracticeSession]
+    public var learningRecordRevisions: [LearningRecordRevision]
+    public var learningAdjustmentSuggestions: [LearningAdjustmentSuggestion]
 
     public init(
         version: String = "v0.2",
@@ -38,7 +40,9 @@ public struct JournalExport: Codable, Equatable, Sendable {
         availabilityRules: [AvailabilityRule] = [],
         schedulingPreferences: [SchedulingPreferences] = [],
         practiceRoutines: [PracticeRoutine] = [],
-        practiceSessions: [PracticeSession] = []
+        practiceSessions: [PracticeSession] = [],
+        learningRecordRevisions: [LearningRecordRevision] = [],
+        learningAdjustmentSuggestions: [LearningAdjustmentSuggestion] = []
     ) {
         self.version = version
         self.exportedAt = exportedAt
@@ -58,6 +62,8 @@ public struct JournalExport: Codable, Equatable, Sendable {
         self.schedulingPreferences = schedulingPreferences
         self.practiceRoutines = practiceRoutines
         self.practiceSessions = practiceSessions
+        self.learningRecordRevisions = learningRecordRevisions
+        self.learningAdjustmentSuggestions = learningAdjustmentSuggestions
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -79,6 +85,8 @@ public struct JournalExport: Codable, Equatable, Sendable {
         case schedulingPreferences
         case practiceRoutines
         case practiceSessions
+        case learningRecordRevisions
+        case learningAdjustmentSuggestions
     }
 
     public init(from decoder: Decoder) throws {
@@ -101,6 +109,8 @@ public struct JournalExport: Codable, Equatable, Sendable {
         schedulingPreferences = try container.decode([SchedulingPreferences].self, forKey: .schedulingPreferences)
         practiceRoutines = try container.decodeIfPresent([PracticeRoutine].self, forKey: .practiceRoutines) ?? []
         practiceSessions = try container.decodeIfPresent([PracticeSession].self, forKey: .practiceSessions) ?? []
+        learningRecordRevisions = try container.decodeIfPresent([LearningRecordRevision].self, forKey: .learningRecordRevisions) ?? []
+        learningAdjustmentSuggestions = try container.decodeIfPresent([LearningAdjustmentSuggestion].self, forKey: .learningAdjustmentSuggestions) ?? []
     }
 }
 
@@ -144,7 +154,9 @@ public struct ExportService {
             availabilityRules: snapshot.availabilityRules,
             schedulingPreferences: snapshot.schedulingPreferences,
             practiceRoutines: snapshot.practiceRoutines,
-            practiceSessions: snapshot.practiceSessions
+            practiceSessions: snapshot.practiceSessions,
+            learningRecordRevisions: snapshot.learningRecordRevisions,
+            learningAdjustmentSuggestions: snapshot.learningAdjustmentSuggestions
         )
         return try JSONEncoder.journal.encode(export)
     }

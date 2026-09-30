@@ -170,6 +170,8 @@ final class JournalRecordContractTests: XCTestCase {
         case let .schedulingPreferences(value): return labels(value)
         case let .practiceRoutine(value): return labels(value)
         case let .practiceSession(value): return labels(value)
+        case let .learningRecordRevision(value): return labels(value)
+        case let .learningAdjustmentSuggestion(value): return labels(value)
         }
     }
 }

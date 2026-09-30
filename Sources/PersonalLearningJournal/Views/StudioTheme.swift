@@ -120,3 +120,38 @@ public struct StudioNoticeRow: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+
+// MARK: - Zoom presentation helpers
+
+extension View {
+    /// Marks this view as the morph source for a zoom sheet presentation.
+    /// No-op below iOS 18, where the sheet keeps its default slide.
+    @ViewBuilder
+    public func studioZoomSource(id: String, namespace: Namespace.ID) -> some View {
+        #if os(iOS)
+        if #available(iOS 18.0, *) {
+            self.matchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+
+    /// Applies the matching zoom transition on presented sheet content.
+    /// No-op without a source or below iOS 18.
+    @ViewBuilder
+    public func studioZoomTransition(sourceID: String?, namespace: Namespace.ID?) -> some View {
+        #if os(iOS)
+        if #available(iOS 18.0, *), let sourceID, let namespace {
+            self.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+}

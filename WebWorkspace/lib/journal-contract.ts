@@ -20,7 +20,9 @@ export type JournalRecordKind =
   | "availabilityRule"
   | "schedulingPreferences"
   | "practiceRoutine"
-  | "practiceSession";
+  | "practiceSession"
+  | "learningRecordRevision"
+  | "learningAdjustmentSuggestion";
 
 export type JournalRecordFieldDefinition = {
   type: string;
@@ -169,6 +171,11 @@ export function decodeJournalRecord(
     normalized.planRevisionID ??= normalized.planId;
     normalized.planSeriesID ??= normalized.planId;
     normalized.isStructuralLocked ??= false;
+  }
+  if (kind === "plannedSession") {
+    // Legacy sessions predate completion criteria; the iPhone decoder falls
+    // back to an empty array and a deterministic fallback fills them later.
+    normalized.completionCriteria ??= [];
   }
   if (kind === "practiceRoutine") {
     normalized.isStructuralLocked ??= false;
@@ -362,20 +369,26 @@ function normalizePayload(
   const normalized: JournalRecordPayload = structuredClone(payload);
   for (const [field, definition] of Object.entries(fields)) {
     const value = normalized[field];
-    if (!definition.trim || value === undefined || value === null) continue;
-    if (typeof value === "string") normalized[field] = value.trim();
-    else if (Array.isArray(value)) {
-      const normalizedArray = value.map((item) =>
-        typeof item === "string" ? item.trim() : item,
-      );
-      if (definition.sort === "ascending" && normalizedArray.every((item): item is number => typeof item === "number")) {
-        normalizedArray.sort((a, b) => a - b);
+    if (value === undefined || value === null) continue;
+    if (definition.trim) {
+      if (typeof value === "string") normalized[field] = value.trim();
+      else if (Array.isArray(value)) {
+        const normalizedArray = value.map((item) =>
+          typeof item === "string" ? item.trim() : item,
+        );
+        if (definition.sort === "ascending" && normalizedArray.every((item): item is number => typeof item === "number")) {
+          normalizedArray.sort((a, b) => a - b);
+        }
+        normalized[field] = normalizedArray;
       }
-      normalized[field] = normalizedArray;
+      if (definition.type === "array" && Array.isArray(value) && definition.items) {
+        normalized[field] = value.map((item) => normalizeNestedValue(item, definition.items!));
+      }
     }
-    if (definition.type === "array" && Array.isArray(value) && definition.items) {
-      normalized[field] = value.map((item) => normalizeNestedValue(item, definition.items!));
-    } else if (definition.type === "object" && isObject(value) && definition.objectFields) {
+    // Nested object/union normalization mirrors the iPhone decoder: it runs
+    // whether or not the container field itself trims, so nested trim rules
+    // (e.g. assessment.blocker) behave identically on both surfaces.
+    if (definition.type === "object" && isObject(value) && definition.objectFields) {
       normalizeObject(value, definition.objectFields);
     } else if (definition.type === "taggedUnion" && isObject(value) && definition.variantFields) {
       const tag = Object.keys(value)[0];

@@ -45,6 +45,8 @@ public struct RepositoryMigration {
             + snapshot.schedulingPreferences.map(JournalEntity.schedulingPreferences)
             + snapshot.practiceRoutines.map(JournalEntity.practiceRoutine)
             + snapshot.practiceSessions.map(JournalEntity.practiceSession)
+            + snapshot.learningRecordRevisions.map(JournalEntity.learningRecordRevision)
+            + snapshot.learningAdjustmentSuggestions.map(JournalEntity.learningAdjustmentSuggestion)
         try repository.commit(
             JournalTransaction(
                 upserts: entities,

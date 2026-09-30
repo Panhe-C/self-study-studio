@@ -330,4 +330,12 @@ private struct UnavailableCoursePlanningProvider: CoursePlanningProvider {
     ) async throws -> CoursePlanDraft {
         throw CoursePlanningError.configurationRequired
     }
+
+    func regeneratePhase(
+        input: CoursePlanningInput,
+        context: CoursePlanningContext,
+        phase: CoursePlanDraftPhase
+    ) async throws -> CoursePlanPhaseRegeneration {
+        throw CoursePlanningError.configurationRequired
+    }
 }

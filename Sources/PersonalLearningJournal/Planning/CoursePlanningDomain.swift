@@ -41,6 +41,8 @@ public enum CoursePlanningValidationError: Error, Equatable, Sendable {
     case invalidRevision
     case invalidOrdinal
     case invalidRevisionIdentity
+    case blankCompletionCriterion(String)
+    case tooManyCompletionCriteria(String)
 }
 
 public enum PlanRevisionIdentityError: Error, Equatable, Sendable {
@@ -844,6 +846,11 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
     /// Flexible target range used before an optional exact calendar
     /// commitment. Nil preserves legacy session payloads.
     public var planningWindow: PlanningWindow?
+    /// 1–5 user-judgeable completion checks per activity. Legacy sessions
+    /// decode an empty array; a deterministic fallback fills them later.
+    public var completionCriteria: [String]
+    /// Why the planner recommended this activity. Legacy sessions decode nil.
+    public var recommendationReason: String?
     public var deadline: Date?
     public var status: PlannedSessionStatus
     public var completedSessionId: UUID?
@@ -865,6 +872,8 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
         expectedProof: String? = nil,
         durationMinutes: Int,
         planningWindow: PlanningWindow? = nil,
+        completionCriteria: [String] = [],
+        recommendationReason: String? = nil,
         deadline: Date? = nil,
         status: PlannedSessionStatus = .unscheduled,
         completedSessionId: UUID? = nil,
@@ -892,6 +901,8 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
         self.expectedProof = expectedProof?.trimmedForJournal
         self.durationMinutes = durationMinutes
         self.planningWindow = planningWindow
+        self.completionCriteria = completionCriteria
+        self.recommendationReason = recommendationReason
         self.deadline = deadline
         self.status = status
         self.completedSessionId = completedSessionId
@@ -904,7 +915,8 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id, planId, planRevisionID, planSeriesID, isStructuralLocked
         case phaseId, projectId, title, actionType, expectedProof, durationMinutes
-        case planningWindow, deadline, status, completedSessionId, createdAt, updatedAt, deletedAt
+        case planningWindow, completionCriteria, recommendationReason, deadline
+        case status, completedSessionId, createdAt, updatedAt, deletedAt
         case schemaVersion
     }
 
@@ -923,6 +935,8 @@ public struct PlannedSession: Codable, Equatable, Identifiable, Sendable {
             expectedProof: container.decodeIfPresent(String.self, forKey: .expectedProof),
             durationMinutes: container.decode(Int.self, forKey: .durationMinutes),
             planningWindow: container.decodeIfPresent(PlanningWindow.self, forKey: .planningWindow),
+            completionCriteria: container.decodeIfPresent([String].self, forKey: .completionCriteria) ?? [],
+            recommendationReason: container.decodeIfPresent(String.self, forKey: .recommendationReason),
             deadline: container.decodeIfPresent(Date.self, forKey: .deadline),
             status: container.decode(PlannedSessionStatus.self, forKey: .status),
             completedSessionId: container.decodeIfPresent(UUID.self, forKey: .completedSessionId),
@@ -944,9 +958,16 @@ public struct CoursePlanningInput: Codable, Equatable, Sendable {
     public var expectedOutcome: String
     public var startsOn: Date
     public var deadline: Date?
+    /// Optional study-period alternative to an exact deadline. Legacy
+    /// payloads decode nil.
+    public var studyPeriodWeeks: Int?
     public var weeklyBudgetMinutes: Int
     public var preferredSessionMinutes: Int
     public var availableMinutesByWeekday: [Int: Int]
+    /// Learner-supplied prior knowledge; empty is valid.
+    public var prerequisites: String
+    /// Learner-supplied device, time, or learning-style constraints.
+    public var constraints: String
 
     public init(
         projectId: UUID,
@@ -957,9 +978,12 @@ public struct CoursePlanningInput: Codable, Equatable, Sendable {
         expectedOutcome: String,
         startsOn: Date,
         deadline: Date? = nil,
+        studyPeriodWeeks: Int? = nil,
         weeklyBudgetMinutes: Int,
         preferredSessionMinutes: Int,
-        availableMinutesByWeekday: [Int: Int] = [:]
+        availableMinutesByWeekday: [Int: Int] = [:],
+        prerequisites: String = "",
+        constraints: String = ""
     ) {
         self.projectId = projectId
         self.courseURL = courseURL
@@ -969,9 +993,46 @@ public struct CoursePlanningInput: Codable, Equatable, Sendable {
         self.expectedOutcome = expectedOutcome
         self.startsOn = startsOn
         self.deadline = deadline
+        self.studyPeriodWeeks = studyPeriodWeeks
         self.weeklyBudgetMinutes = weeklyBudgetMinutes
         self.preferredSessionMinutes = preferredSessionMinutes
         self.availableMinutesByWeekday = availableMinutesByWeekday
+        self.prerequisites = prerequisites
+        self.constraints = constraints
+    }
+
+    /// `deadline` wins when both are supplied; otherwise the study period
+    /// derives a deadline from `startsOn`. Stored values are never mutated.
+    public var effectiveDeadline: Date? {
+        deadline ?? studyPeriodWeeks.map {
+            startsOn.addingTimeInterval(TimeInterval($0 * 7 * 86_400))
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectId, courseURL, courseTitle, courseOutline, goal, expectedOutcome
+        case startsOn, deadline, studyPeriodWeeks, weeklyBudgetMinutes
+        case preferredSessionMinutes, availableMinutesByWeekday, prerequisites, constraints
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            projectId: container.decode(UUID.self, forKey: .projectId),
+            courseURL: container.decodeIfPresent(URL.self, forKey: .courseURL),
+            courseTitle: container.decode(String.self, forKey: .courseTitle),
+            courseOutline: container.decode(String.self, forKey: .courseOutline),
+            goal: container.decode(String.self, forKey: .goal),
+            expectedOutcome: container.decode(String.self, forKey: .expectedOutcome),
+            startsOn: container.decode(Date.self, forKey: .startsOn),
+            deadline: container.decodeIfPresent(Date.self, forKey: .deadline),
+            studyPeriodWeeks: container.decodeIfPresent(Int.self, forKey: .studyPeriodWeeks),
+            weeklyBudgetMinutes: container.decode(Int.self, forKey: .weeklyBudgetMinutes),
+            preferredSessionMinutes: container.decode(Int.self, forKey: .preferredSessionMinutes),
+            availableMinutesByWeekday: container.decodeIfPresent([Int: Int].self, forKey: .availableMinutesByWeekday) ?? [:],
+            prerequisites: container.decodeIfPresent(String.self, forKey: .prerequisites) ?? "",
+            constraints: container.decodeIfPresent(String.self, forKey: .constraints) ?? ""
+        )
     }
 }
 
@@ -1039,6 +1100,11 @@ public struct CoursePlanDraftSession: Codable, Equatable, Identifiable, Sendable
     /// Flexible target range used by the planning surface before an optional
     /// exact Calendar Commitment is generated. Legacy drafts decode nil.
     public var planningWindow: PlanningWindow?
+    /// 1–5 user-judgeable completion checks per activity. Legacy drafts
+    /// decode an empty array; a deterministic fallback fills them later.
+    public var completionCriteria: [String]
+    /// Why the planner recommended this activity. Legacy drafts decode nil.
+    public var recommendationReason: String?
 
     public init(
         id: String,
@@ -1048,7 +1114,9 @@ public struct CoursePlanDraftSession: Codable, Equatable, Identifiable, Sendable
         expectedProof: String? = nil,
         durationMinutes: Int,
         deadline: Date? = nil,
-        planningWindow: PlanningWindow? = nil
+        planningWindow: PlanningWindow? = nil,
+        completionCriteria: [String] = [],
+        recommendationReason: String? = nil
     ) {
         self.id = id
         self.phaseID = phaseID
@@ -1058,5 +1126,28 @@ public struct CoursePlanDraftSession: Codable, Equatable, Identifiable, Sendable
         self.durationMinutes = durationMinutes
         self.deadline = deadline
         self.planningWindow = planningWindow
+        self.completionCriteria = completionCriteria
+        self.recommendationReason = recommendationReason
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, phaseID, title, actionType, expectedProof, durationMinutes
+        case deadline, planningWindow, completionCriteria, recommendationReason
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            id: container.decode(String.self, forKey: .id),
+            phaseID: container.decode(String.self, forKey: .phaseID),
+            title: container.decode(String.self, forKey: .title),
+            actionType: container.decode(ActionType.self, forKey: .actionType),
+            expectedProof: container.decodeIfPresent(String.self, forKey: .expectedProof),
+            durationMinutes: container.decode(Int.self, forKey: .durationMinutes),
+            deadline: container.decodeIfPresent(Date.self, forKey: .deadline),
+            planningWindow: container.decodeIfPresent(PlanningWindow.self, forKey: .planningWindow),
+            completionCriteria: container.decodeIfPresent([String].self, forKey: .completionCriteria) ?? [],
+            recommendationReason: container.decodeIfPresent(String.self, forKey: .recommendationReason)
+        )
     }
 }

@@ -242,6 +242,9 @@ public struct PracticeManagerView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(routine.name)
                         .font(.headline)
+                    Label(projectName(for: routine), systemImage: "folder")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Text("\(routine.targetMinutes) min · \(weekdaySummary(for: routine))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -330,6 +333,16 @@ public struct PracticeManagerView: View {
         }.joined(separator: ", ")
     }
 
+    private func projectName(for routine: PracticeRoutine) -> String {
+        guard let projectID = routine.projectId,
+              let project = viewModel.projects.first(where: {
+                  $0.id == projectID && $0.deletedAt == nil && !$0.isTrashed
+              }) else {
+            return String(localized: "vnext.today.practice.project_unavailable")
+        }
+        return project.name
+    }
+
     private func routineAccessibilityLabel(
         _ routine: PracticeRoutine,
         sessions: [PracticeSession]
@@ -365,7 +378,7 @@ private struct PracticeEditorContext: Identifiable {
     let routine: PracticeRoutine?
 }
 
-private struct PracticeRoutineEditorView: View {
+struct PracticeRoutineEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var viewModel: JournalViewModel

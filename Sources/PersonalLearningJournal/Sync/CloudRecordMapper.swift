@@ -26,7 +26,7 @@ public struct CloudRecordMapper {
         )
         switch entity {
         case let .project(value): try encode(value, into: record)
-        case let .session(value): encode(value, into: record)
+        case let .session(value): try encode(value, into: record)
         case let .proof(value): try encode(value, into: record)
         case let .review(value): try encode(value, into: record)
         case let .evidenceContract(value): try encodePayload(value, into: record)
@@ -41,6 +41,8 @@ public struct CloudRecordMapper {
         case let .schedulingPreferences(value): encode(value, into: record)
         case let .practiceRoutine(value): try encode(value, into: record)
         case let .practiceSession(value): try encode(value, into: record)
+        case let .learningRecordRevision(value): try encodePayload(value, into: record)
+        case let .learningAdjustmentSuggestion(value): try encodePayload(value, into: record)
         }
         return record
     }
@@ -66,6 +68,8 @@ public struct CloudRecordMapper {
         case "SchedulingPreferences": return .schedulingPreferences(try decodeSchedulingPreferences(record, id: id))
         case "PracticeRoutine": return .practiceRoutine(try decodePracticeRoutine(record, id: id))
         case "PracticeSession": return .practiceSession(try decodePracticeSession(record, id: id))
+        case "LearningRecordRevision": return .learningRecordRevision(try decodePayload(LearningRecordRevision.self, from: record, id: id))
+        case "LearningAdjustmentSuggestion": return .learningAdjustmentSuggestion(try decodePayload(LearningAdjustmentSuggestion.self, from: record, id: id))
         default: throw CloudRecordMapperError.unsupportedRecordType(record.recordType)
         }
     }
@@ -96,6 +100,8 @@ public struct CloudRecordMapper {
         case .schedulingPreferences: "SchedulingPreferences"
         case .practiceRoutine: "PracticeRoutine"
         case .practiceSession: "PracticeSession"
+        case .learningRecordRevision: "LearningRecordRevision"
+        case .learningAdjustmentSuggestion: "LearningAdjustmentSuggestion"
         }
     }
 
@@ -129,7 +135,7 @@ public struct CloudRecordMapper {
         encodeDates(value.createdAt, value.updatedAt, value.archivedAt, value.deletedAt, value.schemaVersion, into: record)
     }
 
-    private func encode(_ value: LearningSession, into record: CKRecord) {
+    private func encode(_ value: LearningSession, into record: CKRecord) throws {
         record["projectId"] = value.projectId.uuidString
         record["source"] = value.source.rawValue
         record["actionType"] = value.actionType.rawValue
@@ -139,6 +145,7 @@ public struct CloudRecordMapper {
         record["note"] = value.note
         record["nextStepBefore"] = value.nextStepBefore
         record["nextStepAfter"] = value.nextStepAfter
+        record["assessment"] = try value.assessment.map { try JSONEncoder.journal.encode($0) }
         encodeDates(value.createdAt, value.updatedAt, nil, value.deletedAt, value.schemaVersion, into: record)
     }
 
@@ -260,6 +267,8 @@ public struct CloudRecordMapper {
         record["planningWindowStart"] = value.planningWindow?.start
         record["planningWindowEnd"] = value.planningWindow?.end
         record["planningWindowGranularity"] = value.planningWindow?.granularity.rawValue
+        record["completionCriteria"] = value.completionCriteria as NSArray
+        record["recommendationReason"] = value.recommendationReason
         record["deadline"] = value.deadline
         record["status"] = value.status.rawValue
         record["completedSessionId"] = value.completedSessionId?.uuidString
@@ -435,7 +444,8 @@ public struct CloudRecordMapper {
             createdAt: try date("createdAt", from: record),
             updatedAt: try date("updatedAt", from: record),
             deletedAt: optionalDate("deletedAt", from: record),
-            schemaVersion: try integer("schemaVersion", from: record)
+            schemaVersion: try integer("schemaVersion", from: record),
+            assessment: try optionalJSON(LearningRecordAssessment.self, key: "assessment", from: record)
         )
     }
 
@@ -574,6 +584,8 @@ public struct CloudRecordMapper {
             expectedProof: optionalString("expectedProof", from: record),
             durationMinutes: try integer("durationMinutes", from: record),
             planningWindow: try decodePlanningWindow(from: record),
+            completionCriteria: strings("completionCriteria", from: record),
+            recommendationReason: optionalString("recommendationReason", from: record),
             deadline: optionalDate("deadline", from: record),
             status: status,
             completedSessionId: try optionalUUID("completedSessionId", from: record),

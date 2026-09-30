@@ -12,8 +12,9 @@ public struct LibraryView: View {
     @State private var selectedFilter: StudioLibraryFilter = .evidence
     @State private var searchText = ""
 
-    public init(viewModel: JournalViewModel) {
+    public init(viewModel: JournalViewModel, initialFilter: StudioLibraryFilter = .evidence) {
         self.viewModel = viewModel
+        _selectedFilter = State(initialValue: initialFilter)
     }
 
     public var body: some View {

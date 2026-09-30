@@ -335,6 +335,49 @@ public struct ProjectOnboardingDraft: Equatable, Sendable {
     }
 }
 
+/// Structured completion facts captured when a learning record is confirmed
+/// (spec 4.5). Stored as an optional field on LearningSession so sessions
+/// confirmed before this model existed remain valid. The AI draft's original
+/// text is never persisted here — only the user-confirmed outcome and the
+/// metadata needed to render and amend the record later.
+public struct LearningRecordAssessment: Codable, Equatable, Sendable {
+    /// Stable idempotency key for a guided capture. Legacy quick-log records
+    /// leave this nil; confirmed guided records carry the originating
+    /// `PendingStudyCapture.id` so a journal commit can be safely retried even
+    /// when removing the device-local capture fails after the commit.
+    public var captureID: UUID?
+    public var progress: CompletionProgress
+    public var completedCriterionIDs: [String]
+    public var understanding: UnderstandingLevel?
+    public var blocker: String?
+    public var aiDraftedSummary: Bool
+    public var userEditedSummary: Bool
+    public var confirmedAt: Date
+    public var revision: Int
+
+    public init(
+        captureID: UUID? = nil,
+        progress: CompletionProgress,
+        completedCriterionIDs: [String],
+        understanding: UnderstandingLevel? = nil,
+        blocker: String? = nil,
+        aiDraftedSummary: Bool,
+        userEditedSummary: Bool,
+        confirmedAt: Date,
+        revision: Int
+    ) {
+        self.captureID = captureID
+        self.progress = progress
+        self.completedCriterionIDs = completedCriterionIDs
+        self.understanding = understanding
+        self.blocker = blocker
+        self.aiDraftedSummary = aiDraftedSummary
+        self.userEditedSummary = userEditedSummary
+        self.confirmedAt = confirmedAt
+        self.revision = max(1, revision)
+    }
+}
+
 public struct LearningSession: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var projectId: UUID
@@ -350,6 +393,9 @@ public struct LearningSession: Codable, Equatable, Identifiable, Sendable {
     public var updatedAt: Date
     public var deletedAt: Date?
     public var schemaVersion: Int
+    /// Structured completion facts for records confirmed through the guided
+    /// study flow. `nil` for legacy quick-log sessions.
+    public var assessment: LearningRecordAssessment?
 
     public init(
         id: UUID = UUID(),
@@ -365,7 +411,8 @@ public struct LearningSession: Codable, Equatable, Identifiable, Sendable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         deletedAt: Date? = nil,
-        schemaVersion: Int = JournalSchema.currentVersion
+        schemaVersion: Int = JournalSchema.currentVersion,
+        assessment: LearningRecordAssessment? = nil
     ) throws {
         guard durationMinutes > 0 else { throw JournalValidationError.invalidDuration }
         guard !note.trimmedForJournal.isEmpty else { throw JournalValidationError.emptySessionNote }
@@ -384,12 +431,13 @@ public struct LearningSession: Codable, Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
         self.schemaVersion = schemaVersion
+        self.assessment = assessment
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, projectId, source, actionType, startedAt, endedAt
         case durationMinutes, note, nextStepBefore, nextStepAfter
-        case createdAt, updatedAt, deletedAt, schemaVersion
+        case createdAt, updatedAt, deletedAt, schemaVersion, assessment
     }
 
     public init(from decoder: Decoder) throws {
@@ -409,7 +457,8 @@ public struct LearningSession: Codable, Equatable, Identifiable, Sendable {
             updatedAt: container.decode(Date.self, forKey: .updatedAt),
             deletedAt: container.decodeIfPresent(Date.self, forKey: .deletedAt),
             schemaVersion: container.decodeIfPresent(Int.self, forKey: .schemaVersion)
-                ?? JournalSchema.currentVersion
+                ?? JournalSchema.currentVersion,
+            assessment: container.decodeIfPresent(LearningRecordAssessment.self, forKey: .assessment)
         )
     }
 }

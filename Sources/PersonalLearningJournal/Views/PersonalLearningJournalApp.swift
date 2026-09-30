@@ -144,11 +144,25 @@ public struct PersonalLearningJournalApp: App {
                     }
                 }
             }
+            .onOpenURL { url in
+                // Deep links (notification taps, selfstudystudio://pending-
+                // capture/<uuid>) reopen the capture's step; stale or
+                // confirmed captures no-op and stay on Today (spec 13).
+                session.openPendingCaptureDeepLink(url)
+            }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
-                case .active: Task { await appLock.applicationDidBecomeActive() }
-                case .background, .inactive: appLock.applicationDidEnterBackground()
-                @unknown default: appLock.applicationDidEnterBackground()
+                case .active:
+                    Task { await appLock.applicationDidBecomeActive() }
+                    session.refreshPendingCaptureNotifications()
+                case .background, .inactive:
+                    session.pendingCaptureCheckpoint()
+                    session.refreshPendingCaptureNotifications()
+                    appLock.applicationDidEnterBackground()
+                @unknown default:
+                    session.pendingCaptureCheckpoint()
+                    session.refreshPendingCaptureNotifications()
+                    appLock.applicationDidEnterBackground()
                 }
             }
         }

@@ -86,6 +86,74 @@ final class SwiftDataJournalRepositoryTests: XCTestCase {
         XCTAssertEqual(try reopened.pendingMutations(limit: 10).count, 4)
     }
 
+    func testLearningRecordRevisionAndAssessmentSurviveRestartAndSoftDeletion() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("learning-record.store")
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let projectID = UUID()
+        let assessment = LearningRecordAssessment(
+            progress: .completed,
+            completedCriterionIDs: ["criterion-1"],
+            understanding: .canExplainOrApply,
+            blocker: nil,
+            aiDraftedSummary: true,
+            userEditedSummary: true,
+            confirmedAt: timestamp,
+            revision: 1
+        )
+        let session = try LearningSession(
+            projectId: projectID,
+            source: .timer,
+            actionType: .course,
+            startedAt: timestamp,
+            endedAt: timestamp.addingTimeInterval(1_800),
+            durationMinutes: 30,
+            note: "Implemented the merge loop",
+            nextStepBefore: "Write the merge loop",
+            nextStepAfter: "Add tests",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            assessment: assessment
+        )
+        let revision = LearningRecordRevision(
+            sessionID: session.id,
+            revision: 1,
+            previousNote: "Read chapter one",
+            previousAssessment: nil,
+            revisedAt: timestamp
+        )
+
+        try autoreleasepool {
+            let repository = try SwiftDataJournalRepository(url: url)
+            try repository.commit(
+                JournalTransaction(
+                    upserts: [.session(session), .learningRecordRevision(revision)],
+                    origin: .user
+                )
+            )
+        }
+
+        let reopened = try SwiftDataJournalRepository(url: url)
+        let snapshot = try reopened.snapshot()
+        XCTAssertEqual(snapshot.sessions, [session])
+        XCTAssertEqual(snapshot.sessions.first?.assessment, assessment)
+        XCTAssertEqual(snapshot.learningRecordRevisions, [revision])
+        XCTAssertEqual(
+            try reopened.entity(for: .init(.learningRecordRevision, revision.id)),
+            .learningRecordRevision(revision)
+        )
+
+        try reopened.commit(
+            JournalTransaction(
+                deletions: [.init(.learningRecordRevision, revision.id)],
+                origin: .user
+            )
+        )
+        XCTAssertTrue(try reopened.snapshot().learningRecordRevisions.isEmpty)
+        XCTAssertNotNil(try reopened.entity(for: .init(.learningRecordRevision, revision.id)))
+    }
+
     func testPracticeEntitiesSurviveSwiftDataRestartAndSoftDeletion() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

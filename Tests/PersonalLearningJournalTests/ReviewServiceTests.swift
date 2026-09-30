@@ -389,6 +389,34 @@ final class ReviewServiceTests: XCTestCase {
         XCTAssertFalse(defaults.dictionaryRepresentation().values.contains { "\($0)".contains("secret-key") })
     }
 
+    func testAIProviderPresetsSupplyOpenAICompatibleEndpointsAndModels() throws {
+        let expected: [(AIProviderPreset, String, String)] = [
+            (.openAI, "https://api.openai.com/v1", "gpt-5.6-luna"),
+            (.kimi, "https://api.moonshot.cn/v1", "kimi-k3"),
+            (.miniMax, "https://api.minimaxi.com/v1", "MiniMax-M2.7"),
+            (.deepSeek, "https://api.deepseek.com", "deepseek-v4-flash"),
+            (.openRouter, "https://openrouter.ai/api/v1", "~openai/gpt-latest")
+        ]
+
+        for (provider, endpoint, model) in expected {
+            let settings = try XCTUnwrap(provider.makeSettings())
+            XCTAssertEqual(settings.endpoint.absoluteString, endpoint)
+            XCTAssertEqual(settings.model, model)
+            XCTAssertEqual(settings.provider, provider)
+            XCTAssertEqual(settings.chatCompletionsURL.absoluteString, "\(endpoint)/chat/completions")
+        }
+        XCTAssertNil(AIProviderPreset.custom.makeSettings())
+        XCTAssertNil(AIProviderPreset.kimi.makeSettings(model: "gpt-5.6-luna"))
+    }
+
+    func testLegacySettingsInferProviderWithoutChangingStoredShape() throws {
+        let legacyJSON = #"{"endpoint":"https:\/\/api.moonshot.cn\/v1","model":"kimi-k3"}"#.data(using: .utf8)!
+        let settings = try JSONDecoder().decode(AIReviewSettings.self, from: legacyJSON)
+
+        XCTAssertNil(settings.providerID)
+        XCTAssertEqual(settings.provider, .kimi)
+    }
+
     func testAdaptiveProviderUsesLocalReviewWhenAIIsNotConfigured() async throws {
         let suiteName = "PersonalLearningJournalTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

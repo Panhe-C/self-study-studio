@@ -115,6 +115,19 @@ public struct SyncMergeService {
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.practiceRoutine, now: now)
         case let (.practiceSession(base), .practiceSession(local), .practiceSession(server)):
             return try merge(base: base, local: local, server: server, wrap: JournalEntity.practiceSession, now: now)
+        case let (.learningRecordRevision(base), .learningRecordRevision(local), .learningRecordRevision(server)):
+            // Revision snapshots are immutable and create-once: identical
+            // triples merge trivially, and a same-id divergence means corrupt
+            // history, which fails safe into conflict review instead of
+            // silently rewriting a snapshot. Append-only growth is guaranteed
+            // by the recording service, which always inserts new ids.
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.learningRecordRevision, now: now)
+        case let (.learningAdjustmentSuggestion(base), .learningAdjustmentSuggestion(local), .learningAdjustmentSuggestion(server)):
+            // Suggestions sync but carry no authority. The generic field
+            // merge keeps one-sided edits; a both-sided change to `decision`
+            // (or any other field) fails safe into conflict review instead
+            // of silently picking a winner for a user-visible decision.
+            return try merge(base: base, local: local, server: server, wrap: JournalEntity.learningAdjustmentSuggestion, now: now)
         default:
             throw SyncMergeError.mismatchedEntityReferences
         }

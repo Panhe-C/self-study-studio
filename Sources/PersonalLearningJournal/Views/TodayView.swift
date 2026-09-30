@@ -8,6 +8,7 @@ public struct TodayView: View {
     @State private var timerProject: Project?
     @State private var quickLogPlan: PlannedSessionContext?
     @State private var timerPlan: PlannedSessionContext?
+    @State private var reopeningCapture: PendingStudyCapture?
     @State private var reviewError: String?
     @State private var isCreatingReview = false
     @State private var showingAISettings = false
@@ -48,6 +49,7 @@ public struct TodayView: View {
             LazyVStack(alignment: .leading, spacing: StudioTheme.sectionSpacing) {
                 todayHeader
                 rhythmSection
+                pendingCapturesSection
                 agendaSection
 
             if let conflicts = calendarViewModel.scheduleDraft?.conflicts, !conflicts.isEmpty {
@@ -163,7 +165,10 @@ public struct TodayView: View {
             QuickLogView(viewModel: viewModel, project: context.project, plannedSession: context.session)
         }
         .sheet(item: $timerPlan) { context in
-            TimerSessionView(viewModel: viewModel, project: context.project, plannedSession: context.session)
+            StudyFlowSheet(viewModel: viewModel, project: context.project, plannedSession: context.session)
+        }
+        .sheet(item: $reopeningCapture) { capture in
+            StudyFlowSheet(viewModel: viewModel, reopening: capture)
         }
         .sheet(isPresented: $showingAISettings) {
             AIReviewSettingsView()
@@ -259,6 +264,60 @@ public struct TodayView: View {
             }
             .padding(.vertical, 4)
         }
+    }
+
+    /// Unconfirmed guided-study captures: saved-for-later checks, drafts
+    /// awaiting confirmation, and a recovered timer. Reopening resumes the
+    /// exact step the user left (spec 5.1, 9.4).
+    @ViewBuilder
+    private var pendingCapturesSection: some View {
+        let pending = viewModel.pendingStudyCaptures()
+        let timerCapture = viewModel.activeStudyCapture()
+        if !pending.isEmpty || timerCapture != nil {
+            Section {
+                if let timerCapture {
+                    pendingCaptureRow(timerCapture)
+                }
+                ForEach(pending) { capture in
+                    pendingCaptureRow(capture)
+                }
+            } header: {
+                StudioSectionHeader(title: String(localized: "study_flow.pending.title"))
+            }
+        }
+    }
+
+    private func pendingCaptureRow(_ capture: PendingStudyCapture) -> some View {
+        Button {
+            reopeningCapture = capture
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(pendingCaptureTitle(capture))
+                        .font(.headline)
+                    Text(StudyFlowCopy.pendingStageTitle(capture.stage))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            "\(pendingCaptureTitle(capture)), \(StudyFlowCopy.pendingStageTitle(capture.stage))"
+        )
+    }
+
+    private func pendingCaptureTitle(_ capture: PendingStudyCapture) -> String {
+        if let plannedID = capture.plannedSessionID,
+           let planned = viewModel.plannedSessions.first(where: { $0.id == plannedID }) {
+            return planned.title
+        }
+        return viewModel.projects.first { $0.id == capture.projectID }?.name
+            ?? String(localized: "study_flow.pending.unknown")
     }
 
     @ViewBuilder

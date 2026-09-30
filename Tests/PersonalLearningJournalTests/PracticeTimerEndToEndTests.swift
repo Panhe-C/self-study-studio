@@ -4,6 +4,48 @@ import XCTest
 
 @MainActor
 final class PracticeTimerEndToEndTests: XCTestCase {
+    func testSimplePracticeStartsFromProjectWithoutRoutineEditor() throws {
+        let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 100))
+        let project = try XCTUnwrap(fixture.viewModel.projects.first)
+
+        let routine = try fixture.viewModel.startSimplePractice(
+            projectId: project.id,
+            mode: .countdown,
+            countdownMinutes: 25
+        )
+
+        XCTAssertEqual(routine.projectId, project.id)
+        XCTAssertEqual(routine.name, project.name)
+        XCTAssertEqual(fixture.viewModel.practiceRoutines.count, 1)
+        XCTAssertEqual(fixture.viewModel.practiceTimer.snapshot.activeRoutineId, routine.id)
+        XCTAssertEqual(fixture.viewModel.practiceTimer.snapshot.mode, .countdown)
+        XCTAssertEqual(fixture.viewModel.practiceTimer.snapshot.targetSeconds, 25 * 60)
+    }
+
+    func testCountdownTargetAutomaticallySavesPracticeIntoProjectTrail() throws {
+        let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 100))
+        let project = try XCTUnwrap(fixture.viewModel.projects.first)
+        let routine = try fixture.viewModel.startSimplePractice(
+            projectId: project.id,
+            mode: .countdown,
+            countdownMinutes: 1
+        )
+        fixture.clock.advance(by: 75)
+
+        let result = try XCTUnwrap(fixture.viewModel.finishCountdownAndSavePractice())
+
+        XCTAssertEqual(result.session.routineId, routine.id)
+        XCTAssertEqual(result.session.linkedProjectId, project.id)
+        XCTAssertEqual(result.session.activeDurationSeconds, 60)
+        XCTAssertEqual(result.learningSession.projectId, project.id)
+        XCTAssertEqual(result.learningSession.actionType, .practice)
+        XCTAssertEqual(result.learningSession.durationMinutes, 1)
+        XCTAssertNil(fixture.viewModel.practiceTimer.pendingCompletion)
+        XCTAssertTrue(fixture.viewModel.trail(for: project.id).contains {
+            $0.type == .session && $0.sourceId == result.learningSession.id
+        })
+    }
+
     func testCreateStartPauseResumeAndSavePracticeWorkflow() throws {
         let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 1_000))
         let weekday = fixture.calendar.component(.weekday, from: fixture.clock.now())
@@ -69,6 +111,55 @@ final class PracticeTimerEndToEndTests: XCTestCase {
         XCTAssertEqual(result.session.linkedProjectId, routine.projectId)
         XCTAssertTrue(result.didDropMissingProjectLink)
         XCTAssertNil(fixture.viewModel.practiceTimer.pendingCompletion)
+    }
+
+    func testVNextTodayRecoversPendingCompletionUntilExplicitSave() throws {
+        let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 1_000))
+        let project = try fixture.viewModel.onboardProject(
+            name: "Practice Project",
+            area: "Learning",
+            goal: "Improve",
+            nextStep: "Run one practice block"
+        )
+        let weekday = fixture.calendar.component(.weekday, from: fixture.clock.now())
+        let routine = try fixture.viewModel.createPracticeRoutine(
+            projectId: project.id,
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 1,
+            weekdays: [weekday]
+        )
+
+        try fixture.viewModel.startPractice(routine)
+        fixture.clock.advance(by: 30)
+        let completion = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
+
+        let pendingProjection = fixture.viewModel.vNextTodayProjection(
+            now: fixture.clock.now(),
+            calendar: fixture.calendar
+        )
+        XCTAssertEqual(
+            pendingProjection.practiceRecoveryCard?.kind,
+            .pendingCompletion
+        )
+        XCTAssertEqual(
+            pendingProjection.practiceRecoveryCard?.routineID,
+            routine.id
+        )
+
+        _ = try fixture.viewModel.savePracticeCompletion(
+            completion,
+            linkedProjectId: project.id,
+            note: nil
+        )
+        XCTAssertNil(fixture.viewModel.practiceTimer.pendingCompletion)
+        XCTAssertNil(
+            fixture.viewModel.vNextTodayProjection(
+                now: fixture.clock.now(),
+                calendar: fixture.calendar
+            ).practiceRecoveryCard
+        )
     }
 
     func testRepositoryFailureKeepsPendingCompletionForRecreationAndRetry() throws {
@@ -555,6 +646,80 @@ final class PracticeTimerEndToEndTests: XCTestCase {
             Set(recoveryMutations.map(\.entity.kind)),
             [.practiceRoutine, .practiceSession, .session, .project, .trailEvent]
         )
+    }
+
+    func testLegacyPendingCompletionRecoversRoutineAfterRemoteDeletion() throws {
+        let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 100))
+        let routine = try fixture.viewModel.createPracticeRoutine(
+            name: "Guitar",
+            symbolName: "guitars",
+            color: .coral,
+            targetMinutes: 30,
+            weekdays: Set(1...7)
+        )
+
+        // Version 1 timer state did not persist a routine presentation snapshot.
+        try fixture.viewModel.practiceTimer.start(
+            routineId: routine.id,
+            targetSeconds: routine.targetMinutes * 60
+        )
+        fixture.clock.advance(by: 1)
+        try fixture.repository.applyRemote(
+            JournalTransaction(
+                deletions: [.init(.practiceRoutine, routine.id)],
+                origin: .remote
+            ),
+            conflicts: []
+        )
+        fixture.viewModel.refresh()
+
+        let completion = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
+        let recoveredRoutine = try XCTUnwrap(
+            fixture.viewModel.practiceRoutineForTimer(routine.id, now: fixture.clock.now())
+        )
+        XCTAssertEqual(recoveredRoutine.name, "Guitar")
+        XCTAssertEqual(recoveredRoutine.projectId, routine.projectId)
+
+        let saved = try fixture.viewModel.savePracticeCompletion(
+            completion,
+            linkedProjectId: recoveredRoutine.projectId,
+            note: nil
+        )
+
+        XCTAssertEqual(saved.session.routineId, routine.id)
+        XCTAssertEqual(fixture.viewModel.practiceSessions.count, 1)
+        XCTAssertEqual(fixture.viewModel.practiceRoutines.count, 1)
+        XCTAssertTrue(fixture.viewModel.practiceRoutines[0].isArchived)
+        XCTAssertNil(fixture.viewModel.practiceTimer.pendingCompletion)
+    }
+
+    func testOrphanedPendingCompletionCanBeAssignedToAProjectAndSaved() throws {
+        let fixture = makeEndToEndFixture(now: Date(timeIntervalSince1970: 100))
+        let project = try XCTUnwrap(fixture.viewModel.projects.first)
+        let orphanedRoutineID = UUID()
+
+        try fixture.viewModel.practiceTimer.start(
+            routineId: orphanedRoutineID,
+            targetSeconds: 30 * 60
+        )
+        fixture.clock.advance(by: 1)
+        let completion = try XCTUnwrap(fixture.viewModel.practiceTimer.finish())
+
+        let saved = try fixture.viewModel.savePracticeCompletion(
+            completion,
+            linkedProjectId: project.id,
+            note: nil
+        )
+
+        XCTAssertEqual(saved.session.linkedProjectId, project.id)
+        XCTAssertEqual(saved.session.routineId, orphanedRoutineID)
+        let recoveredRoutine = try XCTUnwrap(
+            fixture.viewModel.practiceRoutineHistory.first(where: { $0.id == orphanedRoutineID })
+        )
+        XCTAssertEqual(recoveredRoutine.projectId, project.id)
+        XCTAssertEqual(recoveredRoutine.name, "Practice")
+        XCTAssertTrue(recoveredRoutine.isArchived)
+        XCTAssertNil(fixture.viewModel.practiceTimer.pendingCompletion)
     }
 
     private func assertActiveCardUsesLocalTimerPresentation(

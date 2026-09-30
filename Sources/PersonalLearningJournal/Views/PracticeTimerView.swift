@@ -3,9 +3,12 @@ import SwiftUI
 public struct PracticeTimerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var viewModel: JournalViewModel
     @ObservedObject private var timer: PracticeTimerRuntime
     private let routine: PracticeRoutine
+    private let zoomSourceID: String?
+    private let zoomNamespace: Namespace.ID?
 
     @State private var timerError: String?
     @State private var saveError: String?
@@ -13,10 +16,19 @@ public struct PracticeTimerView: View {
     @State private var isSaving = false
     @State private var showingDiscardConfirmation = false
     @State private var showingFallbackExplanation = false
+    @State private var selectedRecoveryProjectID: UUID?
+    @State private var summaryAppeared = false
 
-    public init(viewModel: JournalViewModel, routine: PracticeRoutine) {
+    public init(
+        viewModel: JournalViewModel,
+        routine: PracticeRoutine,
+        zoomSourceID: String? = nil,
+        zoomNamespace: Namespace.ID? = nil
+    ) {
         self.viewModel = viewModel
         self.routine = routine
+        self.zoomSourceID = zoomSourceID
+        self.zoomNamespace = zoomNamespace
         _timer = ObservedObject(wrappedValue: viewModel.practiceTimer)
     }
 
@@ -46,10 +58,30 @@ public struct PracticeTimerView: View {
                         }
                         .accessibilityLabel("Close practice timer")
                     }
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            if timer.snapshot.blocks.count > 1 {
+                                Button {
+                                    if !timer.skipCurrentBlock() {
+                                        timerError = "Choose another practice block before continuing."
+                                    }
+                                } label: {
+                                    Label("Skip Current Block", systemImage: "forward.end.fill")
+                                }
+                            }
+                            Button(role: .destructive, action: requestDiscard) {
+                                Label("Discard Practice", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                        .accessibilityLabel("More practice actions")
+                    }
                 }
             }
         }
         .interactiveDismissDisabled(pendingDraft != nil)
+        .studioZoomTransition(sourceID: zoomSourceID, namespace: zoomNamespace)
         .onAppear(perform: prepareTimer)
         .confirmationDialog(
             pendingDraft == nil ? "Discard this practice timer?" : "Discard this completed practice?",
@@ -84,7 +116,9 @@ public struct PracticeTimerView: View {
         ScrollView {
             VStack(spacing: 28) {
                 timerSummary
-                blockNavigator
+                if showsBlockNavigator {
+                    blockNavigator
+                }
                 timerControls
             }
             .frame(maxWidth: .infinity)
@@ -96,10 +130,12 @@ public struct PracticeTimerView: View {
 
     private var timerSummary: some View {
         let snapshot = timer.snapshot
-        let progress = min(
-            Double(snapshot.activeElapsedSeconds) / Double(max(snapshot.targetSeconds, 1)),
-            1
-        )
+        let progress = snapshot.mode == .countdown
+            ? min(Double(snapshot.activeElapsedSeconds) / Double(max(snapshot.targetSeconds, 1)), 1)
+            : 0
+        let displayedSeconds = snapshot.mode == .countdown
+            ? max(0, snapshot.targetSeconds - snapshot.activeElapsedSeconds)
+            : snapshot.activeElapsedSeconds
 
         return VStack(spacing: 22) {
             ZStack {
@@ -112,6 +148,7 @@ public struct PracticeTimerView: View {
                         style: StrokeStyle(lineWidth: 10, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
+                    .animation(reduceMotion ? nil : .smooth(duration: 0.4), value: progress)
 
                 Image(systemName: routine.symbolName)
                     .font(.system(size: 32, weight: .semibold))
@@ -120,28 +157,63 @@ public struct PracticeTimerView: View {
             }
             .frame(width: 176, height: 176)
             .accessibilityElement()
-            .accessibilityLabel("Target progress")
-            .accessibilityValue("\(Int(progress * 100)) percent")
+            .accessibilityLabel(
+                snapshot.mode == .countdown ? "Countdown progress" : "Count up timer"
+            )
+            .accessibilityValue(
+                snapshot.mode == .countdown
+                    ? "\(Int(progress * 100)) percent"
+                    : StudioDurationFormat.compact(seconds: displayedSeconds)
+            )
 
             VStack(spacing: 8) {
                 Text(routine.name)
                     .font(.title2.bold())
                     .multilineTextAlignment(.center)
-                Text(StudioDurationFormat.clock(seconds: snapshot.activeElapsedSeconds))
+                if let projectName {
+                    Label(projectName, systemImage: "folder")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Text(StudioDurationFormat.clock(seconds: displayedSeconds))
                     .font(.system(elapsedTextStyle, design: .monospaced).weight(.semibold))
                     .monospacedDigit()
                     .lineLimit(1)
-                    .accessibilityLabel("Elapsed time")
-                    .accessibilityValue(StudioDurationFormat.compact(seconds: snapshot.activeElapsedSeconds))
-                Text("Target \(StudioDurationFormat.compact(seconds: snapshot.targetSeconds))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+                    .accessibilityLabel(snapshot.mode == .countdown ? "Time remaining" : "Elapsed time")
+                    .accessibilityValue(StudioDurationFormat.compact(seconds: displayedSeconds))
+                if snapshot.mode == .countdown {
+                    Text("Target \(StudioDurationFormat.compact(seconds: snapshot.targetSeconds))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("vnext.today.practice.setup.count_up")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Text(
+                    String(
+                        format: String(localized: "vnext.today.practice.shelf.total"),
+                        StudioDurationFormat.compact(seconds: accumulatedPracticeSeconds)
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        // Gentle arrival: the summary settles in once instead of popping in
+        // fully rendered. Reduce Motion keeps only the opacity change.
+        .opacity(summaryAppeared ? 1 : 0)
+        .scaleEffect(summaryAppeared || reduceMotion ? 1 : 0.92)
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 1.0)) {
+                summaryAppeared = true
             }
         }
     }
 
     private var timerControls: some View {
-        HStack(spacing: 22) {
+        HStack(spacing: 12) {
             Button {
                 if timer.snapshot.isRunning {
                     timer.pause()
@@ -149,43 +221,41 @@ public struct PracticeTimerView: View {
                     timer.resume()
                 }
             } label: {
-                Image(systemName: timer.snapshot.isRunning ? "pause.fill" : "play.fill")
-                    .frame(width: StudioTheme.practiceControlSize, height: StudioTheme.practiceControlSize)
+                Label(
+                    timer.snapshot.isRunning ? "Pause" : "Resume",
+                    systemImage: timer.snapshot.isRunning ? "pause.fill" : "play.fill"
+                )
+                .contentTransition(.symbolEffect(.replace))
+                .frame(maxWidth: .infinity, minHeight: StudioTheme.practiceControlSize)
             }
             .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
+            .buttonBorderShape(.roundedRectangle(radius: 12))
             .accessibilityLabel(timer.snapshot.isRunning ? "Pause practice" : "Resume practice")
 
             Button(action: finishPractice) {
-                Image(systemName: "checkmark")
-                    .frame(width: StudioTheme.practiceControlSize, height: StudioTheme.practiceControlSize)
+                Label("Finish", systemImage: "checkmark")
+                    .frame(maxWidth: .infinity, minHeight: StudioTheme.practiceControlSize)
             }
             .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.circle)
+            .buttonBorderShape(.roundedRectangle(radius: 12))
             .tint(StudioTheme.practiceColor(routine.color))
             .accessibilityLabel("Finish practice")
-
-            Button {
-                if !timer.skipCurrentBlock() {
-                    timerError = "Choose another practice block before continuing."
-                }
-            } label: {
-                Image(systemName: "forward.end.fill")
-                    .frame(width: StudioTheme.practiceControlSize, height: StudioTheme.practiceControlSize)
-            }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel("Skip current practice block")
-
-            Button(role: .destructive, action: requestDiscard) {
-                Image(systemName: "trash")
-                    .frame(width: StudioTheme.practiceControlSize, height: StudioTheme.practiceControlSize)
-            }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel("Discard practice")
         }
-        .frame(height: StudioTheme.practiceControlSize + 18)
+    }
+
+    private var showsBlockNavigator: Bool {
+        timer.snapshot.blocks.count > 1
+            || !(timer.snapshot.currentBlock?.focus?.isEmpty ?? true)
+    }
+
+    private var accumulatedPracticeSeconds: Int {
+        let saved = PracticeStatistics.calculate(
+            routine: routine,
+            sessions: viewModel.practiceSessions,
+            now: timer.lastRefreshDate,
+            calendar: .current
+        ).allTimeActiveSeconds
+        return saved + timer.snapshot.activeElapsedSeconds
     }
 
     private var blockNavigator: some View {
@@ -262,10 +332,16 @@ public struct PracticeTimerView: View {
                 TextField("Note", text: noteBinding, axis: .vertical)
                     .lineLimit(3...6)
                 TextField("Attention marker (optional)", text: attentionMarkerBinding)
-                LabeledContent(
-                    "Project",
-                    value: availableProjects.first(where: { $0.id == routine.projectId })?.name ?? "Unavailable"
-                )
+                if let projectName {
+                    LabeledContent("Project", value: projectName)
+                } else {
+                    Picker("Project", selection: recoveryProjectBinding) {
+                        Text("Choose a project").tag(UUID?.none)
+                        ForEach(availableProjects) { project in
+                            Text(project.name).tag(Optional(project.id))
+                        }
+                    }
+                }
             }
 
             Section {
@@ -278,7 +354,7 @@ public struct PracticeTimerView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(StudioTheme.practiceColor(routine.color))
-                .disabled(isSaving)
+                .disabled(isSaving || effectiveProjectID == nil)
 
                 Button(action: leaveReflection) {
                     Label("Done", systemImage: "checkmark")
@@ -303,6 +379,32 @@ public struct PracticeTimerView: View {
         viewModel.projects
             .filter { $0.deletedAt == nil }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private var projectName: String? {
+        guard let projectID = routine.projectId else { return nil }
+        return availableProjects.first(where: { $0.id == projectID })?.name
+    }
+
+    private var effectiveProjectID: UUID? {
+        if let routineProjectID = routine.projectId,
+           availableProjects.contains(where: { $0.id == routineProjectID }) {
+            return routineProjectID
+        }
+        return selectedRecoveryProjectID
+    }
+
+    private var recoveryProjectBinding: Binding<UUID?> {
+        Binding {
+            selectedRecoveryProjectID
+        } set: { projectID in
+            selectedRecoveryProjectID = projectID
+            updatePendingDraft(
+                note: pendingDraft?.note ?? "",
+                linkedProjectId: projectID,
+                attentionMarker: pendingDraft?.attentionMarker
+            )
+        }
     }
 
     private var pendingDraft: PracticePendingCompletionDraft? {
@@ -362,6 +464,14 @@ public struct PracticeTimerView: View {
             if pending.completion.routineId != routine.id {
                 timerError = "Save or discard the completed practice before starting \(routine.name)."
             }
+            if projectName == nil, selectedRecoveryProjectID == nil {
+                if let linkedProjectID = pending.linkedProjectId,
+                   availableProjects.contains(where: { $0.id == linkedProjectID }) {
+                    selectedRecoveryProjectID = linkedProjectID
+                } else if availableProjects.count == 1 {
+                    selectedRecoveryProjectID = availableProjects[0].id
+                }
+            }
             return
         }
         do {
@@ -384,15 +494,12 @@ public struct PracticeTimerView: View {
 
     private func finishPractice() {
         refreshTimer()
-        guard let completion = timer.finish() else {
-            timerError = "The timer could not finish. Your active practice is still available to retry."
-            return
-        }
         do {
-            _ = try viewModel.persistPracticeCompletionBase(
-                completion,
-                linkedProjectId: routine.projectId
-            )
+            guard try viewModel.finishAndSavePractice(linkedProjectId: routine.projectId) != nil else {
+                timerError = "The timer could not finish. Your active practice is still available to retry."
+                return
+            }
+            dismiss()
         } catch {
             saveError = error.localizedDescription
         }
@@ -431,12 +538,12 @@ public struct PracticeTimerView: View {
             if !pendingDraftIsPersisted {
                 _ = try viewModel.persistPracticeCompletionBase(
                     draft.completion,
-                    linkedProjectId: routine.projectId
+                    linkedProjectId: effectiveProjectID
                 )
             }
             let result = try viewModel.savePracticeCompletion(
                 draft.completion,
-                linkedProjectId: routine.projectId,
+                linkedProjectId: effectiveProjectID,
                 note: draft.note.trimmedForJournal.nilIfEmpty,
                 attentionMarker: draft.attentionMarker?.trimmedForJournal.nilIfEmpty
             )
