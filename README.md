@@ -11,6 +11,7 @@ Personal Learning Journal is a SwiftUI-first, evidence-first learning system. A 
 - [vNext AI 引导式学习执行 Spec](docs/superpowers/specs/2026-08-10-ai-guided-learning-vnext-design.md)
 - [vNext 实施计划](docs/superpowers/plans/2026-08-10-ai-guided-learning-vnext.md)
 - [产品功能演示页（单文件 HTML）](docs/product-guide/self-study-studio-product-tour.html)
+- [产品使用流程演示视频（50s MP4）](docs/product-guide/self-study-studio-demo.mp4)
 - [产品功能手册](docs/PRODUCT_GUIDE.md)
 - [Web Workspace MVP 产品规格](docs/web-workspace-mvp-spec.md)
 - [跨端迁移路线图](docs/cross-surface-migration-roadmap.md)
