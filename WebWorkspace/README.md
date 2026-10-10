@@ -11,8 +11,8 @@ npm install
 npm run dev
 ```
 
-The app starts in an explicitly labeled **Demo** mode backed by deterministic
-fixtures. Use the visible **Real journal** mode switch to read the same private
+The app starts in an explicitly labeled **示例数据** mode backed by deterministic
+fixtures. Use the visible **个人记录** mode switch to read the same private
 CloudKit journal used by iPhone. Real mode never falls back to Demo data: missing
 configuration, authentication, schema, or zone failures remain visible as a
 blocked, signed-out, partial, or error state.
@@ -54,3 +54,7 @@ npx tsc --noEmit
 
 Canonical Journal records remain in CloudKit. D1 and R2 are intentionally not
 configured; browser storage holds only recoverable unpublished drafts.
+
+## Interface and navigation
+
+The interface uses Chinese navigation and action labels while retaining source learning content. The Dashboard leads with one next action; project search, keyboard tabs, browser back/forward, and explicit iPhone-only notes clarify how to use the workspace. See [the design rationale and validation](../docs/WEB_INTERFACE_DESIGN.md).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   cloudKitConfig,
   configureCloudKit,
@@ -49,26 +49,26 @@ import {
 } from "../lib/sync-conflicts";
 
 const navigation: Array<{ id: WorkspaceSection; label: string; glyph: string }> = [
-  { id: "dashboard", label: "Dashboard", glyph: "⌂" },
-  { id: "projects", label: "Projects", glyph: "□" },
-  { id: "reviews", label: "Reviews", glyph: "◇" },
-  { id: "sync", label: "Sync & conflicts", glyph: "↻" },
+  { id: "dashboard", label: "学习总览", glyph: "⌂" },
+  { id: "projects", label: "学习项目", glyph: "□" },
+  { id: "reviews", label: "复盘", glyph: "◇" },
+  { id: "sync", label: "数据与同步", glyph: "↻" },
 ];
 
 const projectTabs: Array<{ id: ProjectTab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "plan", label: "Plan" },
-  { id: "practice", label: "Practice" },
-  { id: "proof", label: "Proof" },
-  { id: "trail", label: "Learning trail" },
-  { id: "reviews", label: "Reviews" },
+  { id: "overview", label: "概览" },
+  { id: "plan", label: "学习计划" },
+  { id: "practice", label: "练习安排" },
+  { id: "proof", label: "学习证据" },
+  { id: "trail", label: "学习记录" },
+  { id: "reviews", label: "复盘" },
 ];
 
 const initialDiagnostic: CloudKitDiagnostic = hasCloudKitConfiguration()
-  ? { mode: "ready", message: "CloudKit configuration found. Run the check." }
+  ? { mode: "ready", message: "已找到连接配置，可运行连接检查。" }
   : {
       mode: "demo",
-      message: "Demo data is active until a CloudKit Web API token is configured.",
+      message: "当前展示示例数据。完成连接配置后，可读取个人学习记录。",
     };
 
 const workspaceSections: WorkspaceSection[] = [
@@ -173,9 +173,9 @@ function canonicalRecord(record: JournalReadRecord): CanonicalWriteRecord {
 function asWriteResultMessage(result: WebWriteResult) {
   switch (result.status) {
     case "committed":
-      return "CloudKit committed the canonical change.";
+      return "个人学习记录已保存到云端。";
     case "conflict":
-      return "CloudKit rejected the stale revision. Choose an explicit conflict action.";
+      return "云端版本已更新。请到「数据与同步」选择要保留的修改。";
     case "signed-out":
       return result.message;
     case "blocked":
@@ -251,12 +251,24 @@ export function WorkspaceApp({
       if (localState.tab !== "overview") params.set("tab", localState.tab);
     }
     const query = params.toString();
-    window.history.replaceState(
-      null,
-      "",
-      query ? `?${query}` : window.location.pathname,
-    );
+    const destination = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+    if (destination !== `${window.location.pathname}${window.location.search}`) {
+      const previous = new URLSearchParams(window.location.search);
+      const pageChanged = (previous.get("section") ?? "dashboard") !== localState.section
+        || (localState.section === "project" && previous.get("project") !== localState.projectId);
+      window.history.pushState(null, "", destination);
+      if (pageChanged) {
+        document.getElementById("workspace-content")?.focus({ preventScroll: true });
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
+    }
   }, [localState]);
+
+  useEffect(() => {
+    const restoreNavigation = () => setLocalState(null);
+    window.addEventListener("popstate", restoreNavigation);
+    return () => window.removeEventListener("popstate", restoreNavigation);
+  }, []);
 
   function openProject(projectId: string, tab: ProjectTab = "overview") {
     setLocalState(projectNavigationState(projectId, tab));
@@ -404,26 +416,27 @@ export function WorkspaceApp({
 
   const sectionTitle =
     section === "project"
-      ? selectedDemo?.project.name ?? (dataMode === "real" ? "Real journal" : "Project")
-      : navigation.find((item) => item.id === section)?.label ?? "Dashboard";
+      ? selectedDemo?.project.name ?? (dataMode === "real" ? "个人记录" : "学习项目")
+      : navigation.find((item) => item.id === section)?.label ?? "学习总览";
 
   const provenanceLabel = dataMode === "real"
     ? realRead?.status === "blocked"
-      ? "Real journal · configuration blocked"
+      ? "个人记录暂不可用，请到「数据与同步」完成配置。"
         : realRead?.status === "signed-out"
-          ? "Real journal · sign-in required"
+          ? "请先到「数据与同步」登录 Apple 账户。"
         : realWriter
-          ? "Real journal · CloudKit private database · guarded writes"
-          : "Real journal · CloudKit private database · read-only"
-    : "Demo data · deterministic fixture";
+          ? "已连接个人记录。保存前会检查版本，避免覆盖其他设备的修改。"
+          : "个人记录 · 当前仅可查看"
+    : "正在浏览示例数据，不会修改个人学习记录。";
 
   return (
     <div className="workspace-shell">
+      <a className="skip-link" href="#workspace-content">跳到主要内容</a>
       <aside className="sidebar">
         <button
           className="brand"
           onClick={() => setSection("dashboard")}
-          aria-label="Open dashboard"
+          aria-label="返回学习总览"
         >
           <span className="brand-mark" aria-hidden="true">
             S
@@ -434,26 +447,26 @@ export function WorkspaceApp({
           </span>
         </button>
 
-        <nav className="primary-nav" aria-label="Workspace navigation">
+        <nav className="primary-nav" aria-label="主要导航">
           {navigation.map((item) => (
             <button
               key={item.id}
-              className={section === item.id ? "nav-item active" : "nav-item"}
+              className={section === item.id || (section === "project" && item.id === "projects") ? "nav-item active" : "nav-item"}
+              aria-current={section === item.id || (section === "project" && item.id === "projects") ? "page" : undefined}
               onClick={() => setSection(item.id)}
             >
               <span className="nav-glyph" aria-hidden="true">
                 {item.glyph}
               </span>
               {item.label}
-              {item.id === "reviews" && <span className="nav-count">1</span>}
+              {item.id === "reviews" && availableDemos.filter((demo) => demo.review.ready).length > 0 && <span className="nav-count">{availableDemos.filter((demo) => demo.review.ready).length}</span>}
             </button>
           ))}
         </nav>
 
         <div className="sidebar-projects">
           <div className="sidebar-label">
-            <span>{dataMode === "real" ? "Journal projects" : "Active projects"}</span>
-            <button aria-label="Add project">+</button>
+            <span>快捷打开项目</span>
           </div>
           {availableDemos.map((demo) => {
             const project = demo.project;
@@ -480,58 +493,52 @@ export function WorkspaceApp({
             );
           })}
           {dataMode === "real" && availableDemos.length === 0 && (
-            <p className="sidebar-empty">No canonical Projects loaded.</p>
+            <p className="sidebar-empty">尚未读取到个人项目。</p>
           )}
         </div>
 
         <div className="sidebar-footer">
           <div className="owner-avatar">PH</div>
           <div>
-            <strong>Personal workspace</strong>
-            <small>One private journal</small>
+            <strong>个人学习空间</strong>
+            <small>计划 · 练习 · 复盘</small>
           </div>
-          <button aria-label="Workspace settings">•••</button>
         </div>
       </aside>
 
       <main className="main-panel">
         <header className="topbar">
           <div>
-            <span className="eyebrow">Personal learning journal</span>
+            <span className="eyebrow">个人学习工作台</span>
             <h1>{sectionTitle}</h1>
           </div>
           <div className="topbar-actions">
-            <div className="mode-switch" role="group" aria-label="Workspace data mode">
+            <div className="mode-switch" role="group" aria-label="数据来源">
               <button
                 className={dataMode === "demo" ? "active" : ""}
                 aria-pressed={dataMode === "demo"}
                 onClick={() => switchDataMode("demo")}
               >
-                Demo
+                示例数据
               </button>
               <button
                 className={dataMode === "real" ? "active" : ""}
                 aria-pressed={dataMode === "real"}
                 onClick={() => switchDataMode("real")}
               >
-                Real journal
+                个人记录
               </button>
             </div>
-            <button className="search-button" aria-label="Search">
-              <span aria-hidden="true">⌕</span>
-              <span>Search</span>
-              <kbd>⌘ K</kbd>
-            </button>
             <button
               className={`sync-pill ${diagnostic.mode}`}
               onClick={() => setSection("sync")}
             >
               <span className="sync-dot" aria-hidden="true" />
               {dataMode === "demo"
-                ? "Demo workspace"
+                ? "连接个人记录"
                 : diagnostic.mode === "connected"
-                  ? "Real journal connected"
-                  : "Real journal status"}
+                  ? "已连接"
+                  : "查看连接状态"}
             </button>
           </div>
         </header>
@@ -539,12 +546,12 @@ export function WorkspaceApp({
         <div className={`workspace-provenance ${dataMode}`} role="status">
           <span>{provenanceLabel}</span>
           {dataMode === "real" && realRead?.recordCount !== undefined && (
-            <small>{realRead.recordCount} canonical records · {realWriter ? "writes require revision guards" : "writes unavailable"}</small>
+            <small>{realRead.recordCount} 条记录 · {realWriter ? "可保存" : "仅可查看"}</small>
           )}
           {writeMessage && <small role="status">{writeMessage}</small>}
         </div>
 
-        <div className="content-scroll">
+        <div className="content-scroll" id="workspace-content" tabIndex={-1}>
           {section === "dashboard" && (
             <PortfolioDashboard
               initialAsOf={initialAsOf}
@@ -554,14 +561,16 @@ export function WorkspaceApp({
               openReviews={() => setSection("reviews")}
               openSync={() => setSection("sync")}
               snapshot={dataMode === "real" ? realDashboardSnapshot : undefined}
-              provenance={provenanceLabel}
+              provenance=""
             />
           )}
           {section === "projects" && <Projects demos={availableDemos} openProject={openProject} dataMode={dataMode} />}
           {section === "project" && (
             selectedDemo ? (
               <ProjectWorkspace
+                key={selectedDemo.project.id}
                 demo={selectedDemo}
+                openProjects={() => setSection("projects")}
                 tab={projectTab}
                 setTab={setProjectTab}
                 showDraft={() => setShowDraft(true)}
@@ -599,7 +608,7 @@ export function WorkspaceApp({
           onDraftSaved={async (draft) => {
             await draftStore.save(draft);
             await refreshDrafts();
-            setWriteMessage("Recoverable draft saved locally; it clears only after CloudKit commits.");
+            setWriteMessage("草稿已保存在当前浏览器，云端确认保存后才会清除。");
           }}
         />
       )}
@@ -616,23 +625,32 @@ function Projects({
   openProject: (id: string) => void;
   dataMode: "demo" | "real";
 }) {
+  const [query, setQuery] = useState("");
   const projectItems = demos.map((demo) => demo.project);
+  const filteredProjects = projectItems.filter((project) =>
+    `${project.name} ${project.area} ${project.goal}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+  );
   return (
     <div className="page-stack narrow-page">
       <div className="section-heading page-heading">
         <div>
-          <span className="mini-label">{projectItems.filter((project) => project.status === "Active").length} active · {projectItems.filter((project) => project.status === "Paused").length} paused</span>
-          <h2>Projects</h2>
-          <p>{dataMode === "real" ? "Read-only projection from the canonical CloudKit journal." : "Each project keeps its plan, practice, proof, trail, and reviews together."}</p>
+          <span className="mini-label">{projectItems.filter((project) => project.status === "Active").length} 个进行中 · {projectItems.filter((project) => project.status === "Paused").length} 个已暂停</span>
+          <h2>学习项目</h2>
+          <p>{dataMode === "real" ? "这里展示个人记录中的项目。新建项目和练习采集请在 iPhone 上完成。" : "选一个项目，查看学习计划、练习安排、证据和复盘。"}</p>
         </div>
-        <button className="primary-button" disabled={dataMode === "real"}>New project</button>
+        <span className="read-only-note">新建项目请在 iPhone 上完成</span>
       </div>
+      <label className="project-search">
+        <span>查找学习项目</span>
+        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入项目名称、领域或学习目标" />
+        <small role="status">{filteredProjects.length} 个项目</small>
+      </label>
       <div className="project-list">
-        {projectItems.map((project) => (
+        {filteredProjects.map((project) => (
           <button className="project-list-card" key={project.id} onClick={() => openProject(project.id)}>
             <span className="project-list-accent" style={{ background: project.accent }} />
             <div className="project-list-main">
-              <span className="mini-label">{project.area} · {project.status}</span>
+              <span className="mini-label">{project.area} · {project.status === "Active" ? "进行中" : project.status === "Paused" ? "已暂停" : project.status === "Completed" ? "已完成" : "已停止"}</span>
               <h3>{project.name}</h3>
               <p>{project.goal}</p>
               <div className="project-meta-row">
@@ -643,13 +661,16 @@ function Projects({
             </div>
             <div className="project-evidence-stat">
               <strong>{project.evidenceCount}/{project.evidenceTarget}</strong>
-              <span>proof signals</span>
+              <span>项学习证据</span>
             </div>
             <span className="chevron" aria-hidden="true">›</span>
           </button>
         ))}
+        {projectItems.length > 0 && filteredProjects.length === 0 && (
+          <section className="empty-history"><h3>没有找到匹配的项目</h3><p>尝试其他关键词，或清空搜索查看全部项目。</p><button className="secondary-button" onClick={() => setQuery("")}>清空搜索</button></section>
+        )}
         {projectItems.length === 0 && (
-          <section className="empty-history"><span>□</span><h3>No canonical Projects loaded</h3><p>Switch to Demo or configure Real journal access.</p></section>
+          <section className="empty-history"><span>□</span><h3>尚未读取到个人项目</h3><p>可切换到示例数据浏览，或到「数据与同步」检查连接。</p></section>
         )}
       </div>
     </div>
@@ -658,6 +679,7 @@ function Projects({
 
 function ProjectWorkspace({
   demo,
+  openProjects,
   tab,
   setTab,
   showDraft,
@@ -666,59 +688,78 @@ function ProjectWorkspace({
   onUpdateNextStep,
 }: {
   demo: ProjectDemo;
+  openProjects: () => void;
   tab: ProjectTab;
-  setTab: (tab: ProjectTab) => void;
   showDraft: () => void;
   dataMode: "demo" | "real";
   canWrite: boolean;
   onUpdateNextStep: (projectId: string, nextStep: string) => Promise<void>;
+  setTab: (tab: ProjectTab) => void;
 }) {
   const project = demo.project;
   return (
     <div className="project-page page-stack">
+      <button className="back-link" onClick={openProjects}>← 返回学习项目</button>
       <section className="project-hero">
         <div>
           <div className="project-identity">
             <span className="project-token coral" style={{ backgroundColor: project.accent }}>{project.token}</span>
-            <span className="status-pill">{project.status}</span>
+            <span className="status-pill">{project.status === "Active" ? "进行中" : project.status === "Paused" ? "已暂停" : project.status === "Completed" ? "已完成" : "已停止"}</span>
           </div>
           <h2>{project.name}</h2>
           <p>{project.goal}</p>
           <small className="demo-source">{demo.sourceLabel}</small>
         </div>
         <div className="project-hero-actions">
-          <button className="secondary-button" disabled={dataMode === "demo"}>Add proof</button>
-          <button className="primary-button" onClick={showDraft}>Adjust plan</button>
+          <span className="read-only-note">学习证据请在 iPhone 上添加</span>
+          <button className="primary-button" onClick={showDraft}>调整计划</button>
         </div>
       </section>
 
-      <div className="tab-list" role="tablist" aria-label="Project workspace sections">
+      <div className="tab-list" role="tablist" aria-label="项目内容">
         {projectTabs.map((item) => (
           <button
             key={item.id}
             role="tab"
+            id={`project-tab-${item.id}`}
+            aria-controls="project-panel"
+            tabIndex={tab === item.id ? 0 : -1}
             aria-selected={tab === item.id}
+            onKeyDown={(event) => {
+              const index = projectTabs.findIndex((entry) => entry.id === item.id);
+              const next = event.key === "ArrowRight" ? (index + 1) % projectTabs.length
+                : event.key === "ArrowLeft" ? (index + projectTabs.length - 1) % projectTabs.length
+                  : event.key === "Home" ? 0 : event.key === "End" ? projectTabs.length - 1 : -1;
+              if (next < 0) return;
+              event.preventDefault();
+              setTab(projectTabs[next].id);
+              const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]");
+              buttons?.[next].focus();
+            }}
             className={tab === item.id ? "tab-button active" : "tab-button"}
             onClick={() => setTab(item.id)}
           >
             {item.label}
-            {item.id === "reviews" && <span className="tab-alert" />}
+            {item.id === "reviews" && demo.review.ready && <span className="tab-alert" aria-label="有待复盘事项" />}
           </button>
         ))}
       </div>
 
-      {tab === "overview" && <ProjectOverview demo={demo} dataMode={dataMode} canWrite={canWrite} onUpdateNextStep={onUpdateNextStep} />}
-      {tab === "plan" && <PlanPanel demo={demo} showDraft={showDraft} dataMode={dataMode} />}
+      <section className="project-tab-panel" role="tabpanel" id="project-panel" aria-labelledby={`project-tab-${tab}`} tabIndex={0}>
+      {tab === "overview" && <ProjectOverview demo={demo} dataMode={dataMode} canWrite={canWrite} onUpdateNextStep={onUpdateNextStep} setTab={setTab} />}
+      {tab === "plan" && <PlanPanel demo={demo} showDraft={showDraft} dataMode={dataMode} setTab={setTab} />}
       {tab === "practice" && <PracticePanel demo={demo} />}
       {tab === "proof" && <ProofPanel demo={demo} />}
       {tab === "trail" && <TrailPanel demo={demo} />}
-      {tab === "reviews" && <ProjectReviews demo={demo} />}
+      {tab === "reviews" && <ProjectReviews demo={demo} setTab={setTab} />}
+      </section>
     </div>
   );
 }
 
 function ProjectOverview({
   demo,
+  setTab,
   dataMode,
   canWrite,
   onUpdateNextStep,
@@ -727,6 +768,7 @@ function ProjectOverview({
   dataMode: "demo" | "real";
   canWrite: boolean;
   onUpdateNextStep: (projectId: string, nextStep: string) => Promise<void>;
+  setTab: (tab: ProjectTab) => void;
 }) {
   const project = demo.project;
   const [nextStep, setNextStep] = useState(project.nextStep);
@@ -745,53 +787,53 @@ function ProjectOverview({
         <article className="card phase-detail-card">
           <div className="section-heading compact">
             <div>
-              <span className="mini-label">Active phase · {project.phaseWindow}</span>
+              <span className="mini-label">当前阶段 · {project.phaseWindow}</span>
               <h3>{project.phase}</h3>
             </div>
-            <span className="soft-badge">Revision 1</span>
+            <span className="soft-badge">版本 {demo.planRevision}</span>
           </div>
           <div className="phase-detail-grid">
             <div>
-              <span className="mini-label">Outcome</span>
+              <span className="mini-label">阶段目标</span>
               <p>{project.goal}</p>
             </div>
             <div>
-              <span className="mini-label">Expected proof</span>
+              <span className="mini-label">需要的学习证据</span>
               <p>{project.expectedProof}</p>
             </div>
           </div>
           <div className="phase-progress-row">
-            <span className="phase-number">02</span>
+            <span className="phase-number" aria-hidden="true">✓</span>
             <div>
-              <strong>{project.evidenceCount} proof signals collected</strong>
-              <span>{project.evidenceTarget - project.evidenceCount} still need to qualify before this phase can advance.</span>
+              <strong>{project.evidenceCount} 项学习证据已收集</strong>
+              <span>{project.evidenceTarget - project.evidenceCount} 项仍待收集，达到目标后再确认是否推进。</span>
             </div>
-            <button className="text-button">Inspect</button>
+            <button className="text-button" onClick={() => setTab("proof")}>查看证据 →</button>
           </div>
         </article>
         <article className="card">
           <div className="section-heading compact">
             <div>
-              <span className="mini-label">Planned work</span>
-              <h3>Sessions</h3>
+              <span className="mini-label">已安排的学习</span>
+              <h3>学习任务</h3>
             </div>
-            <button className="text-button">View plan</button>
+            <button className="text-button" onClick={() => setTab("plan")}>查看计划 →</button>
           </div>
           <SessionList sessions={demo.sessions} />
         </article>
       </div>
       <aside className="project-side-column page-stack small-gap">
         <article className="card next-step-card">
-          <span className="mini-label">Canonical next step</span>
-          <input aria-label="Canonical next step" value={nextStep} onChange={(event) => setNextStep(event.target.value)} />
+          <span className="mini-label">下一步学习行动</span>
+          <textarea rows={3} aria-label="下一步学习行动" readOnly={dataMode !== "real" || !canWrite} value={nextStep} onChange={(event) => setNextStep(event.target.value)} />
           <button className="dark-button" disabled={dataMode !== "real" || !canWrite || isSaving} onClick={() => void saveNextStep()}>
-            {isSaving ? "Saving…" : dataMode === "real" && canWrite ? "Save guarded Next Step" : "Real journal write only"}
+            {isSaving ? "正在保存…" : dataMode === "real" && canWrite ? "保存下一步" : "连接个人记录后可编辑"}
           </button>
         </article>
         <article className="card">
           <div className="section-heading compact">
             <div>
-              <span className="mini-label">Practice routine</span>
+              <span className="mini-label">固定练习</span>
               <h3>{demo.routineTitle} · {demo.routineTargetMinutes}m</h3>
             </div>
             <span className="soft-badge">{demo.routineFrequency}</span>
@@ -812,24 +854,24 @@ function ProjectOverview({
   );
 }
 
-function PlanPanel({ demo, showDraft, dataMode }: { demo: ProjectDemo; showDraft: () => void; dataMode: "demo" | "real" }) {
+function PlanPanel({ demo, showDraft, dataMode, setTab }: { demo: ProjectDemo; showDraft: () => void; dataMode: "demo" | "real"; setTab: (tab: ProjectTab) => void }) {
   return (
     <div className="panel-layout">
       <section className="card plan-timeline-card">
         <div className="section-heading">
           <div>
-            <span className="mini-label">Active learning plan · Revision {demo.planRevision}</span>
+            <span className="mini-label">当前学习计划 · 版本 {demo.planRevision}</span>
             <h3>{demo.planTitle}</h3>
             <p>{demo.sourceLabel}</p>
           </div>
-          <button className="primary-button" onClick={showDraft}>Adjust plan</button>
+          <button className="primary-button" onClick={showDraft}>调整计划</button>
         </div>
         <div className="phase-timeline">
           {demo.planPhases.map((phase) => (
             <div className={`timeline-phase ${phase.status.toLowerCase()}`} key={phase.id}>
               <span className="timeline-marker">{phase.status === "Complete" ? "✓" : phase.order}</span>
               <div>
-                <span className="mini-label">Phase {phase.order} · {phase.status}</span>
+                <span className="mini-label">阶段 {phase.order} · {phase.status === "Active" ? "进行中" : phase.status === "Complete" ? "已完成" : "已计划"}</span>
                 <h4>{phase.title}</h4>
                 <p>{phase.description}</p>
                 <div className="phase-milestones">
@@ -844,16 +886,16 @@ function PlanPanel({ demo, showDraft, dataMode }: { demo: ProjectDemo; showDraft
       </section>
       <aside className="page-stack small-gap">
         <article className="card capacity-summary-card">
-          <span className="mini-label">Capacity check</span>
+          <span className="mini-label">时间安排检查</span>
           <strong>{formatMinutes(demo.capacity.plannedMinutes)} / {formatMinutes(demo.capacity.availableMinutes)}</strong>
           <div className="capacity-track"><span className="capacity-used" style={{ width: `${Math.min(100, demo.capacity.plannedMinutes / demo.capacity.availableMinutes * 100)}%` }} /></div>
           <p>{demo.capacity.note}</p>
         </article>
         <article className="card revision-card">
-          <span className="mini-label">Plan history</span>
-          <h3>{demo.planRevision} published revision</h3>
+          <span className="mini-label">计划版本</span>
+          <h3>{demo.planRevision} 个已发布版本</h3>
           <p>{dataMode === "real" ? "Revision identity and structural changes are guarded in CloudKit." : "Imported as deterministic Demo data · no structural conflicts."}</p>
-          <button className="secondary-button">View history</button>
+          <button className="secondary-button" onClick={() => setTab("trail")}>查看学习记录</button>
         </article>
       </aside>
     </div>
@@ -868,11 +910,11 @@ function PracticePanel({ demo }: { demo: ProjectDemo }) {
       <section className="card routine-card">
         <div className="section-heading">
           <div>
-            <span className="mini-label">Active routine · {demo.routineFrequency}</span>
+            <span className="mini-label">当前练习安排 · {demo.routineFrequency}</span>
             <h3>{demo.routineTitle}</h3>
-            <p>{demo.routineTargetMinutes}-minute overall target · Block targets are guidance.</p>
+            <p>总目标 {demo.routineTargetMinutes} 分钟 · 各模块的时长可按实际练习调整。</p>
           </div>
-          <button className="secondary-button">Edit routine</button>
+          <span className="read-only-note">练习设置请在 iPhone 上调整</span>
         </div>
         <div className="block-table">
           {demo.practiceBlocks.map((block, index) => (
@@ -880,13 +922,13 @@ function PracticePanel({ demo }: { demo: ProjectDemo }) {
               <span className="block-index">0{index + 1}</span>
               <span className={`large-block-dot ${block.tone}`} />
               <div className="block-main">
-                <span className="mini-label">{block.name} · target {block.targetMinutes}m</span>
+                <span className="mini-label">{block.name} · 目标 {block.targetMinutes} 分钟</span>
                 <h4>{block.focus}</h4>
-                <p>Next focus: {block.nextFocus}</p>
+                <p>下次练习：{block.nextFocus}</p>
               </div>
               <div className="block-actual">
                 <strong>{block.actualMinutes}m</strong>
-                <span>last session</span>
+                <span>最近一次练习</span>
               </div>
             </div>
           ))}
@@ -894,19 +936,19 @@ function PracticePanel({ demo }: { demo: ProjectDemo }) {
       </section>
       <aside className="page-stack small-gap">
         <article className="card">
-          <span className="mini-label">Last session</span>
+          <span className="mini-label">最近一次练习</span>
           <div className="big-metric">{lastSessionMinutes}m</div>
           <p>{demo.lastSessionLabel}</p>
           <div className="attention-callout">
             <span>!</span>
-            {attentionBlock?.name ?? "Routine balance"} is marked for attention.
+            {attentionBlock?.name ?? "练习分配"} 需要留意。
           </div>
         </article>
         <article className="card">
-          <span className="mini-label">iPhone execution</span>
-          <h3>Guided Routine Player</h3>
-          <p>Start once, move between Blocks, and save one Practice Summary.</p>
-          <span className="read-only-note">View-only on Web</span>
+          <span className="mini-label">在 iPhone 上练习</span>
+          <h3>按步骤开始练习</h3>
+          <p>打开 iPhone 应用，按练习模块执行，结束后保存一次练习记录。</p>
+          <span className="read-only-note">网页仅供查看</span>
         </article>
       </aside>
     </div>
@@ -925,10 +967,10 @@ function ProofPanel({ demo }: { demo: ProjectDemo }) {
           <span className="proof-type">{proof.kind} · {proof.status}</span>
           <h3>{proof.title}</h3>
           <p>{proof.detail}</p>
-          <div className="proof-footer"><span>{proof.date}</span><button className="text-button">Inspect</button></div>
+          <div className="proof-footer"><span>{proof.date}</span><span className="read-only-note">证据摘要</span></div>
         </article>
       ))}
-      <button className="add-proof-card"><span>+</span><strong>Add proof</strong><small>Capture works best on iPhone</small></button>
+      <aside className="add-proof-card"><span aria-hidden="true">+</span><strong>在 iPhone 上添加学习证据</strong><small>录音、照片或笔记会随个人记录同步到这里。</small></aside>
     </div>
   );
 }
@@ -937,33 +979,34 @@ function TrailPanel({ demo }: { demo: ProjectDemo }) {
   return (
     <section className="card wide-card">
       <div className="section-heading">
-        <div><span className="mini-label">Meaningful history</span><h3>Learning trail</h3></div>
-        <button className="secondary-button">Filter</button>
+        <div><span className="mini-label">练习、证据与复盘的变化</span><h3>学习记录</h3></div>
+
       </div>
       <TrailList items={demo.trail} />
     </section>
   );
 }
 
-function ProjectReviews({ demo }: { demo: ProjectDemo }) {
+function ProjectReviews({ demo, setTab }: { demo: ProjectDemo; setTab: (tab: ProjectTab) => void }) {
   const project = demo.project;
   return (
     <div className="panel-layout">
       <section className="card review-workbench">
-        <span className="mini-label">{demo.review.ready ? "Stage review ready" : "Stage review not ready"}</span>
+        <span className="mini-label">{demo.review.ready ? "可以进行阶段复盘" : "阶段复盘尚未就绪"}</span>
         <h3>{demo.review.headline}</h3>
         <p className="large-copy">{demo.review.summary}</p>
         <div className="review-facts">
-          <div><strong>{project.evidenceCount}</strong><span>proof signals</span></div>
-          <div><strong>{demo.review.practiceSessions}</strong><span>practice sessions</span></div>
-          <div><strong>{demo.review.carryovers}</strong><span>carryover</span></div>
+          <div><strong>{project.evidenceCount}</strong><span>项学习证据</span></div>
+          <div><strong>{demo.review.practiceSessions}</strong><span>次练习</span></div>
+          <div><strong>{demo.review.carryovers}</strong><span>项未完成任务</span></div>
         </div>
-        <button className="dark-button" disabled={!demo.review.ready}>{demo.review.ready ? "Start evidence review" : "Collect more proof"}</button>
+        <button className="primary-button" onClick={() => setTab("proof")}>查看学习证据 →</button>
+        <p className="read-only-note">网页可查看复盘依据；发布复盘决定请在 iPhone 上完成。</p>
       </section>
       <aside className="card">
-        <span className="mini-label">Publication rule</span>
-        <h3>Nothing changes silently.</h3>
-        <p>Review Facts are deterministic. Only your published Review Decisions can advance or revise the plan.</p>
+        <span className="mini-label">决定何时生效</span>
+        <h3>确认后才推进计划</h3>
+        <p>先查看练习和证据，再在 iPhone 上发布复盘决定。只有明确确认后，计划才会推进或修订。</p>
       </aside>
     </div>
   );
@@ -982,24 +1025,24 @@ function Reviews({
   return (
     <div className="page-stack narrow-page">
       <div className="section-heading page-heading">
-        <div><span className="mini-label">{readyReviews.length} decision waiting</span><h2>Review inbox</h2><p>{dataMode === "real" ? "Read-only Reviews projected from the canonical journal." : "Evidence first, interpretation second, publication always explicit."}</p></div>
-        <button className="secondary-button" disabled={dataMode === "real"}>Start weekly review</button>
+        <div><span className="mini-label">{readyReviews.length} 项待复盘</span><h2>待复盘的项目</h2><p>{dataMode === "real" ? "这里展示个人记录中的复盘依据。发布决定请在 iPhone 上完成。" : "先查看学习证据，判断本阶段的目标是否达成，再决定下一步。"}</p></div>
+        <span className="read-only-note">在 iPhone 上发起或发布复盘</span>
       </div>
       {readyReviews.map((demo) => (
         <article className="review-inbox-card" key={demo.project.id}>
           <span className="review-status-orb">◇</span>
           <div>
-            <span className="mini-label">Stage review · {demo.project.name}</span>
+            <span className="mini-label">阶段复盘 · {demo.project.name}</span>
             <h3>{demo.review.headline}</h3>
-            <p>Target window reached · {demo.project.evidenceCount} proof signals · {demo.review.carryovers} carryover</p>
+            <p>已到阶段复盘时间 · {demo.project.evidenceCount} 项学习证据 · {demo.review.carryovers} 项待处理任务</p>
           </div>
           <div className="review-inbox-actions">
             <span>{demo.review.readySince}</span>
-            <button className="primary-button" onClick={() => openProject(demo.project.id, "reviews")}>Open review</button>
+            <button className="primary-button" onClick={() => openProject(demo.project.id, "reviews")}>查看复盘依据</button>
           </div>
         </article>
       ))}
-      <section className="empty-history"><span>◇</span><h3>No draft reviews</h3><p>Started reviews remain here until you publish or discard them.</p></section>
+      <section className="empty-history"><span>◇</span><h3>复盘草稿请在 iPhone 上查看</h3><p>网页展示已读取的复盘依据，不创建或发布复盘决定。</p></section>
     </div>
   );
 }
@@ -1008,9 +1051,9 @@ function RealJournalEmptyState({ mode }: { mode: "demo" | "real" }) {
   return (
     <div className="page-stack narrow-page">
       <section className="card portfolio-error-state" role="status">
-        <span className="mini-label">{mode === "real" ? "Real journal" : "Project"}</span>
-        <h3>{mode === "real" ? "No canonical Project selected" : "No Project selected"}</h3>
-        <p>{mode === "real" ? "CloudKit returned no readable Project for this route. Demo data is not substituted." : "Choose a Project from the sidebar."}</p>
+        <span className="mini-label">{mode === "real" ? "个人记录" : "学习项目"}</span>
+        <h3>{mode === "real" ? "尚未读取到个人项目" : "尚未选择项目"}</h3>
+        <p>{mode === "real" ? "尚未读取到可查看的项目。请到「数据与同步」检查连接；这里不会用示例替代个人记录。" : "从「学习项目」中选择一个项目。"}</p>
       </section>
     </div>
   );
@@ -1038,12 +1081,12 @@ function SyncDiagnostics({
     <div className="page-stack narrow-page">
       <div className="section-heading page-heading">
         <div>
-          <span className="mini-label">Direct journal access</span>
-          <h2>Sync & conflicts</h2>
-          <p>{dataMode === "real" ? "Real mode reads and writes the same private CloudKit zone used by the iPhone App. Every write is atomic and change-tag guarded." : "Run a read-only diagnostic before switching to Real journal mode."}</p>
+          <span className="mini-label">连接 iPhone 的个人学习记录</span>
+          <h2>数据与同步</h2>
+          <p>{dataMode === "real" ? "这里与 iPhone 使用同一份 iCloud 私有记录。保存修改前会检查版本；如有冲突，需要选择保留哪个版本。" : "先检查连接，再切换到个人记录。示例数据仅用于浏览，不会保存到个人记录。"}</p>
         </div>
         <button className="primary-button" onClick={runCheck} disabled={isChecking}>
-          {isChecking ? "Checking…" : "Run CloudKit check"}
+          {isChecking ? "正在检查…" : "检查连接"}
         </button>
       </div>
 
@@ -1051,20 +1094,20 @@ function SyncDiagnostics({
         <article className="card cloud-status-card">
           <div className={`large-status-dot ${diagnostic.mode}`} />
           <div>
-            <span className="mini-label">Connection status</span>
-            <h3>{diagnostic.mode === "connected" ? "Private journal connected" : diagnostic.mode === "demo" ? "Demo mode" : diagnostic.mode === "blocked" ? "Real mode blocked" : diagnostic.mode.replace("-", " ")}</h3>
+            <span className="mini-label">连接状态</span>
+            <h3>{diagnostic.mode === "connected" ? "已连接个人记录" : diagnostic.mode === "demo" ? "正在使用示例数据" : diagnostic.mode === "blocked" ? "个人记录连接受阻" : diagnostic.mode.replace("-", " ")}</h3>
             <p>{diagnostic.message}</p>
           </div>
           <div id="apple-sign-in-button" className="apple-auth-slot" />
           <div id="apple-sign-out-button" className="apple-auth-slot" />
         </article>
         <article className="card config-card">
-          <span className="mini-label">Configuration</span>
+          <span className="mini-label">连接配置</span>
           <dl>
-            <div><dt>Container</dt><dd>{cloudKitConfig.containerIdentifier}</dd></div>
-            <div><dt>Environment</dt><dd>{cloudKitConfig.environment}</dd></div>
-            <div><dt>Private zone</dt><dd>{cloudKitConfig.zoneName}</dd></div>
-            <div><dt>Web API token</dt><dd>{hasCloudKitConfiguration() ? "Configured" : "Missing"}</dd></div>
+            <div><dt>容器</dt><dd>{cloudKitConfig.containerIdentifier}</dd></div>
+            <div><dt>环境</dt><dd>{cloudKitConfig.environment}</dd></div>
+            <div><dt>私有数据区域</dt><dd>{cloudKitConfig.zoneName}</dd></div>
+            <div><dt>Web API token</dt><dd>{hasCloudKitConfiguration() ? "已配置" : "尚未配置"}</dd></div>
           </dl>
         </article>
       </section>
@@ -1073,9 +1116,9 @@ function SyncDiagnostics({
         <section className="setup-callout">
           <span className="callout-number">01</span>
           <div>
-            <span className="mini-label">Apple setup required</span>
-            <h3>Create a CloudKit Web API token</h3>
-            <p>Add the development and production site origins in CloudKit Dashboard, then set the public token in the Web environment. Until then, no Apple sign-in or private record read is attempted.</p>
+            <span className="mini-label">需要完成 Apple 连接配置</span>
+            <h3>配置个人记录连接</h3>
+            <p>在 CloudKit Dashboard 中添加网站地址，再配置 Web API token。完成前无法登录 Apple 账户或读取个人记录。</p>
           </div>
           <code>NEXT_PUBLIC_CLOUDKIT_API_TOKEN</code>
         </section>
@@ -1096,29 +1139,32 @@ function SyncDiagnostics({
 
       {drafts.length > 0 && (
         <section className="card recoverable-drafts-card">
-          <div className="section-heading compact"><div><span className="mini-label">Recoverable drafts</span><h3>{drafts.length} unfinished edit{drafts.length === 1 ? "" : "s"}</h3></div><span className="soft-badge">local only</span></div>
-          <p>Drafts survive a browser restart and clear only after CloudKit reports a semantic commit.</p>
+          <div className="section-heading compact"><div><span className="mini-label">本地未发布草稿</span><h3>{drafts.length} 个未完成的编辑</h3></div><span className="soft-badge">仅保存在当前浏览器</span></div>
+          <p>草稿保存在当前浏览器，重新打开后仍可查看。只有云端确认保存成功后才会清除。</p>
           <div className="draft-list">{drafts.map((draft) => <div className="draft-list-row" key={draft.id}><strong>{draft.kind}</strong><span>{draft.status}</span><small>{new Date(draft.updatedAt).toLocaleString()}</small></div>)}</div>
         </section>
       )}
 
       {conflicts.length > 0 ? conflicts.map((conflict) => (
         <section className="card sync-conflict-card" key={conflict.id}>
-          <div className="section-heading compact"><div><span className="mini-label">{conflict.structural ? "Structural conflict" : "Same-field conflict"} · {conflict.kind}</span><h3>CloudKit needs an explicit decision</h3></div><span className="soft-badge">no silent LWW</span></div>
+          <div className="section-heading compact"><div><span className="mini-label">{conflict.structural ? "计划结构冲突" : "同一内容存在冲突"} · {conflict.kind}</span><h3>选择要保留的修改</h3></div><span className="soft-badge">等待确认</span></div>
+          <p>其他设备也修改了这份内容。先检查各个版本，再选择处理方式。</p>
+          <details><summary>查看冲突版本详情</summary>
           <div className="conflict-columns">
-            <div><span className="mini-label">Base</span><pre>{JSON.stringify(conflict.basePayload, null, 2)}</pre></div>
-            <div><span className="mini-label">Local Web edit</span><pre>{JSON.stringify(conflict.localPayload, null, 2)}</pre></div>
-            <div><span className="mini-label">Remote CloudKit</span><pre>{JSON.stringify(conflict.serverPayload, null, 2)}</pre></div>
+            <div><span className="mini-label">修改前的版本</span><pre>{JSON.stringify(conflict.basePayload, null, 2)}</pre></div>
+            <div><span className="mini-label">本次网页修改</span><pre>{JSON.stringify(conflict.localPayload, null, 2)}</pre></div>
+            <div><span className="mini-label">当前云端版本</span><pre>{JSON.stringify(conflict.serverPayload, null, 2)}</pre></div>
           </div>
-          <p className="conflict-fields">Conflicting fields: {conflict.conflictingFields.join(", ") || "structural identity"}</p>
+          <p className="conflict-fields">冲突字段：{conflict.conflictingFields.join(", ") || "计划结构"}</p>
+          </details>
           <div className="conflict-actions">
-            {(["keepRemote", "discardLocal", "rebaseLocal", "fork"] as SyncConflictResolution[]).map((resolution) => <button key={resolution} className={resolution === "keepRemote" ? "secondary-button" : "text-button"} onClick={() => onResolveConflict(conflict, resolution)}>{resolution === "keepRemote" ? "Keep remote" : resolution === "discardLocal" ? "Discard local" : resolution === "rebaseLocal" ? "Rebase local" : "Fork revision"}</button>)}
+            {(["keepRemote", "discardLocal", "rebaseLocal", "fork"] as SyncConflictResolution[]).map((resolution) => <button key={resolution} className={resolution === "keepRemote" ? "secondary-button" : "text-button"} onClick={() => onResolveConflict(conflict, resolution)}>{resolution === "keepRemote" ? "保留云端版本" : resolution === "discardLocal" ? "放弃本次网页修改" : resolution === "rebaseLocal" ? "按新版本重新应用修改" : "另存为新版本"}</button>)}
           </div>
         </section>
       )) : (
         <section className="card conflict-empty-state">
           <span className="conflict-icon">↻</span>
-          <div><h3>{dataMode === "real" ? "No unresolved CloudKit conflicts" : "No Web conflicts loaded"}</h3><p>{dataMode === "real" ? "Guarded writes never retry stale revisions or apply last-write-wins. Same-field and structural collisions will appear here." : "Same-field and structural collisions will appear here. Last-write-wins is never applied silently."}</p></div>
+          <div><h3>{dataMode === "real" ? "当前没有未解决的冲突" : "尚未读取个人记录的冲突"}</h3><p>{dataMode === "real" ? "保存前会检查版本。如果多个设备修改同一内容，这里会提示需要选择的版本。" : "连接个人记录后，可检查各设备的修改是否冲突。"}</p></div>
         </section>
       )}
     </div>
@@ -1147,6 +1193,24 @@ function PlanDraftSheet({
   const [expectedProof, setExpectedProof] = useState(demo.project.expectedProof);
   const [draftId, setDraftId] = useState<string | undefined>();
   const [isSaving, setIsSaving] = useState(false);
+  const dialogRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    const controls = () => Array.from(dialog?.querySelectorAll<HTMLElement>("button:not(:disabled), input, textarea, [tabindex='0']") ?? []);
+    controls()[0]?.focus();
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") { event.preventDefault(); close(); }
+      if (event.key !== "Tab") return;
+      const items = controls();
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+    dialog?.addEventListener("keydown", handleKey);
+    return () => { dialog?.removeEventListener("keydown", handleKey); previousFocus?.focus(); };
+  }, [close]);
   const activePlan = records.find((record) => record.kind === "coursePlan" && record.payload.projectId === demo.project.id && record.payload.status === "active");
   const canActivate = dataMode === "real" && Boolean(writer && activePlan?.recordChangeTag);
 
@@ -1227,25 +1291,25 @@ function PlanDraftSheet({
 
   return (
     <div className="sheet-backdrop" role="presentation" onMouseDown={close}>
-      <section className="plan-sheet" role="dialog" aria-modal="true" aria-labelledby="draft-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="plan-sheet" role="dialog" aria-modal="true" aria-labelledby="draft-title" onMouseDown={(event) => event.stopPropagation()}>
         <header className="sheet-header">
-          <div><span className="mini-label">Recoverable draft · not active</span><h2 id="draft-title">Adjust learning plan</h2></div>
-          <button className="close-button" onClick={close} aria-label="Close plan draft">×</button>
+          <div><span className="mini-label">计划草稿 · 尚未生效</span><h2 id="draft-title">调整学习计划</h2></div>
+          <button className="close-button" onClick={close} aria-label="关闭计划草稿">×</button>
         </header>
         <div className="sheet-body">
-          <label><span>Phase outcome</span><textarea value={outcome} onChange={(event) => setOutcome(event.target.value)} /></label>
+          <label><span>本阶段的学习目标</span><textarea value={outcome} onChange={(event) => setOutcome(event.target.value)} /></label>
           <div className="field-row">
-            <label><span>Plan window</span><input value={activePhase?.window ?? ""} readOnly /></label>
-            <label><span>Revision</span><input value={`Revision ${demo.planRevision + 1} draft`} readOnly /></label>
+            <label><span>计划时间</span><input value={activePhase?.window ?? ""} readOnly /></label>
+            <label><span>版本</span><input value={`版本 ${demo.planRevision + 1} 草稿`} readOnly /></label>
           </div>
-          <label><span>Expected proof</span><textarea value={expectedProof} onChange={(event) => setExpectedProof(event.target.value)} /></label>
-          <div className="draft-warning"><span>i</span><div><strong>Capacity check</strong><p>{formatMinutes(demo.capacity.plannedMinutes)} planned against {formatMinutes(demo.capacity.availableMinutes)} available. {demo.capacity.note}</p></div></div>
-          <div className="revision-note"><span className="mini-label">What creates a new revision?</span><p>Changing this outcome, phase dates, expected proof, phase order, or Routine structure. Session completion and Proof remain ordinary execution updates.</p></div>
-          <p className="read-only-note">{dataMode === "real" ? (canActivate ? "Activation creates a new immutable CoursePlan revision and checks the current CloudKit change tag." : "Activation is unavailable until a canonical CoursePlan and change tag are loaded.") : "Demo records are noncanonical. This editor can only save a local recoverable draft."}</p>
+          <label><span>需要的学习证据</span><textarea value={expectedProof} onChange={(event) => setExpectedProof(event.target.value)} /></label>
+          <div className="draft-warning"><span>i</span><div><strong>时间安排检查</strong><p>{formatMinutes(demo.capacity.plannedMinutes)} planned against {formatMinutes(demo.capacity.availableMinutes)} available. {demo.capacity.note}</p></div></div>
+          <div className="revision-note"><span className="mini-label">哪些改动会生成新版本？</span><p>修改学习目标、阶段日期、学习证据要求、阶段顺序或练习结构会生成新版本。完成学习任务和添加证据不会生成新计划版本。</p></div>
+          <p className="read-only-note">{dataMode === "real" ? (canActivate ? "启用前会检查当前版本，确认后生成新计划版本。" : "当前无法启用新计划。请连接个人记录并读取现有计划。") : "示例模式仅保存当前浏览器的本地草稿，不会修改个人学习计划。"}</p>
         </div>
         <footer className="sheet-footer">
-          <button className="secondary-button" onClick={() => void saveDraft()} disabled={isSaving}>Save recoverable draft</button>
-          <button className="primary-button" disabled={!canActivate || isSaving} onClick={() => void activateRevision()} title={canActivate ? "Create and activate a guarded CoursePlan revision" : "CloudKit writes require Real journal mode and a revision guard"}>{isSaving ? "Activating…" : "Activate guarded revision"}</button>
+          <button className="secondary-button" onClick={() => void saveDraft()} disabled={isSaving}>保存本地草稿</button>
+          <button className="primary-button" disabled={!canActivate || isSaving} onClick={() => void activateRevision()} title={canActivate ? "保存并启用新的学习计划版本" : "连接个人记录并读取现有计划后可启用"}>{isSaving ? "正在启用…" : "确认并启用新计划"}</button>
         </footer>
       </section>
     </div>
@@ -1258,8 +1322,8 @@ function SessionList({ sessions }: { sessions: ProjectDemo["sessions"] }) {
       {sessions.map((session) => (
         <div className="session-row" key={session.id}>
           <span className={`session-state ${session.status.toLowerCase()}`}>{session.status === "Done" ? "✓" : session.status === "Carryover" ? "!" : ""}</span>
-          <div><strong>{session.title}</strong><span>{session.window} · {session.duration} min</span></div>
-          <span className={`session-badge ${session.status.toLowerCase()}`}>{session.status}</span>
+          <div><strong>{session.title}</strong><span>{session.window} · {session.duration} 分钟</span></div>
+          <span className={`session-badge ${session.status.toLowerCase()}`}>{session.status === "Done" ? "已完成" : session.status === "Carryover" ? "待处理" : "已计划"}</span>
         </div>
       ))}
     </div>

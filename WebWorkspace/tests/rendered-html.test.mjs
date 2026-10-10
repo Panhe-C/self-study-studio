@@ -89,8 +89,8 @@ test("threads one server initialAsOf through the production Dashboard boundary",
     initialAsOf: "2026-08-02T12:00:00Z",
     initialTimeZone: "Asia/Shanghai",
   });
-  assert.match(html, /Sunday, August 2/);
-  assert.match(html, /Actionable items/);
+  assert.match(html, /8月2日星期日/);
+  assert.match(html, /含上方待确认事项/);
 });
 
 test.after(async () => {
@@ -154,9 +154,14 @@ test("server-renders the learning workspace", async () => {
   assert.match(html, /aria-pressed="true"/);
   assert.match(html, /meaningful activity over 6 weeks/i);
   assert.match(html, /planned minutes of .* available/i);
-  assert.match(html, /<title>Self Study Studio — Learning Workspace<\/title>/i);
-  assert.match(html, /Your learning portfolio/);
-  assert.match(html, /Active Projects/);
+  assert.match(html, /<title>Self Study Studio — 个人学习工作台<\/title>/i);
+  assert.match(html, /学习总览/);
+  assert.match(html, /进行中的项目/);
+  assert.match(html, /跳到主要内容/);
+  assert.match(html, /aria-current="page"/);
+  assert.match(html, /<details class="portfolio-insights"><summary>/);
+  assert.doesNotMatch(html, /<details class="portfolio-insights" open/);
+  assert.doesNotMatch(html, /aria-label="Search"|Workspace settings|Add project/);
   assert.match(html, /Electric guitar improvisation/);
   assert.match(html, /CS336 · Language Modeling from Scratch/);
   assert.match(
@@ -167,9 +172,9 @@ test("server-renders the learning workspace", async () => {
     html,
     /A reversible tokenizer with passing fixtures, benchmark notes, and a short explanation of vocabulary tradeoffs\./,
   );
-  assert.match(html, /Stage Review is ready/);
-  assert.match(html, /Portfolio movement/);
-  assert.match(html, /Next 2 weeks capacity/);
+  assert.match(html, /本阶段可以复盘了/);
+  assert.match(html, /学习活动趋势/);
+  assert.match(html, /未来两周的时间安排/);
   assert.match(html, /meaningful events across 1 week/i);
   assert.doesNotMatch(html, /completion percentage|streak|rank|grade/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
@@ -218,7 +223,7 @@ test("keeps every narrow Dashboard action at least 44 pixels", async () => {
   );
   assert.match(
     narrowRules,
-    /\.portfolio-decision-card button\s*\{[^}]*min-height:\s*44px/,
+    /\.start-here button\s*\{[^}]*min-height:\s*44px/,
   );
   assert.match(
     narrowRules,
@@ -301,11 +306,12 @@ test("server-renders complete accessible activity sequences in hierarchy order",
   assert.doesNotMatch(html, /title="(?:This week|\d+ weeks? ago): \d+ meaningful events"/);
 
   assertInOrder(html, [
+    'id="start-here-heading"',
     'aria-label="Portfolio pulse"',
     'id="portfolio-projects-heading"',
     'id="portfolio-decisions-heading"',
-    ">Portfolio movement<",
-    ">Next 2 weeks capacity<",
+    ">学习活动趋势<",
+    ">未来两周的时间安排<",
   ]);
 });
 
@@ -333,11 +339,11 @@ test("server-renders the injected asOf, overload warning segment, and capacity a
     },
   });
 
-  assert.match(clockHtml, /Friday, July 24/);
-  assert.match(html, /Capacity exceeds availability/);
+  assert.match(clockHtml, /7月24日星期五/);
+  assert.match(html, /计划时间超过可用时间/);
   assert.match(html, /class="capacity-overage-segment"/);
   assert.match(html, /Over capacity by 270m/);
-  assert.match(html, /Planned capacity needs a decision/);
+  assert.match(html, /计划时间需要调整/);
 });
 
 test("server-renders empty, partial, conflict, loading, and error snapshot states", async () => {
@@ -389,15 +395,15 @@ test("server-renders empty, partial, conflict, loading, and error snapshot state
     }),
   ]);
 
-  assert.match(empty, /Create Project/);
-  assert.match(empty, /View archive/);
-  assert.match(partial, /Some Dashboard data is unavailable/);
-  assert.match(partial, /Capacity data unavailable/);
+  assert.match(empty, /查看项目/);
+  assert.match(empty, /查看全部项目/);
+  assert.match(partial, /部分数据暂不可用/);
+  assert.match(partial, /时间安排暂不可用/);
   assert.match(conflict, /Plan revision conflict/);
-  assert.match(conflict, /Open Sync &amp; conflicts/);
+  assert.match(conflict, /查看同步问题/);
   assert.match(loading, /aria-busy="true"/);
   assert.match(loading, /portfolio-skeleton/);
-  assert.match(error, /Dashboard unavailable/);
+  assert.match(error, /学习总览加载失败/);
   assert.match(error, /Snapshot unavailable/);
 });
 

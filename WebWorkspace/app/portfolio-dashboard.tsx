@@ -4,7 +4,6 @@ import { useMemo, useState, type CSSProperties } from "react";
 import {
   createDashboardSnapshot,
   derivePortfolioDashboard,
-  formatDashboardDate,
   type AttentionItem,
   type DashboardPeriod,
   type DashboardSection,
@@ -26,15 +25,15 @@ type PortfolioDashboardProps = {
 };
 
 const periods: Array<{ id: DashboardPeriod; label: string }> = [
-  { id: "now", label: "Now" },
-  { id: "4w", label: "4 weeks" },
-  { id: "12w", label: "12 weeks" },
+  { id: "now", label: "本周" },
+  { id: "4w", label: "近 4 周" },
+  { id: "12w", label: "近 12 周" },
 ];
 
 const unavailableLabels: Record<DashboardSection, string> = {
-  evidence: "Proof readiness",
-  activity: "Meaningful activity",
-  capacity: "Capacity",
+  evidence: "学习证据",
+  activity: "学习活动",
+  capacity: "时间安排",
 };
 
 function weekLabel(index: number, bucketCount: number) {
@@ -129,25 +128,24 @@ function PortfolioProjectCard({
         <span
           className={`portfolio-state${project.attention ? " attention" : ""}`}
         >
-          {project.status}
+          {project.status === "Active" ? "进行中" : project.status === "Paused" ? "已暂停" : project.status === "Completed" ? "已完成" : "已停止"}
         </span>
       </header>
       <div className="portfolio-project-body">
         <div>
-          <span className="mini-label">Active Phase</span>
-          <h5>{project.activePhase?.title ?? "No active Phase"}</h5>
+          <span className="mini-label">当前阶段</span>
+          <h5>{project.activePhase?.title ?? "尚无进行中的阶段"}</h5>
           <p className="portfolio-outcome">{project.outcome}</p>
           <div className="portfolio-expected-proof">
-            <span className="mini-label">Expected Proof</span>
+            <span className="mini-label">本阶段需要的证据</span>
             <p>{project.expectedProof}</p>
           </div>
           {project.evidence ? (
             <div className="portfolio-evidence">
               <div>
-                <span>Proof readiness</span>
+                <span>学习证据</span>
                 <strong>
-                  {project.evidence.ready} of {project.evidence.expected} signals
-                  ready
+                  {project.evidence.ready} / {project.evidence.expected} 项
                 </strong>
               </div>
               <div
@@ -159,12 +157,12 @@ function PortfolioProjectCard({
             </div>
           ) : (
             <p className="portfolio-unavailable-note">
-              Proof readiness unavailable
+              学习证据暂不可用
             </p>
           )}
         </div>
-        <div className="portfolio-activity">
-          <span className="mini-label">Meaningful activity</span>
+        <details className="portfolio-activity">
+          <summary>近六周的学习活动</summary>
           {project.activity ? (
             <>
               <div className="portfolio-sparkline" aria-hidden="true">
@@ -186,15 +184,15 @@ function PortfolioProjectCard({
             </>
           ) : (
             <p className="portfolio-unavailable-note">
-              Meaningful activity unavailable
+              学习活动暂不可用
             </p>
           )}
-        </div>
+        </details>
       </div>
       <footer>
         <div>
-          <span className="mini-label">Next decision</span>
-          <strong>{project.nextDecision.label}</strong>
+          <span className="mini-label">下一步</span>
+          <strong>{attentionLabel(project.nextDecision.label)}</strong>
           <small>{project.nextDecision.detail}</small>
         </div>
         <button
@@ -211,12 +209,26 @@ function PortfolioProjectCard({
           }
         >
           {project.nextDecision.destination.section === "sync"
-            ? "Open Sync & conflicts"
-            : "Open Project"}
+            ? "查看同步问题"
+            : project.nextDecision.destination.tab === "reviews" ? "查看复盘依据"
+              : project.nextDecision.destination.tab === "proof" ? "查看学习证据"
+                : project.nextDecision.destination.tab === "practice" ? "查看练习安排"
+                  : project.nextDecision.destination.tab === "plan" ? "查看计划" : "查看下一步"}
         </button>
       </footer>
     </article>
   );
+}
+
+function attentionLabel(label: string) {
+  return label.replace("Stage Review is ready", "本阶段可以复盘了")
+    .replace("Learning log needs attention", "有练习模块需要补充")
+    .replace("Expected Proof gap at the Phase boundary", "阶段结束前仍需补充学习证据")
+    .replace(/(\d+) Carryover awaiting a decision/, "$1 项未完成任务需要确认")
+    .replace(/No meaningful activity for (\d+) days/, "已有 $1 天没有新的学习记录")
+    .replace("Continue the canonical Next Step", "继续下一步学习行动")
+    .replace("Resolve the sync conflict", "选择要保留的同步版本")
+    .replace("Planned capacity needs a decision", "计划时间需要调整");
 }
 
 function AttentionRow({
@@ -239,7 +251,7 @@ function AttentionRow({
       />
       <span>
         <strong>{item.projectName}</strong>
-        <small>{item.label}</small>
+        <small>{attentionLabel(item.label)}</small>
       </span>
       <span aria-hidden="true">›</span>
     </button>
@@ -255,8 +267,8 @@ function PortfolioMovementMatrix({
     <article className="card portfolio-viz-card">
       <div className="section-heading">
         <div>
-          <span className="mini-label">Meaningful events only</span>
-          <h3>Portfolio movement</h3>
+          <span className="mini-label">练习、证据与复盘记录</span>
+          <h3>学习活动趋势</h3>
         </div>
       </div>
       <div className="movement-matrix">
@@ -292,13 +304,13 @@ function CapacityAllocation({
     >
       <div className="section-heading">
         <div>
-          <span className="mini-label">Planned allocation</span>
-          <h3>Next 2 weeks capacity</h3>
+          <span className="mini-label">计划时间分配</span>
+          <h3>未来两周的时间安排</h3>
         </div>
       </div>
       {capacity.warning && (
         <div className="capacity-warning" role="status">
-          <strong>Capacity exceeds availability</strong>
+          <strong>计划时间超过可用时间</strong>
           <span>{capacity.warning}</span>
         </div>
       )}
@@ -359,11 +371,12 @@ function DashboardHeader({
   return (
     <header className="portfolio-header">
       <div>
-        <p className="date-line">{formatDashboardDate(asOf, timeZone)}</p>
-        <h2>Your learning portfolio</h2>
-        <p>See where every active Project stands and what needs a decision.</p>
+        <p className="date-line">{Number.isFinite(Date.parse(asOf)) ? new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long", timeZone }).format(new Date(asOf)) : "日期暂不可用"}</p>
+        <h2>学习总览</h2>
+        <p>查看项目的下一步，在 iPhone 上练习，再回来整理计划与复盘。</p>
       </div>
       <div className="portfolio-period" aria-label="Dashboard period">
+        <span className="period-label">统计范围</span>
         {periods.map((item) => (
           <button
             className={period === item.id ? "active" : ""}
@@ -371,7 +384,7 @@ function DashboardHeader({
             key={item.id}
             onClick={() => setPeriod(item.id)}
           >
-            {item.label}
+            {attentionLabel(item.label)}
           </button>
         ))}
       </div>
@@ -394,7 +407,7 @@ function DashboardLoading({
     >
       <header className="portfolio-header portfolio-skeleton">
         <div>
-          <p className="date-line">{formatDashboardDate(asOf, timeZone)}</p>
+          <p className="date-line">{Number.isFinite(Date.parse(asOf)) ? new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long", timeZone }).format(new Date(asOf)) : "日期暂不可用"}</p>
           <span className="skeleton-line wide" />
           <span className="skeleton-line" />
         </div>
@@ -419,17 +432,17 @@ function DashboardLoading({
 function UnavailableVisualization({ section }: { section: DashboardSection }) {
   return (
     <article className="card portfolio-viz-card portfolio-unavailable-card">
-      <span className="mini-label">Partial snapshot</span>
-      <h3>{unavailableLabels[section]} data unavailable</h3>
-      <p>Available Project state remains visible; this section is not estimated.</p>
+      <span className="mini-label">部分数据缺失</span>
+      <h3>{unavailableLabels[section]}暂不可用</h3>
+      <p>已读取的项目仍可查看。此处缺少数据，暂不显示估算结果。</p>
     </article>
   );
 }
 
 function decisionActionLabel(item: AttentionItem) {
-  if (item.destination.section === "sync") return "Open Sync & conflicts";
-  if (item.kind === "review") return "Start Stage Review";
-  return "Open Project";
+  if (item.destination.section === "sync") return "查看同步问题";
+  if (item.kind === "review") return "查看复盘依据";
+  return "查看下一步";
 }
 
 export function PortfolioDashboard({
@@ -440,7 +453,7 @@ export function PortfolioDashboard({
   initialAsOf,
   initialTimeZone,
   snapshot,
-  provenance = "Demo data · deterministic fixture",
+  provenance = "示例数据 · 可浏览，不会写入个人记录",
 }: PortfolioDashboardProps) {
   const [period, setPeriod] = useState<DashboardPeriod>("now");
   const currentSnapshot = useMemo(
@@ -460,7 +473,7 @@ export function PortfolioDashboard({
   if (model.loadState === "loading") {
     return (
       <div>
-        <div className="portfolio-provenance" role="status">{provenance}</div>
+        {provenance && <div className="portfolio-provenance" role="status">{provenance}</div>}
         <DashboardLoading asOf={model.asOf} timeZone={initialTimeZone} />
       </div>
     );
@@ -469,7 +482,7 @@ export function PortfolioDashboard({
   if (model.loadState === "error") {
     return (
       <div className="portfolio-dashboard page-stack">
-        <div className="portfolio-provenance" role="status">{provenance}</div>
+        {provenance && <div className="portfolio-provenance" role="status">{provenance}</div>}
         <DashboardHeader
           asOf={model.asOf}
           timeZone={initialTimeZone}
@@ -477,11 +490,11 @@ export function PortfolioDashboard({
           setPeriod={setPeriod}
         />
         <section className="card portfolio-error-state" role="alert">
-          <span className="mini-label">Snapshot error</span>
-          <h3>Dashboard unavailable</h3>
+          <span className="mini-label">数据读取失败</span>
+          <h3>学习总览加载失败</h3>
           <p>{model.errorMessage}</p>
           <button className="secondary-button" onClick={openSync}>
-            Open Sync & conflicts
+            查看同步问题
           </button>
         </section>
       </div>
@@ -497,7 +510,7 @@ export function PortfolioDashboard({
 
   return (
     <div className="portfolio-dashboard page-stack">
-      <div className="portfolio-provenance" role="status">{provenance}</div>
+      {provenance && <div className="portfolio-provenance" role="status">{provenance}</div>}
       <DashboardHeader
         asOf={model.asOf}
         timeZone={initialTimeZone}
@@ -506,12 +519,12 @@ export function PortfolioDashboard({
       />
       {model.loadState === "partial" && (
         <section className="portfolio-state-banner partial" role="status">
-          <strong>Some Dashboard data is unavailable</strong>
+          <strong>部分数据暂不可用</strong>
           <span>
             {model.unavailableSections
               .map((section) => unavailableLabels[section])
               .join(", ")}{" "}
-            is shown as unavailable, not estimated.
+            暂不可用，已读取的项目仍可查看。
           </span>
         </section>
       )}
@@ -520,45 +533,59 @@ export function PortfolioDashboard({
           <div>
             <strong>{model.conflicts[0]?.label ?? "Sync conflict"}</strong>
             <span>
-              Last trusted Project data remains visible until you choose the
-              canonical state.
+              这里保留最近可信的数据。打开同步页面，选择要保留的版本。
             </span>
           </div>
           <button className="secondary-button" onClick={openSync}>
-            Open Sync & conflicts
+            查看同步问题
+          </button>
+        </section>
+      )}
+      {model.projects.length > 0 && (
+        <section className="start-here" aria-labelledby="start-here-heading">
+          <div>
+            <span className="mini-label">从这里开始</span>
+            <h3 id="start-here-heading">{primaryDecision ? "有一项学习决定等你确认" : "继续推进一个学习项目"}</h3>
+            <p>{primaryDecision?.projectName ?? model.projects[0].name}</p>
+            <small>{primaryDecision?.detail ?? model.projects[0].nextDecision.detail}</small>
+          </div>
+          <button className="primary-button" onClick={() => primaryDecision
+            ? openDestination(primaryDecision, openProject, openSync)
+            : openProject(model.projects[0].id, model.projects[0].nextDecision.tab)}>
+            {primaryDecision ? decisionActionLabel(primaryDecision) : "查看下一步"}<span aria-hidden="true"> →</span>
           </button>
         </section>
       )}
       <section className="portfolio-pulse" aria-label="Portfolio pulse">
         <PulseCard
-          label="Active Projects"
+          label="进行中的项目"
           value={`${model.pulse.activeProjects}`}
-          detail="Projects with an active Phase"
+          detail="正在推进的学习项目"
         />
         <PulseCard
-          label="Evidence ready"
+          label="已收集证据"
           value={evidenceValue}
-          detail="Expected Proof signals"
+          detail="已收集 / 本阶段目标"
         />
         <PulseCard
-          label="Reviews ready"
+          label="待复盘"
           value={`${model.pulse.reviewsReady}`}
-          detail="Decisions waiting"
+          detail="查看依据后再做决定"
         />
         <PulseCard
-          label="Needs attention"
+          label="待处理"
           value={`${model.pulse.needsAttention}`}
-          detail="Actionable items"
+          detail="含上方待确认事项"
           attention
         />
       </section>
       <div className="portfolio-main-grid">
         <section aria-labelledby="portfolio-projects-heading">
           <div className="section-heading">
-            <h3 id="portfolio-projects-heading">Active Projects</h3>
-            {model.hasMoreProjects && (
+            <h3 id="portfolio-projects-heading">进行中的项目</h3>
+            {model.totalActiveProjects > 0 && (
               <button className="text-button" onClick={openProjects}>
-                View all {model.totalActiveProjects}
+                查看全部 {model.totalActiveProjects} 个项目
               </button>
             )}
           </div>
@@ -575,16 +602,16 @@ export function PortfolioDashboard({
             </div>
           ) : (
             <div className="portfolio-empty-state">
-              <h3>No active Projects</h3>
+              <h3>还没有进行中的项目</h3>
               <p>
-                Paused, Completed, and Abandoned Projects remain in the archive.
+                可先查看已有项目，或在 iPhone 上创建第一个学习项目。
               </p>
               <div className="portfolio-empty-actions">
                 <button className="primary-button" onClick={openProjects}>
-                  Create Project
+                  查看项目
                 </button>
                 <button className="secondary-button" onClick={openProjects}>
-                  View archive
+                  查看全部项目
                 </button>
               </div>
             </div>
@@ -592,40 +619,14 @@ export function PortfolioDashboard({
         </section>
         <aside aria-labelledby="portfolio-decisions-heading">
           <div className="section-heading">
-            <h3 id="portfolio-decisions-heading">Decisions</h3>
+            <h3 id="portfolio-decisions-heading">待处理事项</h3>
             <button className="text-button" onClick={openReviews}>
-              Review inbox
+              全部复盘
             </button>
           </div>
-          {primaryDecision ? (
-            <article className="portfolio-decision-card">
-              <span className="mini-label">
-                {primaryDecision.kind === "review"
-                  ? "Review ready"
-                  : "Decision needed"}
-              </span>
-              <h3>{primaryDecision.projectName}</h3>
-              <p>{primaryDecision.detail}</p>
-              <button
-                onClick={() =>
-                  openDestination(primaryDecision, openProject, openSync)
-                }
-              >
-                {decisionActionLabel(primaryDecision)}
-              </button>
-              <small>
-                {primaryDecision.kind === "review"
-                  ? "Nothing advances until you publish."
-                  : "The Dashboard remains read-only."}
-              </small>
-            </article>
-          ) : (
-            <p className="portfolio-empty-note">
-              No explicit decision is waiting.
-            </p>
-          )}
+          <p className="section-description">打开一项，查看原因和可采取的行动。</p>
           <article className="portfolio-attention-card">
-            <h3>Needs attention</h3>
+            <span className="sr-only">待处理</span>
             {model.attention.length > 0 ? (
               model.attention.map((item) => (
                 <AttentionRow
@@ -637,14 +638,16 @@ export function PortfolioDashboard({
               ))
             ) : (
               <p className="portfolio-empty-note">
-                No additional attention items.
+                目前没有其他待处理事项。
               </p>
             )}
           </article>
         </aside>
       </div>
       {model.loadState !== "empty" && (
-        <section className="portfolio-lower-grid">
+        <details className="portfolio-insights">
+          <summary>查看学习趋势与时间安排<span>按当前统计范围展示</span></summary>
+          <section className="portfolio-lower-grid">
           {model.movement ? (
             <PortfolioMovementMatrix movement={model.movement} />
           ) : (
@@ -655,7 +658,8 @@ export function PortfolioDashboard({
           ) : (
             <UnavailableVisualization section="capacity" />
           )}
-        </section>
+          </section>
+        </details>
       )}
     </div>
   );

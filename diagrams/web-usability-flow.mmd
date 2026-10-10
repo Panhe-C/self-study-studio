@@ -1,0 +1,18 @@
+flowchart TD
+    A[学习总览<br/>查看数据来源与推荐下一步] --> B[查看复盘依据<br/>或查看下一步]
+    A --> C[学习项目<br/>按名称、领域或目标搜索]
+    A --> D[按需展开<br/>学习趋势与时间安排]
+    B --> E[项目详情]
+    C --> E
+    E --> F[概览 / 学习计划 / 练习安排<br/>学习证据 / 学习记录 / 复盘]
+    E --> C
+    F --> G[调整计划<br/>保存本地草稿]
+    G --> H{已连接个人记录<br/>且读取现有版本?}
+    H -->|是| I[确认并启用新计划<br/>检查云端版本后保存]
+    H -->|否| J[连接个人记录<br/>到数据与同步检查]
+    A --> J
+    F --> K[iPhone<br/>新建项目、练习、添加证据、发布复盘]
+    classDef primary fill:#ebf2e9,stroke:#286650,color:#202e2b
+    classDef secondary fill:#f5f6f3,stroke:#cbd4cc,color:#202e2b
+    class A,B,E primary
+    class C,D,F,G,H,I,J,K secondary
