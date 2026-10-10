@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Self Study Studio — Learning Workspace",
+  title: "Self Study Studio — 个人学习工作台",
   description:
-    "Plan deliberately, practice on iPhone, and review evidence in one personal learning journal.",
+    "查看学习项目与下一步，整理计划，在 iPhone 上练习并记录，再回到网页查看学习证据与复盘。",
   icons: {
     icon: "/app-icon.png",
     shortcut: "/app-icon.png",
@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <head>
         <script
           defer

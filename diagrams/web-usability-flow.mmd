@@ -1,0 +1,19 @@
+flowchart TD
+    A[学习总览<br/>今天先做这一件事] --> B[推荐事项<br/>唯一的绿色按钮]
+    A --> S[三步用法<br/>看下一步 → 去 iPhone 练习 → 回来复盘]
+    A --> C[学习项目<br/>按名称、领域或目标搜索]
+    A --> D[按需展开<br/>学习趋势、时间安排与统计范围]
+    B --> E[项目详情<br/>面包屑：学习项目 / 项目名]
+    C --> E
+    E --> F[概览顶部的下一步<br/>每个标签一句用途说明]
+    E --> C
+    F --> G[调整计划<br/>保存本地草稿]
+    G --> H{已连接个人记录<br/>且读取现有版本?}
+    H -->|是| I[确认并启用新计划<br/>检查云端版本后保存]
+    H -->|否| J[数据与同步<br/>状态条：如何连接个人记录]
+    A --> J
+    F --> K[iPhone<br/>新建项目、练习、添加证据、发布复盘]
+    classDef primary fill:#e3eee6,stroke:#22614b,color:#1f2a26
+    classDef secondary fill:#fffdf8,stroke:#cfc7b6,color:#1f2a26
+    class A,B,E,F primary
+    class S,C,D,G,H,I,J,K secondary

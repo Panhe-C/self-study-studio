@@ -18,6 +18,7 @@ Personal Learning Journal is a SwiftUI-first, evidence-first learning system. A 
 - [Canva 可导入演示稿](docs/product-guide/self-study-studio-product-deck.pptx)
 - [Canva 可导入 A4 手册](docs/product-guide/self-study-studio-product-guide-a4.pdf)
 - [产品功能说明图](diagrams/PRODUCT_FUNCTION_DIAGRAMS.md)
+- [Web 界面改版与操作路径](docs/WEB_INTERFACE_DESIGN.md)
 - [产品功能手册设计](docs/superpowers/specs/2026-07-12-product-guide-design.md)
 
 When user-visible behavior changes, update the affected diagram source and regenerate its SVG and PNG exports.

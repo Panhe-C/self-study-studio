@@ -4,8 +4,8 @@ import { useMemo, useState, type CSSProperties } from "react";
 import {
   createDashboardSnapshot,
   derivePortfolioDashboard,
-  formatDashboardDate,
   type AttentionItem,
+  type DashboardDestination,
   type DashboardPeriod,
   type DashboardSection,
   type DashboardSnapshot,
@@ -26,49 +26,23 @@ type PortfolioDashboardProps = {
 };
 
 const periods: Array<{ id: DashboardPeriod; label: string }> = [
-  { id: "now", label: "Now" },
-  { id: "4w", label: "4 weeks" },
-  { id: "12w", label: "12 weeks" },
+  { id: "now", label: "本周" },
+  { id: "4w", label: "近 4 周" },
+  { id: "12w", label: "近 12 周" },
 ];
 
 const unavailableLabels: Record<DashboardSection, string> = {
-  evidence: "Proof readiness",
-  activity: "Meaningful activity",
-  capacity: "Capacity",
+  evidence: "学习证据",
+  activity: "学习活动",
+  capacity: "时间安排",
 };
-
-function weekLabel(index: number, bucketCount: number) {
-  const weeksAgo = bucketCount - 1 - index;
-  if (weeksAgo === 0) return "This week";
-  return `${weeksAgo} week${weeksAgo === 1 ? "" : "s"} ago`;
-}
 
 function movementSummary(
   row: NonNullable<PortfolioDashboardDataModel["movement"]>[number],
 ) {
-  return `${row.projectName} weekly movement: ${row.buckets
-    .map((bucket) => `${bucket.label}: ${bucket.count}`)
-    .join("; ")} meaningful events.`;
-}
-
-function PulseCard({
-  label,
-  value,
-  detail,
-  attention = false,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  attention?: boolean;
-}) {
-  return (
-    <article className={`portfolio-pulse-card${attention ? " attention" : ""}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </article>
-  );
+  return `${row.projectName} 每周学习记录：${row.buckets
+    .map((bucket) => `${bucket.label} ${bucket.count} 条`)
+    .join("；")}。`;
 }
 
 function openDestination(
@@ -83,6 +57,20 @@ function openDestination(
   openProject(item.projectId, item.destination.tab);
 }
 
+function destinationActionLabel(destination: DashboardDestination, kind?: string) {
+  if (destination.section === "sync") return "查看同步问题";
+  if (kind === "review" || destination.tab === "reviews") return "查看复盘依据";
+  if (destination.tab === "proof") return "查看学习证据";
+  if (destination.tab === "practice") return "查看练习安排";
+  if (destination.tab === "plan") return "查看计划";
+  if (destination.tab === "trail") return "查看学习记录";
+  return "查看下一步";
+}
+
+function statusLabel(status: ProjectDashboardState["status"]) {
+  return status === "Active" ? "进行中" : status === "Paused" ? "已暂停" : status === "Completed" ? "已完成" : "已停止";
+}
+
 function PortfolioProjectCard({
   project,
   openProject,
@@ -92,131 +80,89 @@ function PortfolioProjectCard({
   openProject: PortfolioDashboardProps["openProject"];
   openSync: PortfolioDashboardProps["openSync"];
 }) {
-  const maxActivity = Math.max(...(project.activity ?? []), 1);
-  const activitySummary = project.activity
-    ? `${project.name} meaningful activity over ${project.activity.length} weeks: ${project.activity
-        .map(
-          (count, index) =>
-            `${weekLabel(index, project.activity?.length ?? 0)}: ${count}`,
-        )
-        .join("; ")} meaningful events.`
-    : "";
   const evidencePercent =
     !project.evidence || project.evidence.expected === 0
       ? 0
-      : Math.min(
-          100,
-          (project.evidence.ready / project.evidence.expected) * 100,
-        );
+      : Math.min(100, (project.evidence.ready / project.evidence.expected) * 100);
 
   return (
-    <article className="portfolio-project-card">
+    <article
+      className="portfolio-project-card"
+      style={{ "--project-accent": project.accent } as CSSProperties}
+    >
       <header>
         <div className="portfolio-project-identity">
-          <span
-            className="portfolio-token"
-            style={{ "--project-accent": project.accent } as CSSProperties}
-          >
-            {project.token}
-          </span>
+          <span className="portfolio-token" aria-hidden="true">{project.token}</span>
           <div>
-            <h4>{project.name}</h4>
-            <p>
-              {project.area} · {project.phaseWindow}
-            </p>
+            <h3>{project.name}</h3>
+            <p>{project.area} · {project.phaseWindow}</p>
           </div>
         </div>
-        <span
-          className={`portfolio-state${project.attention ? " attention" : ""}`}
-        >
-          {project.status}
+        <span className={`portfolio-state${project.attention ? " attention" : ""}`}>
+          {statusLabel(project.status)}
         </span>
       </header>
-      <div className="portfolio-project-body">
+      <dl className="portfolio-project-facts">
         <div>
-          <span className="mini-label">Active Phase</span>
-          <h5>{project.activePhase?.title ?? "No active Phase"}</h5>
-          <p className="portfolio-outcome">{project.outcome}</p>
-          <div className="portfolio-expected-proof">
-            <span className="mini-label">Expected Proof</span>
-            <p>{project.expectedProof}</p>
-          </div>
-          {project.evidence ? (
-            <div className="portfolio-evidence">
-              <div>
-                <span>Proof readiness</span>
-                <strong>
-                  {project.evidence.ready} of {project.evidence.expected} signals
-                  ready
-                </strong>
-              </div>
-              <div
-                className="portfolio-evidence-track"
-                aria-label={`${project.evidence.ready} of ${project.evidence.expected} expected Proof signals ready`}
-              >
-                <span style={{ width: `${evidencePercent}%` }} />
-              </div>
-            </div>
-          ) : (
-            <p className="portfolio-unavailable-note">
-              Proof readiness unavailable
-            </p>
-          )}
+          <dt>当前阶段</dt>
+          <dd>{project.activePhase?.title ?? "尚无进行中的阶段"}</dd>
         </div>
-        <div className="portfolio-activity">
-          <span className="mini-label">Meaningful activity</span>
-          {project.activity ? (
-            <>
-              <div className="portfolio-sparkline" aria-hidden="true">
-                {project.activity.map((count, index) => (
-                  <span
-                    key={index}
-                    data-activity-count={count}
-                    style={{
-                      height: `${count === 0 ? 0 : (count / maxActivity) * 100}%`,
-                    }}
-                  />
-                ))}
-              </div>
-              <p className="sr-only">{activitySummary}</p>
-              <small>
-                {weekLabel(0, project.activity.length)}{" "}
-                <span>This week</span>
-              </small>
-            </>
-          ) : (
-            <p className="portfolio-unavailable-note">
-              Meaningful activity unavailable
-            </p>
-          )}
+        <div>
+          <dt>本阶段的完成标准</dt>
+          <dd className="portfolio-expected-proof">{project.expectedProof}</dd>
         </div>
-      </div>
+        <div>
+          <dt>学习证据</dt>
+          <dd>
+            {project.evidence ? (
+              <span className="portfolio-evidence">
+                <strong>{project.evidence.ready} / {project.evidence.expected} 项</strong>
+                <span
+                  className="portfolio-evidence-track"
+                  role="img"
+                  aria-label={`已收集 ${project.evidence.ready} 项，本阶段需要 ${project.evidence.expected} 项`}
+                >
+                  <span style={{ width: `${evidencePercent}%` }} />
+                </span>
+              </span>
+            ) : (
+              <span className="portfolio-unavailable-note">学习证据暂不可用</span>
+            )}
+          </dd>
+        </div>
+      </dl>
       <footer>
         <div>
-          <span className="mini-label">Next decision</span>
-          <strong>{project.nextDecision.label}</strong>
+          <span className="mini-label">下一步</span>
+          <strong>{attentionLabel(project.nextDecision.label)}</strong>
           <small>{project.nextDecision.detail}</small>
         </div>
         <button
           className="secondary-button"
           onClick={() =>
             openDestination(
-              {
-                projectId: project.id,
-                destination: project.nextDecision.destination,
-              },
+              { projectId: project.id, destination: project.nextDecision.destination },
               openProject,
               openSync,
             )
           }
         >
-          {project.nextDecision.destination.section === "sync"
-            ? "Open Sync & conflicts"
-            : "Open Project"}
+          {destinationActionLabel(project.nextDecision.destination, project.nextDecision.kind)}
         </button>
       </footer>
     </article>
   );
+}
+
+function attentionLabel(label: string) {
+  return label.replace("Stage Review is ready", "本阶段可以复盘了")
+    .replace("Learning log needs attention", "有练习模块需要补充")
+    .replace("Expected Proof gap at the Phase boundary", "阶段结束前仍需补充学习证据")
+    .replace(/(\d+) Carryover awaiting a decision/, "$1 项未完成任务需要确认")
+    .replace(/No meaningful activity for (\d+) days/, "已有 $1 天没有新的学习记录")
+    .replace("Continue the canonical Next Step", "继续下一步学习行动")
+    .replace("Resolve the sync conflict", "选择要保留的同步版本")
+    .replace("Planned capacity needs a decision", "计划时间需要调整");
 }
 
 function AttentionRow({
@@ -239,7 +185,7 @@ function AttentionRow({
       />
       <span>
         <strong>{item.projectName}</strong>
-        <small>{item.label}</small>
+        <small>{attentionTitle(item)}</small>
       </span>
       <span aria-hidden="true">›</span>
     </button>
@@ -255,8 +201,8 @@ function PortfolioMovementMatrix({
     <article className="card portfolio-viz-card">
       <div className="section-heading">
         <div>
-          <span className="mini-label">Meaningful events only</span>
-          <h3>Portfolio movement</h3>
+          <span className="mini-label">颜色越深，当周的练习、证据和复盘记录越多</span>
+          <h3>学习活动趋势</h3>
         </div>
       </div>
       <div className="movement-matrix">
@@ -292,13 +238,13 @@ function CapacityAllocation({
     >
       <div className="section-heading">
         <div>
-          <span className="mini-label">Planned allocation</span>
-          <h3>Next 2 weeks capacity</h3>
+          <span className="mini-label">计划时间分配</span>
+          <h3>未来两周的时间安排</h3>
         </div>
       </div>
       {capacity.warning && (
         <div className="capacity-warning" role="status">
-          <strong>Capacity exceeds availability</strong>
+          <strong>计划时间超过可用时间</strong>
           <span>{capacity.warning}</span>
         </div>
       )}
@@ -329,14 +275,14 @@ function CapacityAllocation({
           <li key={segment.projectId}>
             <i style={{ background: segment.color }} />
             <span>{segment.label}</span>
-            <strong>{segment.minutes}m</strong>
+            <strong>{segment.minutes} 分钟</strong>
           </li>
         ))}
         {capacity.warningSegment && (
           <li className="capacity-overage-legend">
             <i />
             <span>{capacity.warningSegment.label}</span>
-            <strong>Over capacity by {capacity.warningSegment.minutes}m</strong>
+            <strong>超出 {capacity.warningSegment.minutes} 分钟</strong>
           </li>
         )}
       </ul>
@@ -345,73 +291,77 @@ function CapacityAllocation({
   );
 }
 
-function DashboardHeader({
-  asOf,
-  timeZone,
-  period,
-  setPeriod,
-}: {
-  asOf: string;
-  timeZone: string;
-  period: DashboardPeriod;
-  setPeriod: (period: DashboardPeriod) => void;
-}) {
+function formatDate(asOf: string, timeZone: string) {
+  return Number.isFinite(Date.parse(asOf))
+    ? new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long", timeZone }).format(new Date(asOf))
+    : "日期暂不可用";
+}
+
+function DashboardHeader({ asOf, timeZone }: { asOf: string; timeZone: string }) {
   return (
     <header className="portfolio-header">
-      <div>
-        <p className="date-line">{formatDashboardDate(asOf, timeZone)}</p>
-        <h2>Your learning portfolio</h2>
-        <p>See where every active Project stands and what needs a decision.</p>
-      </div>
-      <div className="portfolio-period" aria-label="Dashboard period">
-        {periods.map((item) => (
-          <button
-            className={period === item.id ? "active" : ""}
-            aria-pressed={period === item.id}
-            key={item.id}
-            onClick={() => setPeriod(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <p className="date-line">{formatDate(asOf, timeZone)}</p>
+      <h2>今天先做这一件事</h2>
     </header>
   );
 }
 
-function DashboardLoading({
-  asOf,
-  timeZone,
-}: {
-  asOf: string;
-  timeZone: string;
-}) {
+const usageSteps = [
+  { title: "看下一步", detail: "在网页上确认今天要做什么" },
+  { title: "去 iPhone 练习", detail: "练习、录音、拍照或记笔记" },
+  { title: "回来复盘", detail: "对照证据，决定下一阶段" },
+];
+
+function UsageSteps() {
   return (
-    <div
-      className="portfolio-dashboard page-stack"
-      aria-busy="true"
-      aria-label="Loading Dashboard"
-    >
-      <header className="portfolio-header portfolio-skeleton">
-        <div>
-          <p className="date-line">{formatDashboardDate(asOf, timeZone)}</p>
-          <span className="skeleton-line wide" />
-          <span className="skeleton-line" />
-        </div>
-      </header>
-      <section className="portfolio-pulse portfolio-skeleton" aria-hidden="true">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div className="portfolio-pulse-card" key={index} />
+    <section className="usage-steps" aria-labelledby="usage-steps-heading">
+      <h3 id="usage-steps-heading" className="sr-only">使用方法</h3>
+      <ol>
+        {usageSteps.map((step, index) => (
+          <li key={step.title}>
+            <span aria-hidden="true">{index + 1}</span>
+            <div><strong>{step.title}</strong><small>{step.detail}</small></div>
+          </li>
         ))}
+      </ol>
+    </section>
+  );
+}
+
+function PeriodSwitch({ period, setPeriod }: { period: DashboardPeriod; setPeriod: (period: DashboardPeriod) => void }) {
+  return (
+    <div className="portfolio-period" role="group" aria-label="Dashboard period">
+      <span className="period-label">统计范围</span>
+      {periods.map((item) => (
+        <button
+          className={period === item.id ? "active" : ""}
+          aria-pressed={period === item.id}
+          key={item.id}
+          onClick={() => setPeriod(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DashboardLoading({ asOf, timeZone }: { asOf: string; timeZone: string }) {
+  return (
+    <div className="portfolio-dashboard page-stack" aria-busy="true" aria-label="正在读取学习总览">
+      <header className="portfolio-header portfolio-skeleton">
+        <p className="date-line">{formatDate(asOf, timeZone)}</p>
+        <span className="skeleton-line wide" />
+      </header>
+      <section className="start-here portfolio-skeleton" aria-hidden="true">
+        <span className="skeleton-line wide" />
+        <span className="skeleton-line" />
       </section>
-      <section
-        className="portfolio-project-card portfolio-skeleton"
-        aria-hidden="true"
-      >
+      <section className="portfolio-project-card portfolio-skeleton" aria-hidden="true">
         <span className="skeleton-line wide" />
         <span className="skeleton-block" />
       </section>
-      <p className="sr-only">Loading portfolio snapshot.</p>
+      <p className="sr-only">正在读取学习总览。</p>
     </div>
   );
 }
@@ -419,17 +369,23 @@ function DashboardLoading({
 function UnavailableVisualization({ section }: { section: DashboardSection }) {
   return (
     <article className="card portfolio-viz-card portfolio-unavailable-card">
-      <span className="mini-label">Partial snapshot</span>
-      <h3>{unavailableLabels[section]} data unavailable</h3>
-      <p>Available Project state remains visible; this section is not estimated.</p>
+      <span className="mini-label">部分数据缺失</span>
+      <h3>{unavailableLabels[section]}暂不可用</h3>
+      <p>已读取的项目仍可查看。此处缺少数据，暂不显示估算结果。</p>
     </article>
   );
 }
 
-function decisionActionLabel(item: AttentionItem) {
-  if (item.destination.section === "sync") return "Open Sync & conflicts";
-  if (item.kind === "review") return "Start Stage Review";
-  return "Open Project";
+const attentionTitles: Partial<Record<AttentionItem["kind"], string>> = {
+  conflict: "选择要保留的同步版本",
+  review: "本阶段可以复盘了",
+  proof: "阶段结束前仍需补充学习证据",
+  capacity: "计划时间超出可用时间",
+  practice: "有练习模块需要补充",
+};
+
+function attentionTitle(item: AttentionItem) {
+  return attentionTitles[item.kind] ?? attentionLabel(item.label);
 }
 
 export function PortfolioDashboard({
@@ -440,16 +396,11 @@ export function PortfolioDashboard({
   initialAsOf,
   initialTimeZone,
   snapshot,
-  provenance = "Demo data · deterministic fixture",
+  provenance = "示例数据 · 可浏览，不会写入个人记录",
 }: PortfolioDashboardProps) {
   const [period, setPeriod] = useState<DashboardPeriod>("now");
   const currentSnapshot = useMemo(
-    () =>
-      snapshot ??
-      createDashboardSnapshot({
-        asOf: initialAsOf,
-        demos: projectDemos,
-      }),
+    () => snapshot ?? createDashboardSnapshot({ asOf: initialAsOf, demos: projectDemos }),
     [initialAsOf, snapshot],
   );
   const model = useMemo(
@@ -460,7 +411,7 @@ export function PortfolioDashboard({
   if (model.loadState === "loading") {
     return (
       <div>
-        <div className="portfolio-provenance" role="status">{provenance}</div>
+        {provenance && <div className="portfolio-provenance" role="status">{provenance}</div>}
         <DashboardLoading asOf={model.asOf} timeZone={initialTimeZone} />
       </div>
     );
@@ -469,193 +420,137 @@ export function PortfolioDashboard({
   if (model.loadState === "error") {
     return (
       <div className="portfolio-dashboard page-stack">
-        <div className="portfolio-provenance" role="status">{provenance}</div>
-        <DashboardHeader
-          asOf={model.asOf}
-          timeZone={initialTimeZone}
-          period={period}
-          setPeriod={setPeriod}
-        />
+        {provenance && <div className="portfolio-provenance" role="status">{provenance}</div>}
+        <DashboardHeader asOf={model.asOf} timeZone={initialTimeZone} />
         <section className="card portfolio-error-state" role="alert">
-          <span className="mini-label">Snapshot error</span>
-          <h3>Dashboard unavailable</h3>
+          <span className="mini-label">数据读取失败</span>
+          <h3>学习总览加载失败</h3>
           <p>{model.errorMessage}</p>
-          <button className="secondary-button" onClick={openSync}>
-            Open Sync & conflicts
-          </button>
+          <button className="primary-button" onClick={openSync}>查看同步问题</button>
         </section>
       </div>
     );
   }
 
   const primaryDecision = model.decisions[0];
-  const evidenceValue =
-    model.pulse.evidenceReady === null ||
-    model.pulse.evidenceExpected === null
-      ? "Unavailable"
-      : `${model.pulse.evidenceReady} / ${model.pulse.evidenceExpected}`;
+  const fallbackProject = model.projects[0];
+  const evidenceSummary =
+    model.pulse.evidenceReady === null || model.pulse.evidenceExpected === null
+      ? "学习证据暂不可用"
+      : `学习证据 ${model.pulse.evidenceReady} / ${model.pulse.evidenceExpected} 项`;
 
   return (
     <div className="portfolio-dashboard page-stack">
-      <div className="portfolio-provenance" role="status">{provenance}</div>
-      <DashboardHeader
-        asOf={model.asOf}
-        timeZone={initialTimeZone}
-        period={period}
-        setPeriod={setPeriod}
-      />
+      {provenance && <div className="portfolio-provenance" role="status">{provenance}</div>}
+      <DashboardHeader asOf={model.asOf} timeZone={initialTimeZone} />
       {model.loadState === "partial" && (
         <section className="portfolio-state-banner partial" role="status">
-          <strong>Some Dashboard data is unavailable</strong>
+          <strong>部分数据暂不可用</strong>
           <span>
-            {model.unavailableSections
-              .map((section) => unavailableLabels[section])
-              .join(", ")}{" "}
-            is shown as unavailable, not estimated.
+            {model.unavailableSections.map((section) => unavailableLabels[section]).join("、")}
+            暂不可用，已读取的项目仍可查看。
           </span>
         </section>
       )}
       {model.loadState === "conflict" && (
         <section className="portfolio-state-banner conflict" role="alert">
           <div>
-            <strong>{model.conflicts[0]?.label ?? "Sync conflict"}</strong>
-            <span>
-              Last trusted Project data remains visible until you choose the
-              canonical state.
-            </span>
+            <strong>{model.conflicts[0]?.label ?? "同步冲突"}</strong>
+            <span>这里保留最近可信的数据。打开同步页面，选择要保留的版本。</span>
           </div>
-          <button className="secondary-button" onClick={openSync}>
-            Open Sync & conflicts
-          </button>
+          <button className="secondary-button" onClick={openSync}>查看同步问题</button>
         </section>
       )}
-      <section className="portfolio-pulse" aria-label="Portfolio pulse">
-        <PulseCard
-          label="Active Projects"
-          value={`${model.pulse.activeProjects}`}
-          detail="Projects with an active Phase"
-        />
-        <PulseCard
-          label="Evidence ready"
-          value={evidenceValue}
-          detail="Expected Proof signals"
-        />
-        <PulseCard
-          label="Reviews ready"
-          value={`${model.pulse.reviewsReady}`}
-          detail="Decisions waiting"
-        />
-        <PulseCard
-          label="Needs attention"
-          value={`${model.pulse.needsAttention}`}
-          detail="Actionable items"
-          attention
-        />
-      </section>
-      <div className="portfolio-main-grid">
-        <section aria-labelledby="portfolio-projects-heading">
-          <div className="section-heading">
-            <h3 id="portfolio-projects-heading">Active Projects</h3>
-            {model.hasMoreProjects && (
-              <button className="text-button" onClick={openProjects}>
-                View all {model.totalActiveProjects}
-              </button>
-            )}
+      {fallbackProject ? (
+        <section className="start-here" aria-labelledby="start-here-heading">
+          <div className="start-here-copy">
+            <span className="start-here-kicker">
+              <b>推荐</b>
+              {primaryDecision?.projectName ?? fallbackProject.name}
+            </span>
+            <h3 id="start-here-heading">
+              {primaryDecision ? attentionTitle(primaryDecision) : "继续下一步学习行动"}
+            </h3>
+            <p>{primaryDecision?.detail ?? fallbackProject.nextDecision.detail}</p>
           </div>
-          {model.projects.length > 0 ? (
+          <div className="start-here-action">
+            <button
+              className="primary-button"
+              onClick={() =>
+                primaryDecision
+                  ? openDestination(primaryDecision, openProject, openSync)
+                  : openProject(fallbackProject.id, fallbackProject.nextDecision.tab)
+              }
+            >
+              {primaryDecision
+                ? destinationActionLabel(primaryDecision.destination, primaryDecision.kind)
+                : "查看下一步"}
+              <span aria-hidden="true"> →</span>
+            </button>
+            <small>先查看依据，决定前不会修改计划。</small>
+          </div>
+        </section>
+      ) : (
+        <section className="portfolio-empty-state">
+          <h3>还没有进行中的项目</h3>
+          <p>可先查看已有项目，或在 iPhone 上创建第一个学习项目。</p>
+          <div className="portfolio-empty-actions">
+            <button className="primary-button" onClick={openProjects}>查看项目</button>
+            <button className="secondary-button" onClick={openSync}>检查数据连接</button>
+          </div>
+        </section>
+      )}
+      <UsageSteps />
+      {model.projects.length > 0 && (
+        <div className="portfolio-main-grid">
+          <section aria-labelledby="portfolio-projects-heading">
+            <div className="section-heading">
+              <div>
+                <h2 id="portfolio-projects-heading">进行中的项目</h2>
+                <p className="section-summary" aria-label="Portfolio pulse">
+                  {model.pulse.activeProjects} 个进行中 · {evidenceSummary} · {model.pulse.reviewsReady} 项待复盘
+                </p>
+              </div>
+              <button className="text-button" onClick={openProjects}>
+                查看全部 {model.totalActiveProjects} 个项目
+              </button>
+            </div>
             <div className="portfolio-project-list">
               {model.projects.map((project) => (
-                <PortfolioProjectCard
-                  project={project}
-                  openProject={openProject}
-                  openSync={openSync}
-                  key={project.id}
-                />
+                <PortfolioProjectCard project={project} openProject={openProject} openSync={openSync} key={project.id} />
               ))}
             </div>
-          ) : (
-            <div className="portfolio-empty-state">
-              <h3>No active Projects</h3>
-              <p>
-                Paused, Completed, and Abandoned Projects remain in the archive.
-              </p>
-              <div className="portfolio-empty-actions">
-                <button className="primary-button" onClick={openProjects}>
-                  Create Project
-                </button>
-                <button className="secondary-button" onClick={openProjects}>
-                  View archive
-                </button>
-              </div>
+          </section>
+          <aside aria-labelledby="portfolio-decisions-heading">
+            <div className="section-heading">
+              <h2 id="portfolio-decisions-heading">
+                其他待处理 <span className="heading-count">{model.attention.length}</span>
+              </h2>
+              <button className="text-button" onClick={openReviews}>全部复盘</button>
             </div>
-          )}
-        </section>
-        <aside aria-labelledby="portfolio-decisions-heading">
-          <div className="section-heading">
-            <h3 id="portfolio-decisions-heading">Decisions</h3>
-            <button className="text-button" onClick={openReviews}>
-              Review inbox
-            </button>
-          </div>
-          {primaryDecision ? (
-            <article className="portfolio-decision-card">
-              <span className="mini-label">
-                {primaryDecision.kind === "review"
-                  ? "Review ready"
-                  : "Decision needed"}
-              </span>
-              <h3>{primaryDecision.projectName}</h3>
-              <p>{primaryDecision.detail}</p>
-              <button
-                onClick={() =>
-                  openDestination(primaryDecision, openProject, openSync)
-                }
-              >
-                {decisionActionLabel(primaryDecision)}
-              </button>
-              <small>
-                {primaryDecision.kind === "review"
-                  ? "Nothing advances until you publish."
-                  : "The Dashboard remains read-only."}
-              </small>
-            </article>
-          ) : (
-            <p className="portfolio-empty-note">
-              No explicit decision is waiting.
-            </p>
-          )}
-          <article className="portfolio-attention-card">
-            <h3>Needs attention</h3>
-            {model.attention.length > 0 ? (
-              model.attention.map((item) => (
-                <AttentionRow
-                  item={item}
-                  openProject={openProject}
-                  openSync={openSync}
-                  key={item.id}
-                />
-              ))
-            ) : (
-              <p className="portfolio-empty-note">
-                No additional attention items.
-              </p>
-            )}
-          </article>
-        </aside>
-      </div>
+            <div className="portfolio-attention-card">
+              {model.attention.length > 0 ? (
+                model.attention.map((item) => (
+                  <AttentionRow item={item} openProject={openProject} openSync={openSync} key={item.id} />
+                ))
+              ) : (
+                <p className="portfolio-empty-note">目前没有其他待处理事项。</p>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
       {model.loadState !== "empty" && (
-        <section className="portfolio-lower-grid">
-          {model.movement ? (
-            <PortfolioMovementMatrix movement={model.movement} />
-          ) : (
-            <UnavailableVisualization section="activity" />
-          )}
-          {model.capacity ? (
-            <CapacityAllocation capacity={model.capacity} />
-          ) : (
-            <UnavailableVisualization section="capacity" />
-          )}
-        </section>
+        <details className="portfolio-insights">
+          <summary>查看学习趋势与时间安排<span>可选：判断投入是否均衡</span></summary>
+          <div className="portfolio-insights-body">
+            <PeriodSwitch period={period} setPeriod={setPeriod} />
+            <section className="portfolio-lower-grid">
+              {model.movement ? <PortfolioMovementMatrix movement={model.movement} /> : <UnavailableVisualization section="activity" />}
+              {model.capacity ? <CapacityAllocation capacity={model.capacity} /> : <UnavailableVisualization section="capacity" />}
+            </section>
+          </div>
+        </details>
       )}
     </div>
   );
