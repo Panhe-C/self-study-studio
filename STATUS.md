@@ -4,7 +4,7 @@
 任务状态：已完成（实现与本地验证完成，待评审和用户验收）
 当前任务：按《Don't Make Me Think》与《写给大家看的设计书》重整 Web 的阅读层级、导航和操作提示，让首次使用者识别用途与下一步。
 工作分支：feat/web-usability-redesign
-关联 PR：推送后创建
+关联 PR：https://github.com/Panhe-C/self-study-studio/pull/4
 
 ## 已完成
 - `WebWorkspace/app/portfolio-dashboard.tsx`：首屏推荐行动、轻量项目摘要、明确的跳转按钮、按需展开的学习活动与时间安排。
