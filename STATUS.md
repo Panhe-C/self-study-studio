@@ -4,7 +4,7 @@
 任务状态：已完成（视频已生成并验证，待用户验收画面与文案）
 当前任务：生成约 50 秒的产品使用流程演示视频（MP4）
 工作分支：docs/product-demo-video
-关联 PR：尚未创建
+关联 PR：https://github.com/Panhe-C/self-study-studio/pull/5
 
 ## 已完成
 - `scripts/generate-demo-video.py`：PIL 逐帧渲染 + ffmpeg 编码的竖屏演示视频生成脚本；场景、字幕与运镜关键帧集中在 `SCENES` 列表，支持 `--frames` 抽帧预览与 `--output` 改输出路径。
