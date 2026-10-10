@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import {
   cloudKitConfig,
   configureCloudKit,
@@ -48,20 +48,34 @@ import {
   type WebSyncConflict,
 } from "../lib/sync-conflicts";
 
-const navigation: Array<{ id: WorkspaceSection; label: string; glyph: string }> = [
-  { id: "dashboard", label: "学习总览", glyph: "⌂" },
-  { id: "projects", label: "学习项目", glyph: "□" },
-  { id: "reviews", label: "复盘", glyph: "◇" },
-  { id: "sync", label: "数据与同步", glyph: "↻" },
+const navigation: Array<{ id: WorkspaceSection; label: string; hint: string }> = [
+  { id: "dashboard", label: "学习总览", hint: "今天先做什么" },
+  { id: "projects", label: "学习项目", hint: "计划、练习与证据" },
+  { id: "reviews", label: "复盘", hint: "对照证据做决定" },
+  { id: "sync", label: "数据与同步", hint: "连接 iPhone 记录" },
 ];
 
-const projectTabs: Array<{ id: ProjectTab; label: string }> = [
-  { id: "overview", label: "概览" },
-  { id: "plan", label: "学习计划" },
-  { id: "practice", label: "练习安排" },
-  { id: "proof", label: "学习证据" },
-  { id: "trail", label: "学习记录" },
-  { id: "reviews", label: "复盘" },
+function NavIcon({ id }: { id: WorkspaceSection }) {
+  const paths: Record<string, string> = {
+    dashboard: "M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z",
+    projects: "M4 6.5h6l2 2h8V18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z",
+    reviews: "M6 4h9l3 3v13H6zM9 11h6M9 15h4",
+    sync: "M18.5 9A7 7 0 0 0 6 7.5L4.5 9M5.5 15A7 7 0 0 0 18 16.5l1.5-1.5M4.5 4.5V9H9M19.5 19.5V15H15",
+  };
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d={paths[id]} />
+    </svg>
+  );
+}
+
+const projectTabs: Array<{ id: ProjectTab; label: string; intro: string }> = [
+  { id: "overview", label: "概览", intro: "先看当前阶段、完成标准和下一步。" },
+  { id: "plan", label: "学习计划", intro: "查看全部阶段；需要调整时，先保存草稿再启用。" },
+  { id: "practice", label: "练习安排", intro: "查看每次练习的模块与时长；练习在 iPhone 上进行。" },
+  { id: "proof", label: "学习证据", intro: "录音、代码或笔记，用来判断本阶段是否达成。" },
+  { id: "trail", label: "学习记录", intro: "按时间顺序查看练习、证据和计划的变化。" },
+  { id: "reviews", label: "复盘", intro: "对照证据判断是否进入下一阶段；发布决定在 iPhone 上完成。" },
 ];
 
 const initialDiagnostic: CloudKitDiagnostic = hasCloudKitConfiguration()
@@ -149,8 +163,8 @@ function subscribeToUrl(callback: () => void) {
 function formatMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
-  if (!hours) return `${remainder}m`;
-  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+  if (!hours) return `${remainder} 分钟`;
+  return remainder ? `${hours} 小时 ${remainder} 分钟` : `${hours} 小时`;
 }
 
 type WebJournalWriter = ReturnType<typeof createWebJournalWriter>;
@@ -276,7 +290,7 @@ export function WorkspaceApp({
 
   async function loadRealJournal() {
     setIsCheckingCloud(true);
-    setDiagnostic({ mode: "checking", message: "Checking the private journal…" });
+    setDiagnostic({ mode: "checking", message: "正在检查个人学习记录…" });
     setRealDashboardSnapshot(
       createDashboardSnapshot({ asOf: initialAsOf, state: "loading" }),
     );
@@ -339,7 +353,7 @@ export function WorkspaceApp({
       return;
     }
     setIsCheckingCloud(true);
-    setDiagnostic({ mode: "checking", message: "Checking the private journal…" });
+    setDiagnostic({ mode: "checking", message: "正在检查个人学习记录…" });
     try {
       setDiagnostic(await inspectCloudKitJournal());
     } finally {
@@ -369,12 +383,12 @@ export function WorkspaceApp({
     const value = nextStep.trim();
     if (!value) return;
     if (dataMode !== "real" || !realWriter || !realRead) {
-      setWriteMessage("Demo data is noncanonical; switch to Real journal to write a guarded Next Step.");
+      setWriteMessage("示例数据不会保存。切换到「个人记录」后可编辑下一步。");
       return;
     }
     const source = realRead.records.find((record) => record.kind === "project" && record.recordName === projectId);
     if (!source || !source.recordChangeTag) {
-      setWriteMessage("This Project has no CloudKit change tag, so the guarded write is unavailable.");
+      setWriteMessage("这个项目缺少云端版本标记，暂时无法安全保存。");
       return;
     }
     const next = canonicalRecord({
@@ -405,9 +419,9 @@ export function WorkspaceApp({
       resolveSyncConflict(conflict, resolution);
       if (resolution === "keepRemote" || resolution === "discardLocal") {
         setConflicts((current) => current.filter((item) => item.id !== conflict.id));
-        setWriteMessage(resolution === "keepRemote" ? "Remote value kept; no Trail event was created." : "Local edit discarded; no Trail event was created.");
+        setWriteMessage(resolution === "keepRemote" ? "已保留云端版本，学习记录未变化。" : "已放弃本次网页修改，学习记录未变化。");
       } else {
-        setWriteMessage(`${resolution === "rebaseLocal" ? "Rebase" : "Fork"} is staged as an explicit decision; publish a new canonical revision from the editor.`);
+        setWriteMessage(`已选择「${resolution === "rebaseLocal" ? "按新版本重新应用修改" : "另存为新版本"}」。请在编辑器中确认并保存新版本。`);
       }
     } catch (error) {
       setWriteMessage(error instanceof Error ? error.message : String(error));
@@ -427,23 +441,20 @@ export function WorkspaceApp({
         : realWriter
           ? "已连接个人记录。保存前会检查版本，避免覆盖其他设备的修改。"
           : "个人记录 · 当前仅可查看"
-    : "正在浏览示例数据，不会修改个人学习记录。";
+    : "你正在看示例数据：可以随意点击，不会修改个人学习记录。";
+
+  const reviewCount = availableDemos.filter((demo) => demo.review.ready).length;
+  const isNavActive = (id: WorkspaceSection) => section === id || (section === "project" && id === "projects");
 
   return (
     <div className="workspace-shell">
       <a className="skip-link" href="#workspace-content">跳到主要内容</a>
       <aside className="sidebar">
-        <button
-          className="brand"
-          onClick={() => setSection("dashboard")}
-          aria-label="返回学习总览"
-        >
-          <span className="brand-mark" aria-hidden="true">
-            S
-          </span>
+        <button className="brand" onClick={() => setSection("dashboard")} aria-label="返回学习总览">
+          <span className="brand-mark" aria-hidden="true">学</span>
           <span>
-            <strong>Self Study</strong>
-            <small>Studio</small>
+            <strong>Self Study Studio</strong>
+            <small>网页做计划与复盘 · iPhone 做练习</small>
           </span>
         </button>
 
@@ -451,104 +462,86 @@ export function WorkspaceApp({
           {navigation.map((item) => (
             <button
               key={item.id}
-              className={section === item.id || (section === "project" && item.id === "projects") ? "nav-item active" : "nav-item"}
-              aria-current={section === item.id || (section === "project" && item.id === "projects") ? "page" : undefined}
+              className={isNavActive(item.id) ? "nav-item active" : "nav-item"}
+              aria-current={isNavActive(item.id) ? "page" : undefined}
               onClick={() => setSection(item.id)}
             >
-              <span className="nav-glyph" aria-hidden="true">
-                {item.glyph}
+              <NavIcon id={item.id} />
+              <span className="nav-text">
+                <strong>{item.label}</strong>
+                <small>{item.hint}</small>
               </span>
-              {item.label}
-              {item.id === "reviews" && availableDemos.filter((demo) => demo.review.ready).length > 0 && <span className="nav-count">{availableDemos.filter((demo) => demo.review.ready).length}</span>}
+              {item.id === "reviews" && reviewCount > 0 && (
+                <span className="nav-count" aria-label={`${reviewCount} 项待复盘`}>{reviewCount}</span>
+              )}
             </button>
           ))}
         </nav>
 
         <div className="sidebar-projects">
-          <div className="sidebar-label">
-            <span>快捷打开项目</span>
-          </div>
+          <div className="sidebar-label">直接打开项目</div>
           {availableDemos.map((demo) => {
             const project = demo.project;
+            const selected = section === "project" && selectedProjectId === project.id;
             return (
-            <button
-              key={project.id}
-              className={
-                section === "project" && selectedProjectId === project.id
-                  ? "project-shortcut selected"
-                  : "project-shortcut"
-              }
-              onClick={() => openProject(project.id)}
-            >
-              <span
-                className="project-dot"
-                style={{ backgroundColor: project.accent }}
-                aria-hidden="true"
-              />
-              <span>
-                <strong>{project.name}</strong>
-                <small>{project.phase}</small>
-              </span>
-            </button>
+              <button
+                key={project.id}
+                className={selected ? "project-shortcut selected" : "project-shortcut"}
+                aria-current={selected ? "page" : undefined}
+                onClick={() => openProject(project.id)}
+              >
+                <span className="project-dot" style={{ backgroundColor: project.accent }} aria-hidden="true" />
+                <span>
+                  <strong>{project.name}</strong>
+                  <small>{project.phase}</small>
+                </span>
+              </button>
             );
           })}
           {dataMode === "real" && availableDemos.length === 0 && (
             <p className="sidebar-empty">尚未读取到个人项目。</p>
           )}
         </div>
-
-        <div className="sidebar-footer">
-          <div className="owner-avatar">PH</div>
-          <div>
-            <strong>个人学习空间</strong>
-            <small>计划 · 练习 · 复盘</small>
-          </div>
-        </div>
       </aside>
 
       <main className="main-panel">
         <header className="topbar">
-          <div>
-            <span className="eyebrow">个人学习工作台</span>
-            <h1>{sectionTitle}</h1>
-          </div>
+          <nav className="breadcrumb" aria-label="当前位置">
+            {section === "project" ? (
+              <>
+                <button onClick={() => setSection("projects")}>学习项目</button>
+                <span aria-hidden="true">/</span>
+                <strong aria-current="page">{sectionTitle}</strong>
+              </>
+            ) : (
+              <strong aria-current="page">{sectionTitle}</strong>
+            )}
+          </nav>
           <div className="topbar-actions">
             <div className="mode-switch" role="group" aria-label="数据来源">
-              <button
-                className={dataMode === "demo" ? "active" : ""}
-                aria-pressed={dataMode === "demo"}
-                onClick={() => switchDataMode("demo")}
-              >
+              <span className="mode-label">正在查看</span>
+              <button className={dataMode === "demo" ? "active" : ""} aria-pressed={dataMode === "demo"} onClick={() => switchDataMode("demo")}>
                 示例数据
               </button>
-              <button
-                className={dataMode === "real" ? "active" : ""}
-                aria-pressed={dataMode === "real"}
-                onClick={() => switchDataMode("real")}
-              >
+              <button className={dataMode === "real" ? "active" : ""} aria-pressed={dataMode === "real"} onClick={() => switchDataMode("real")}>
                 个人记录
               </button>
             </div>
-            <button
-              className={`sync-pill ${diagnostic.mode}`}
-              onClick={() => setSection("sync")}
-            >
-              <span className="sync-dot" aria-hidden="true" />
-              {dataMode === "demo"
-                ? "连接个人记录"
-                : diagnostic.mode === "connected"
-                  ? "已连接"
-                  : "查看连接状态"}
-            </button>
           </div>
         </header>
 
         <div className={`workspace-provenance ${dataMode}`} role="status">
+          <span className="provenance-dot" aria-hidden="true" />
           <span>{provenanceLabel}</span>
           {dataMode === "real" && realRead?.recordCount !== undefined && (
             <small>{realRead.recordCount} 条记录 · {realWriter ? "可保存" : "仅可查看"}</small>
           )}
           {writeMessage && <small role="status">{writeMessage}</small>}
+          {section !== "sync" && (dataMode === "demo" || diagnostic.mode !== "connected") && (
+            <button className="text-button" onClick={() => setSection("sync")}>
+              {dataMode === "demo" ? "如何连接个人记录" : "查看连接状态"}
+            </button>
+          )}
         </div>
 
         <div className="content-scroll" id="workspace-content" tabIndex={-1}>
@@ -700,19 +693,20 @@ function ProjectWorkspace({
   return (
     <div className="project-page page-stack">
       <button className="back-link" onClick={openProjects}>← 返回学习项目</button>
-      <section className="project-hero">
+      <section className="project-hero" style={{ "--project-accent": project.accent } as CSSProperties}>
         <div>
           <div className="project-identity">
-            <span className="project-token coral" style={{ backgroundColor: project.accent }}>{project.token}</span>
+            <span className="project-token" aria-hidden="true">{project.token}</span>
             <span className="status-pill">{project.status === "Active" ? "进行中" : project.status === "Paused" ? "已暂停" : project.status === "Completed" ? "已完成" : "已停止"}</span>
+            <span className="project-phase-chip">{project.phase} · {project.phaseWindow}</span>
           </div>
           <h2>{project.name}</h2>
           <p>{project.goal}</p>
           <small className="demo-source">{demo.sourceLabel}</small>
         </div>
         <div className="project-hero-actions">
-          <span className="read-only-note">学习证据请在 iPhone 上添加</span>
-          <button className="primary-button" onClick={showDraft}>调整计划</button>
+          <button className="secondary-button" onClick={showDraft}>调整计划</button>
+          <small>先保存草稿，确认后才会生效</small>
         </div>
       </section>
 
@@ -746,6 +740,7 @@ function ProjectWorkspace({
       </div>
 
       <section className="project-tab-panel" role="tabpanel" id="project-panel" aria-labelledby={`project-tab-${tab}`} tabIndex={0}>
+      <p className="tab-intro">{projectTabs.find((item) => item.id === tab)?.intro}</p>
       {tab === "overview" && <ProjectOverview demo={demo} dataMode={dataMode} canWrite={canWrite} onUpdateNextStep={onUpdateNextStep} setTab={setTab} />}
       {tab === "plan" && <PlanPanel demo={demo} showDraft={showDraft} dataMode={dataMode} setTab={setTab} />}
       {tab === "practice" && <PracticePanel demo={demo} />}
@@ -781,16 +776,37 @@ function ProjectOverview({
       setIsSaving(false);
     }
   }
+  const editable = dataMode === "real" && canWrite;
+  const remainingEvidence = Math.max(0, project.evidenceTarget - project.evidenceCount);
   return (
-    <div className="project-content-grid">
-      <div className="project-main-column page-stack small-gap">
+    <div className="project-overview page-stack small-gap">
+      <article className="next-step-card">
+        <div className="next-step-copy">
+          <span className="start-here-kicker"><b>下一步</b>在 iPhone 上练习时照着做</span>
+          {editable ? (
+            <textarea rows={3} aria-label="下一步学习行动" value={nextStep} onChange={(event) => setNextStep(event.target.value)} />
+          ) : (
+            <p className="next-step-text">{nextStep}</p>
+          )}
+        </div>
+        <div className="next-step-actions">
+          {editable ? (
+            <button className="primary-button" disabled={isSaving} onClick={() => void saveNextStep()}>
+              {isSaving ? "正在保存…" : "保存下一步"}
+            </button>
+          ) : (
+            <small>{dataMode === "real" ? "连接个人记录并读取项目后可编辑。" : "示例数据仅供查看；切换到「个人记录」后可编辑。"}</small>
+          )}
+        </div>
+      </article>
+      <div className="project-content-grid">
         <article className="card phase-detail-card">
           <div className="section-heading compact">
             <div>
               <span className="mini-label">当前阶段 · {project.phaseWindow}</span>
               <h3>{project.phase}</h3>
             </div>
-            <span className="soft-badge">版本 {demo.planRevision}</span>
+            <span className="soft-badge">计划版本 {demo.planRevision}</span>
           </div>
           <div className="phase-detail-grid">
             <div>
@@ -798,15 +814,15 @@ function ProjectOverview({
               <p>{project.goal}</p>
             </div>
             <div>
-              <span className="mini-label">需要的学习证据</span>
+              <span className="mini-label">完成标准（需要的学习证据）</span>
               <p>{project.expectedProof}</p>
             </div>
           </div>
           <div className="phase-progress-row">
-            <span className="phase-number" aria-hidden="true">✓</span>
+            <span className="phase-number" aria-hidden="true">{project.evidenceCount}/{project.evidenceTarget}</span>
             <div>
-              <strong>{project.evidenceCount} 项学习证据已收集</strong>
-              <span>{project.evidenceTarget - project.evidenceCount} 项仍待收集，达到目标后再确认是否推进。</span>
+              <strong>已收集 {project.evidenceCount} 项学习证据</strong>
+              <span>{remainingEvidence > 0 ? `还差 ${remainingEvidence} 项，达到目标后再确认是否进入下一阶段。` : "已达到目标，可以复盘。"}</span>
             </div>
             <button className="text-button" onClick={() => setTab("proof")}>查看证据 →</button>
           </div>
@@ -814,42 +830,19 @@ function ProjectOverview({
         <article className="card">
           <div className="section-heading compact">
             <div>
-              <span className="mini-label">已安排的学习</span>
+              <span className="mini-label">本阶段已安排</span>
               <h3>学习任务</h3>
             </div>
             <button className="text-button" onClick={() => setTab("plan")}>查看计划 →</button>
           </div>
           <SessionList sessions={demo.sessions} />
+          <div className="routine-summary">
+            <span className="mini-label">固定练习 · {demo.routineFrequency}</span>
+            <strong>{demo.routineTitle} · {demo.routineTargetMinutes} 分钟</strong>
+            <button className="text-button" onClick={() => setTab("practice")}>查看练习安排 →</button>
+          </div>
         </article>
       </div>
-      <aside className="project-side-column page-stack small-gap">
-        <article className="card next-step-card">
-          <span className="mini-label">下一步学习行动</span>
-          <textarea rows={3} aria-label="下一步学习行动" readOnly={dataMode !== "real" || !canWrite} value={nextStep} onChange={(event) => setNextStep(event.target.value)} />
-          <button className="dark-button" disabled={dataMode !== "real" || !canWrite || isSaving} onClick={() => void saveNextStep()}>
-            {isSaving ? "正在保存…" : dataMode === "real" && canWrite ? "保存下一步" : "连接个人记录后可编辑"}
-          </button>
-        </article>
-        <article className="card">
-          <div className="section-heading compact">
-            <div>
-              <span className="mini-label">固定练习</span>
-              <h3>{demo.routineTitle} · {demo.routineTargetMinutes}m</h3>
-            </div>
-            <span className="soft-badge">{demo.routineFrequency}</span>
-          </div>
-          {demo.practiceBlocks.map((block) => (
-            <div className="mini-block" key={block.id}>
-              <span className={`block-dot ${block.tone}`} />
-              <div>
-                <strong>{block.name}</strong>
-                <span>{block.focus}</span>
-              </div>
-              <small>{block.targetMinutes}m</small>
-            </div>
-          ))}
-        </article>
-      </aside>
     </div>
   );
 }
@@ -894,7 +887,7 @@ function PlanPanel({ demo, showDraft, dataMode, setTab }: { demo: ProjectDemo; s
         <article className="card revision-card">
           <span className="mini-label">计划版本</span>
           <h3>{demo.planRevision} 个已发布版本</h3>
-          <p>{dataMode === "real" ? "Revision identity and structural changes are guarded in CloudKit." : "Imported as deterministic Demo data · no structural conflicts."}</p>
+          <p>{dataMode === "real" ? "保存新版本前会检查云端版本，避免覆盖其他设备的修改。" : "示例计划，仅供浏览。"}</p>
           <button className="secondary-button" onClick={() => setTab("trail")}>查看学习记录</button>
         </article>
       </aside>
@@ -927,7 +920,7 @@ function PracticePanel({ demo }: { demo: ProjectDemo }) {
                 <p>下次练习：{block.nextFocus}</p>
               </div>
               <div className="block-actual">
-                <strong>{block.actualMinutes}m</strong>
+                <strong>{block.actualMinutes} 分钟</strong>
                 <span>最近一次练习</span>
               </div>
             </div>
@@ -937,7 +930,7 @@ function PracticePanel({ demo }: { demo: ProjectDemo }) {
       <aside className="page-stack small-gap">
         <article className="card">
           <span className="mini-label">最近一次练习</span>
-          <div className="big-metric">{lastSessionMinutes}m</div>
+          <div className="big-metric">{lastSessionMinutes} 分钟</div>
           <p>{demo.lastSessionLabel}</p>
           <div className="attention-callout">
             <span>!</span>
@@ -1127,13 +1120,13 @@ function SyncDiagnostics({
       {diagnostic.mode === "connected" && (
         <section className="card record-diagnostics">
           <div className="section-heading compact">
-            <div><span className="mini-label">Read-only validation</span><h3>{diagnostic.recordCount} records found</h3></div>
-            <span className="soft-badge">change tags retained</span>
+            <div><span className="mini-label">只读检查</span><h3>找到 {diagnostic.recordCount} 条记录</h3></div>
+            <span className="soft-badge">已保留版本标记</span>
           </div>
           <div className="record-type-grid">
             {recordTypes.map(([type, count]) => <div key={type}><strong>{count}</strong><span>{type}</span></div>)}
           </div>
-          {diagnostic.latestChangeTag && <p className="change-tag">Latest sampled change tag: <code>{diagnostic.latestChangeTag}</code></p>}
+          {diagnostic.latestChangeTag && <p className="change-tag">最近的版本标记：<code>{diagnostic.latestChangeTag}</code></p>}
         </section>
       )}
 
@@ -1303,7 +1296,7 @@ function PlanDraftSheet({
             <label><span>版本</span><input value={`版本 ${demo.planRevision + 1} 草稿`} readOnly /></label>
           </div>
           <label><span>需要的学习证据</span><textarea value={expectedProof} onChange={(event) => setExpectedProof(event.target.value)} /></label>
-          <div className="draft-warning"><span>i</span><div><strong>时间安排检查</strong><p>{formatMinutes(demo.capacity.plannedMinutes)} planned against {formatMinutes(demo.capacity.availableMinutes)} available. {demo.capacity.note}</p></div></div>
+          <div className="draft-warning"><span>i</span><div><strong>时间安排检查</strong><p>已计划 {formatMinutes(demo.capacity.plannedMinutes)}，可用 {formatMinutes(demo.capacity.availableMinutes)}。{demo.capacity.note}</p></div></div>
           <div className="revision-note"><span className="mini-label">哪些改动会生成新版本？</span><p>修改学习目标、阶段日期、学习证据要求、阶段顺序或练习结构会生成新版本。完成学习任务和添加证据不会生成新计划版本。</p></div>
           <p className="read-only-note">{dataMode === "real" ? (canActivate ? "启用前会检查当前版本，确认后生成新计划版本。" : "当前无法启用新计划。请连接个人记录并读取现有计划。") : "示例模式仅保存当前浏览器的本地草稿，不会修改个人学习计划。"}</p>
         </div>

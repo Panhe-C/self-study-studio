@@ -5,6 +5,7 @@ import {
   createDashboardSnapshot,
   derivePortfolioDashboard,
   type AttentionItem,
+  type DashboardDestination,
   type DashboardPeriod,
   type DashboardSection,
   type DashboardSnapshot,
@@ -36,38 +37,12 @@ const unavailableLabels: Record<DashboardSection, string> = {
   capacity: "时间安排",
 };
 
-function weekLabel(index: number, bucketCount: number) {
-  const weeksAgo = bucketCount - 1 - index;
-  if (weeksAgo === 0) return "This week";
-  return `${weeksAgo} week${weeksAgo === 1 ? "" : "s"} ago`;
-}
-
 function movementSummary(
   row: NonNullable<PortfolioDashboardDataModel["movement"]>[number],
 ) {
-  return `${row.projectName} weekly movement: ${row.buckets
-    .map((bucket) => `${bucket.label}: ${bucket.count}`)
-    .join("; ")} meaningful events.`;
-}
-
-function PulseCard({
-  label,
-  value,
-  detail,
-  attention = false,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  attention?: boolean;
-}) {
-  return (
-    <article className={`portfolio-pulse-card${attention ? " attention" : ""}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </article>
-  );
+  return `${row.projectName} 每周学习记录：${row.buckets
+    .map((bucket) => `${bucket.label} ${bucket.count} 条`)
+    .join("；")}。`;
 }
 
 function openDestination(
@@ -82,6 +57,20 @@ function openDestination(
   openProject(item.projectId, item.destination.tab);
 }
 
+function destinationActionLabel(destination: DashboardDestination, kind?: string) {
+  if (destination.section === "sync") return "查看同步问题";
+  if (kind === "review" || destination.tab === "reviews") return "查看复盘依据";
+  if (destination.tab === "proof") return "查看学习证据";
+  if (destination.tab === "practice") return "查看练习安排";
+  if (destination.tab === "plan") return "查看计划";
+  if (destination.tab === "trail") return "查看学习记录";
+  return "查看下一步";
+}
+
+function statusLabel(status: ProjectDashboardState["status"]) {
+  return status === "Active" ? "进行中" : status === "Paused" ? "已暂停" : status === "Completed" ? "已完成" : "已停止";
+}
+
 function PortfolioProjectCard({
   project,
   openProject,
@@ -91,104 +80,57 @@ function PortfolioProjectCard({
   openProject: PortfolioDashboardProps["openProject"];
   openSync: PortfolioDashboardProps["openSync"];
 }) {
-  const maxActivity = Math.max(...(project.activity ?? []), 1);
-  const activitySummary = project.activity
-    ? `${project.name} meaningful activity over ${project.activity.length} weeks: ${project.activity
-        .map(
-          (count, index) =>
-            `${weekLabel(index, project.activity?.length ?? 0)}: ${count}`,
-        )
-        .join("; ")} meaningful events.`
-    : "";
   const evidencePercent =
     !project.evidence || project.evidence.expected === 0
       ? 0
-      : Math.min(
-          100,
-          (project.evidence.ready / project.evidence.expected) * 100,
-        );
+      : Math.min(100, (project.evidence.ready / project.evidence.expected) * 100);
 
   return (
-    <article className="portfolio-project-card">
+    <article
+      className="portfolio-project-card"
+      style={{ "--project-accent": project.accent } as CSSProperties}
+    >
       <header>
         <div className="portfolio-project-identity">
-          <span
-            className="portfolio-token"
-            style={{ "--project-accent": project.accent } as CSSProperties}
-          >
-            {project.token}
-          </span>
+          <span className="portfolio-token" aria-hidden="true">{project.token}</span>
           <div>
-            <h4>{project.name}</h4>
-            <p>
-              {project.area} · {project.phaseWindow}
-            </p>
+            <h3>{project.name}</h3>
+            <p>{project.area} · {project.phaseWindow}</p>
           </div>
         </div>
-        <span
-          className={`portfolio-state${project.attention ? " attention" : ""}`}
-        >
-          {project.status === "Active" ? "进行中" : project.status === "Paused" ? "已暂停" : project.status === "Completed" ? "已完成" : "已停止"}
+        <span className={`portfolio-state${project.attention ? " attention" : ""}`}>
+          {statusLabel(project.status)}
         </span>
       </header>
-      <div className="portfolio-project-body">
+      <dl className="portfolio-project-facts">
         <div>
-          <span className="mini-label">当前阶段</span>
-          <h5>{project.activePhase?.title ?? "尚无进行中的阶段"}</h5>
-          <p className="portfolio-outcome">{project.outcome}</p>
-          <div className="portfolio-expected-proof">
-            <span className="mini-label">本阶段需要的证据</span>
-            <p>{project.expectedProof}</p>
-          </div>
-          {project.evidence ? (
-            <div className="portfolio-evidence">
-              <div>
-                <span>学习证据</span>
-                <strong>
-                  {project.evidence.ready} / {project.evidence.expected} 项
-                </strong>
-              </div>
-              <div
-                className="portfolio-evidence-track"
-                aria-label={`${project.evidence.ready} of ${project.evidence.expected} expected Proof signals ready`}
-              >
-                <span style={{ width: `${evidencePercent}%` }} />
-              </div>
-            </div>
-          ) : (
-            <p className="portfolio-unavailable-note">
-              学习证据暂不可用
-            </p>
-          )}
+          <dt>当前阶段</dt>
+          <dd>{project.activePhase?.title ?? "尚无进行中的阶段"}</dd>
         </div>
-        <details className="portfolio-activity">
-          <summary>近六周的学习活动</summary>
-          {project.activity ? (
-            <>
-              <div className="portfolio-sparkline" aria-hidden="true">
-                {project.activity.map((count, index) => (
-                  <span
-                    key={index}
-                    data-activity-count={count}
-                    style={{
-                      height: `${count === 0 ? 0 : (count / maxActivity) * 100}%`,
-                    }}
-                  />
-                ))}
-              </div>
-              <p className="sr-only">{activitySummary}</p>
-              <small>
-                {weekLabel(0, project.activity.length)}{" "}
-                <span>This week</span>
-              </small>
-            </>
-          ) : (
-            <p className="portfolio-unavailable-note">
-              学习活动暂不可用
-            </p>
-          )}
-        </details>
-      </div>
+        <div>
+          <dt>本阶段的完成标准</dt>
+          <dd className="portfolio-expected-proof">{project.expectedProof}</dd>
+        </div>
+        <div>
+          <dt>学习证据</dt>
+          <dd>
+            {project.evidence ? (
+              <span className="portfolio-evidence">
+                <strong>{project.evidence.ready} / {project.evidence.expected} 项</strong>
+                <span
+                  className="portfolio-evidence-track"
+                  role="img"
+                  aria-label={`已收集 ${project.evidence.ready} 项，本阶段需要 ${project.evidence.expected} 项`}
+                >
+                  <span style={{ width: `${evidencePercent}%` }} />
+                </span>
+              </span>
+            ) : (
+              <span className="portfolio-unavailable-note">学习证据暂不可用</span>
+            )}
+          </dd>
+        </div>
+      </dl>
       <footer>
         <div>
           <span className="mini-label">下一步</span>
@@ -199,21 +141,13 @@ function PortfolioProjectCard({
           className="secondary-button"
           onClick={() =>
             openDestination(
-              {
-                projectId: project.id,
-                destination: project.nextDecision.destination,
-              },
+              { projectId: project.id, destination: project.nextDecision.destination },
               openProject,
               openSync,
             )
           }
         >
-          {project.nextDecision.destination.section === "sync"
-            ? "查看同步问题"
-            : project.nextDecision.destination.tab === "reviews" ? "查看复盘依据"
-              : project.nextDecision.destination.tab === "proof" ? "查看学习证据"
-                : project.nextDecision.destination.tab === "practice" ? "查看练习安排"
-                  : project.nextDecision.destination.tab === "plan" ? "查看计划" : "查看下一步"}
+          {destinationActionLabel(project.nextDecision.destination, project.nextDecision.kind)}
         </button>
       </footer>
     </article>
@@ -251,7 +185,7 @@ function AttentionRow({
       />
       <span>
         <strong>{item.projectName}</strong>
-        <small>{attentionLabel(item.label)}</small>
+        <small>{attentionTitle(item)}</small>
       </span>
       <span aria-hidden="true">›</span>
     </button>
@@ -267,7 +201,7 @@ function PortfolioMovementMatrix({
     <article className="card portfolio-viz-card">
       <div className="section-heading">
         <div>
-          <span className="mini-label">练习、证据与复盘记录</span>
+          <span className="mini-label">颜色越深，当周的练习、证据和复盘记录越多</span>
           <h3>学习活动趋势</h3>
         </div>
       </div>
@@ -341,14 +275,14 @@ function CapacityAllocation({
           <li key={segment.projectId}>
             <i style={{ background: segment.color }} />
             <span>{segment.label}</span>
-            <strong>{segment.minutes}m</strong>
+            <strong>{segment.minutes} 分钟</strong>
           </li>
         ))}
         {capacity.warningSegment && (
           <li className="capacity-overage-legend">
             <i />
             <span>{capacity.warningSegment.label}</span>
-            <strong>Over capacity by {capacity.warningSegment.minutes}m</strong>
+            <strong>超出 {capacity.warningSegment.minutes} 分钟</strong>
           </li>
         )}
       </ul>
@@ -357,74 +291,77 @@ function CapacityAllocation({
   );
 }
 
-function DashboardHeader({
-  asOf,
-  timeZone,
-  period,
-  setPeriod,
-}: {
-  asOf: string;
-  timeZone: string;
-  period: DashboardPeriod;
-  setPeriod: (period: DashboardPeriod) => void;
-}) {
+function formatDate(asOf: string, timeZone: string) {
+  return Number.isFinite(Date.parse(asOf))
+    ? new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long", timeZone }).format(new Date(asOf))
+    : "日期暂不可用";
+}
+
+function DashboardHeader({ asOf, timeZone }: { asOf: string; timeZone: string }) {
   return (
     <header className="portfolio-header">
-      <div>
-        <p className="date-line">{Number.isFinite(Date.parse(asOf)) ? new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long", timeZone }).format(new Date(asOf)) : "日期暂不可用"}</p>
-        <h2>学习总览</h2>
-        <p>查看项目的下一步，在 iPhone 上练习，再回来整理计划与复盘。</p>
-      </div>
-      <div className="portfolio-period" aria-label="Dashboard period">
-        <span className="period-label">统计范围</span>
-        {periods.map((item) => (
-          <button
-            className={period === item.id ? "active" : ""}
-            aria-pressed={period === item.id}
-            key={item.id}
-            onClick={() => setPeriod(item.id)}
-          >
-            {attentionLabel(item.label)}
-          </button>
-        ))}
-      </div>
+      <p className="date-line">{formatDate(asOf, timeZone)}</p>
+      <h2>今天先做这一件事</h2>
     </header>
   );
 }
 
-function DashboardLoading({
-  asOf,
-  timeZone,
-}: {
-  asOf: string;
-  timeZone: string;
-}) {
+const usageSteps = [
+  { title: "看下一步", detail: "在网页上确认今天要做什么" },
+  { title: "去 iPhone 练习", detail: "练习、录音、拍照或记笔记" },
+  { title: "回来复盘", detail: "对照证据，决定下一阶段" },
+];
+
+function UsageSteps() {
   return (
-    <div
-      className="portfolio-dashboard page-stack"
-      aria-busy="true"
-      aria-label="Loading Dashboard"
-    >
-      <header className="portfolio-header portfolio-skeleton">
-        <div>
-          <p className="date-line">{Number.isFinite(Date.parse(asOf)) ? new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long", timeZone }).format(new Date(asOf)) : "日期暂不可用"}</p>
-          <span className="skeleton-line wide" />
-          <span className="skeleton-line" />
-        </div>
-      </header>
-      <section className="portfolio-pulse portfolio-skeleton" aria-hidden="true">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div className="portfolio-pulse-card" key={index} />
+    <section className="usage-steps" aria-labelledby="usage-steps-heading">
+      <h3 id="usage-steps-heading" className="sr-only">使用方法</h3>
+      <ol>
+        {usageSteps.map((step, index) => (
+          <li key={step.title}>
+            <span aria-hidden="true">{index + 1}</span>
+            <div><strong>{step.title}</strong><small>{step.detail}</small></div>
+          </li>
         ))}
+      </ol>
+    </section>
+  );
+}
+
+function PeriodSwitch({ period, setPeriod }: { period: DashboardPeriod; setPeriod: (period: DashboardPeriod) => void }) {
+  return (
+    <div className="portfolio-period" role="group" aria-label="Dashboard period">
+      <span className="period-label">统计范围</span>
+      {periods.map((item) => (
+        <button
+          className={period === item.id ? "active" : ""}
+          aria-pressed={period === item.id}
+          key={item.id}
+          onClick={() => setPeriod(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DashboardLoading({ asOf, timeZone }: { asOf: string; timeZone: string }) {
+  return (
+    <div className="portfolio-dashboard page-stack" aria-busy="true" aria-label="正在读取学习总览">
+      <header className="portfolio-header portfolio-skeleton">
+        <p className="date-line">{formatDate(asOf, timeZone)}</p>
+        <span className="skeleton-line wide" />
+      </header>
+      <section className="start-here portfolio-skeleton" aria-hidden="true">
+        <span className="skeleton-line wide" />
+        <span className="skeleton-line" />
       </section>
-      <section
-        className="portfolio-project-card portfolio-skeleton"
-        aria-hidden="true"
-      >
+      <section className="portfolio-project-card portfolio-skeleton" aria-hidden="true">
         <span className="skeleton-line wide" />
         <span className="skeleton-block" />
       </section>
-      <p className="sr-only">Loading portfolio snapshot.</p>
+      <p className="sr-only">正在读取学习总览。</p>
     </div>
   );
 }
@@ -439,10 +376,16 @@ function UnavailableVisualization({ section }: { section: DashboardSection }) {
   );
 }
 
-function decisionActionLabel(item: AttentionItem) {
-  if (item.destination.section === "sync") return "查看同步问题";
-  if (item.kind === "review") return "查看复盘依据";
-  return "查看下一步";
+const attentionTitles: Partial<Record<AttentionItem["kind"], string>> = {
+  conflict: "选择要保留的同步版本",
+  review: "本阶段可以复盘了",
+  proof: "阶段结束前仍需补充学习证据",
+  capacity: "计划时间超出可用时间",
+  practice: "有练习模块需要补充",
+};
+
+function attentionTitle(item: AttentionItem) {
+  return attentionTitles[item.kind] ?? attentionLabel(item.label);
 }
 
 export function PortfolioDashboard({
@@ -457,12 +400,7 @@ export function PortfolioDashboard({
 }: PortfolioDashboardProps) {
   const [period, setPeriod] = useState<DashboardPeriod>("now");
   const currentSnapshot = useMemo(
-    () =>
-      snapshot ??
-      createDashboardSnapshot({
-        asOf: initialAsOf,
-        demos: projectDemos,
-      }),
+    () => snapshot ?? createDashboardSnapshot({ asOf: initialAsOf, demos: projectDemos }),
     [initialAsOf, snapshot],
   );
   const model = useMemo(
@@ -483,47 +421,33 @@ export function PortfolioDashboard({
     return (
       <div className="portfolio-dashboard page-stack">
         {provenance && <div className="portfolio-provenance" role="status">{provenance}</div>}
-        <DashboardHeader
-          asOf={model.asOf}
-          timeZone={initialTimeZone}
-          period={period}
-          setPeriod={setPeriod}
-        />
+        <DashboardHeader asOf={model.asOf} timeZone={initialTimeZone} />
         <section className="card portfolio-error-state" role="alert">
           <span className="mini-label">数据读取失败</span>
           <h3>学习总览加载失败</h3>
           <p>{model.errorMessage}</p>
-          <button className="secondary-button" onClick={openSync}>
-            查看同步问题
-          </button>
+          <button className="primary-button" onClick={openSync}>查看同步问题</button>
         </section>
       </div>
     );
   }
 
   const primaryDecision = model.decisions[0];
-  const evidenceValue =
-    model.pulse.evidenceReady === null ||
-    model.pulse.evidenceExpected === null
-      ? "Unavailable"
-      : `${model.pulse.evidenceReady} / ${model.pulse.evidenceExpected}`;
+  const fallbackProject = model.projects[0];
+  const evidenceSummary =
+    model.pulse.evidenceReady === null || model.pulse.evidenceExpected === null
+      ? "学习证据暂不可用"
+      : `学习证据 ${model.pulse.evidenceReady} / ${model.pulse.evidenceExpected} 项`;
 
   return (
     <div className="portfolio-dashboard page-stack">
       {provenance && <div className="portfolio-provenance" role="status">{provenance}</div>}
-      <DashboardHeader
-        asOf={model.asOf}
-        timeZone={initialTimeZone}
-        period={period}
-        setPeriod={setPeriod}
-      />
+      <DashboardHeader asOf={model.asOf} timeZone={initialTimeZone} />
       {model.loadState === "partial" && (
         <section className="portfolio-state-banner partial" role="status">
           <strong>部分数据暂不可用</strong>
           <span>
-            {model.unavailableSections
-              .map((section) => unavailableLabels[section])
-              .join(", ")}{" "}
+            {model.unavailableSections.map((section) => unavailableLabels[section]).join("、")}
             暂不可用，已读取的项目仍可查看。
           </span>
         </section>
@@ -531,134 +455,101 @@ export function PortfolioDashboard({
       {model.loadState === "conflict" && (
         <section className="portfolio-state-banner conflict" role="alert">
           <div>
-            <strong>{model.conflicts[0]?.label ?? "Sync conflict"}</strong>
-            <span>
-              这里保留最近可信的数据。打开同步页面，选择要保留的版本。
-            </span>
+            <strong>{model.conflicts[0]?.label ?? "同步冲突"}</strong>
+            <span>这里保留最近可信的数据。打开同步页面，选择要保留的版本。</span>
           </div>
-          <button className="secondary-button" onClick={openSync}>
-            查看同步问题
-          </button>
+          <button className="secondary-button" onClick={openSync}>查看同步问题</button>
         </section>
       )}
-      {model.projects.length > 0 && (
+      {fallbackProject ? (
         <section className="start-here" aria-labelledby="start-here-heading">
-          <div>
-            <span className="mini-label">从这里开始</span>
-            <h3 id="start-here-heading">{primaryDecision ? "有一项学习决定等你确认" : "继续推进一个学习项目"}</h3>
-            <p>{primaryDecision?.projectName ?? model.projects[0].name}</p>
-            <small>{primaryDecision?.detail ?? model.projects[0].nextDecision.detail}</small>
+          <div className="start-here-copy">
+            <span className="start-here-kicker">
+              <b>推荐</b>
+              {primaryDecision?.projectName ?? fallbackProject.name}
+            </span>
+            <h3 id="start-here-heading">
+              {primaryDecision ? attentionTitle(primaryDecision) : "继续下一步学习行动"}
+            </h3>
+            <p>{primaryDecision?.detail ?? fallbackProject.nextDecision.detail}</p>
           </div>
-          <button className="primary-button" onClick={() => primaryDecision
-            ? openDestination(primaryDecision, openProject, openSync)
-            : openProject(model.projects[0].id, model.projects[0].nextDecision.tab)}>
-            {primaryDecision ? decisionActionLabel(primaryDecision) : "查看下一步"}<span aria-hidden="true"> →</span>
-          </button>
+          <div className="start-here-action">
+            <button
+              className="primary-button"
+              onClick={() =>
+                primaryDecision
+                  ? openDestination(primaryDecision, openProject, openSync)
+                  : openProject(fallbackProject.id, fallbackProject.nextDecision.tab)
+              }
+            >
+              {primaryDecision
+                ? destinationActionLabel(primaryDecision.destination, primaryDecision.kind)
+                : "查看下一步"}
+              <span aria-hidden="true"> →</span>
+            </button>
+            <small>先查看依据，决定前不会修改计划。</small>
+          </div>
+        </section>
+      ) : (
+        <section className="portfolio-empty-state">
+          <h3>还没有进行中的项目</h3>
+          <p>可先查看已有项目，或在 iPhone 上创建第一个学习项目。</p>
+          <div className="portfolio-empty-actions">
+            <button className="primary-button" onClick={openProjects}>查看项目</button>
+            <button className="secondary-button" onClick={openSync}>检查数据连接</button>
+          </div>
         </section>
       )}
-      <section className="portfolio-pulse" aria-label="Portfolio pulse">
-        <PulseCard
-          label="进行中的项目"
-          value={`${model.pulse.activeProjects}`}
-          detail="正在推进的学习项目"
-        />
-        <PulseCard
-          label="已收集证据"
-          value={evidenceValue}
-          detail="已收集 / 本阶段目标"
-        />
-        <PulseCard
-          label="待复盘"
-          value={`${model.pulse.reviewsReady}`}
-          detail="查看依据后再做决定"
-        />
-        <PulseCard
-          label="待处理"
-          value={`${model.pulse.needsAttention}`}
-          detail="含上方待确认事项"
-          attention
-        />
-      </section>
-      <div className="portfolio-main-grid">
-        <section aria-labelledby="portfolio-projects-heading">
-          <div className="section-heading">
-            <h3 id="portfolio-projects-heading">进行中的项目</h3>
-            {model.totalActiveProjects > 0 && (
+      <UsageSteps />
+      {model.projects.length > 0 && (
+        <div className="portfolio-main-grid">
+          <section aria-labelledby="portfolio-projects-heading">
+            <div className="section-heading">
+              <div>
+                <h2 id="portfolio-projects-heading">进行中的项目</h2>
+                <p className="section-summary" aria-label="Portfolio pulse">
+                  {model.pulse.activeProjects} 个进行中 · {evidenceSummary} · {model.pulse.reviewsReady} 项待复盘
+                </p>
+              </div>
               <button className="text-button" onClick={openProjects}>
                 查看全部 {model.totalActiveProjects} 个项目
               </button>
-            )}
-          </div>
-          {model.projects.length > 0 ? (
+            </div>
             <div className="portfolio-project-list">
               {model.projects.map((project) => (
-                <PortfolioProjectCard
-                  project={project}
-                  openProject={openProject}
-                  openSync={openSync}
-                  key={project.id}
-                />
+                <PortfolioProjectCard project={project} openProject={openProject} openSync={openSync} key={project.id} />
               ))}
             </div>
-          ) : (
-            <div className="portfolio-empty-state">
-              <h3>还没有进行中的项目</h3>
-              <p>
-                可先查看已有项目，或在 iPhone 上创建第一个学习项目。
-              </p>
-              <div className="portfolio-empty-actions">
-                <button className="primary-button" onClick={openProjects}>
-                  查看项目
-                </button>
-                <button className="secondary-button" onClick={openProjects}>
-                  查看全部项目
-                </button>
-              </div>
+          </section>
+          <aside aria-labelledby="portfolio-decisions-heading">
+            <div className="section-heading">
+              <h2 id="portfolio-decisions-heading">
+                其他待处理 <span className="heading-count">{model.attention.length}</span>
+              </h2>
+              <button className="text-button" onClick={openReviews}>全部复盘</button>
             </div>
-          )}
-        </section>
-        <aside aria-labelledby="portfolio-decisions-heading">
-          <div className="section-heading">
-            <h3 id="portfolio-decisions-heading">待处理事项</h3>
-            <button className="text-button" onClick={openReviews}>
-              全部复盘
-            </button>
-          </div>
-          <p className="section-description">打开一项，查看原因和可采取的行动。</p>
-          <article className="portfolio-attention-card">
-            <span className="sr-only">待处理</span>
-            {model.attention.length > 0 ? (
-              model.attention.map((item) => (
-                <AttentionRow
-                  item={item}
-                  openProject={openProject}
-                  openSync={openSync}
-                  key={item.id}
-                />
-              ))
-            ) : (
-              <p className="portfolio-empty-note">
-                目前没有其他待处理事项。
-              </p>
-            )}
-          </article>
-        </aside>
-      </div>
+            <div className="portfolio-attention-card">
+              {model.attention.length > 0 ? (
+                model.attention.map((item) => (
+                  <AttentionRow item={item} openProject={openProject} openSync={openSync} key={item.id} />
+                ))
+              ) : (
+                <p className="portfolio-empty-note">目前没有其他待处理事项。</p>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
       {model.loadState !== "empty" && (
         <details className="portfolio-insights">
-          <summary>查看学习趋势与时间安排<span>按当前统计范围展示</span></summary>
-          <section className="portfolio-lower-grid">
-          {model.movement ? (
-            <PortfolioMovementMatrix movement={model.movement} />
-          ) : (
-            <UnavailableVisualization section="activity" />
-          )}
-          {model.capacity ? (
-            <CapacityAllocation capacity={model.capacity} />
-          ) : (
-            <UnavailableVisualization section="capacity" />
-          )}
-          </section>
+          <summary>查看学习趋势与时间安排<span>可选：判断投入是否均衡</span></summary>
+          <div className="portfolio-insights-body">
+            <PeriodSwitch period={period} setPeriod={setPeriod} />
+            <section className="portfolio-lower-grid">
+              {model.movement ? <PortfolioMovementMatrix movement={model.movement} /> : <UnavailableVisualization section="activity" />}
+              {model.capacity ? <CapacityAllocation capacity={model.capacity} /> : <UnavailableVisualization section="capacity" />}
+            </section>
+          </div>
         </details>
       )}
     </div>

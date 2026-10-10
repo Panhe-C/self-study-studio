@@ -41,7 +41,7 @@ test("retains the Dashboard narrow-screen layout rules", async () => {
   );
   const narrowRules = atRuleBody(css, "@media (max-width: 540px)");
 
-  assert.match(narrowRules, /\.portfolio-pulse\s*\{[^}]*grid-template-columns:\s*1fr 1fr/);
+  assert.match(narrowRules, /\.start-here button\s*\{[^}]*min-height:\s*44px/);
   assert.match(narrowRules, /\.portfolio-period\s*\{[^}]*width:\s*auto/);
   assert.match(
     narrowRules,

@@ -90,7 +90,7 @@ test("threads one server initialAsOf through the production Dashboard boundary",
     initialTimeZone: "Asia/Shanghai",
   });
   assert.match(html, /8月2日星期日/);
-  assert.match(html, /含上方待确认事项/);
+  assert.match(html, /今天先做这一件事/);
 });
 
 test.after(async () => {
@@ -152,8 +152,10 @@ test("server-renders the learning workspace", async () => {
   assert.match(html, /aria-label="Portfolio pulse"/);
   assert.match(html, /aria-label="Dashboard period"/);
   assert.match(html, /aria-pressed="true"/);
-  assert.match(html, /meaningful activity over 6 weeks/i);
-  assert.match(html, /planned minutes of .* available/i);
+  assert.match(html, /已计划 \d+ 分钟，可用 \d+ 分钟/);
+  assert.match(html, /class="usage-steps"/);
+  assert.match(html, /看下一步[\s\S]*去 iPhone 练习[\s\S]*回来复盘/);
+  assert.match(html, /aria-label="当前位置"/);
   assert.match(html, /<title>Self Study Studio — 个人学习工作台<\/title>/i);
   assert.match(html, /学习总览/);
   assert.match(html, /进行中的项目/);
@@ -175,7 +177,8 @@ test("server-renders the learning workspace", async () => {
   assert.match(html, /本阶段可以复盘了/);
   assert.match(html, /学习活动趋势/);
   assert.match(html, /未来两周的时间安排/);
-  assert.match(html, /meaningful events across 1 week/i);
+  assert.match(html, /1 周内共 \d+ 条学习记录/);
+  assert.doesNotMatch(html, /meaningful|This week|weeks ago|Over capacity|>Available</);
   assert.doesNotMatch(html, /completion percentage|streak|rank|grade/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
@@ -251,14 +254,10 @@ test("uses readable Portfolio status colors for small text", async () => {
   assert.ok(contrastRatio(faintText, "#ffffff") >= 4.5);
   assert.ok(contrastRatio(greenText, "#e6f1ec") >= 4.5);
   assert.ok(contrastRatio(amberText, "#fbf1df") >= 4.5);
-  assert.match(
-    css,
-    /\.portfolio-pulse-card > span\s*\{[^}]*color:\s*var\(--portfolio-faint-text\)/,
-  );
-  assert.match(
-    css,
-    /\.portfolio-activity > small\s*\{[^}]*color:\s*var\(--portfolio-faint-text\)/,
-  );
+  const muted = cssHexVariable(css.slice(css.indexOf("Clarity layer")), "muted");
+  const panel = cssHexVariable(css.slice(css.indexOf("Clarity layer")), "panel");
+  assert.ok(contrastRatio(muted, panel) >= 4.5);
+  assert.ok(contrastRatio(muted, "#fbf3dc") >= 4.5);
   assert.match(
     css,
     /\.portfolio-state\s*\{[^}]*color:\s*var\(--portfolio-green-text\)/,
@@ -289,37 +288,32 @@ test("server-renders complete accessible activity sequences in hierarchy order",
 
   assert.match(
     html,
-    /Electric guitar improvisation meaningful activity over 6 weeks: 5 weeks ago: 0; 4 weeks ago: 0; 3 weeks ago: 0; 2 weeks ago: 0; 1 week ago: 1; This week: 3 meaningful events\./,
+    /Electric guitar improvisation 每周学习记录：本周 3 条。/,
   );
   assert.match(
     html,
-    /CS336 · Language Modeling from Scratch meaningful activity over 6 weeks: 5 weeks ago: 0; 4 weeks ago: 0; 3 weeks ago: 1; 2 weeks ago: 0; 1 week ago: 1; This week: 2 meaningful events\./,
+    /CS336 · Language Modeling from Scratch 每周学习记录：本周 2 条。/,
   );
-  assert.match(
-    html,
-    /Electric guitar improvisation weekly movement: This week: 3 meaningful events\./,
-  );
-  assert.match(
-    html,
-    /CS336 · Language Modeling from Scratch weekly movement: This week: 2 meaningful events\./,
-  );
-  assert.doesNotMatch(html, /title="(?:This week|\d+ weeks? ago): \d+ meaningful events"/);
+  assert.match(html, /学习证据 3 \/ 7 项/);
 
   assertInOrder(html, [
     'id="start-here-heading"',
-    'aria-label="Portfolio pulse"',
+    'class="usage-steps"',
     'id="portfolio-projects-heading"',
+    'aria-label="Portfolio pulse"',
     'id="portfolio-decisions-heading"',
+    'aria-label="Dashboard period"',
     ">学习活动趋势<",
     ">未来两周的时间安排<",
   ]);
 });
 
-test("server-renders zero activity buckets at zero height", async () => {
-  const html = await (await render()).text();
-
-  assert.match(html, /data-activity-count="0" style="height:0%"/);
-  assert.doesNotMatch(html, /data-activity-count="0" style="height:(?!0%)[^"]+"/);
+test("gives the first screen exactly one filled primary action", async () => {
+  const html = await renderDashboard({
+    initialAsOf: "2026-07-24T12:00:00Z",
+  });
+  assert.equal(html.match(/class="primary-button"/g)?.length, 1);
+  assert.match(html, /<section class="start-here"[\s\S]*?class="primary-button"/);
 });
 
 test("server-renders the injected asOf, overload warning segment, and capacity attention", async () => {
@@ -342,7 +336,7 @@ test("server-renders the injected asOf, overload warning segment, and capacity a
   assert.match(clockHtml, /7月24日星期五/);
   assert.match(html, /计划时间超过可用时间/);
   assert.match(html, /class="capacity-overage-segment"/);
-  assert.match(html, /Over capacity by 270m/);
+  assert.match(html, /超出 270 分钟/);
   assert.match(html, /计划时间需要调整/);
 });
 
@@ -396,7 +390,7 @@ test("server-renders empty, partial, conflict, loading, and error snapshot state
   ]);
 
   assert.match(empty, /查看项目/);
-  assert.match(empty, /查看全部项目/);
+  assert.match(empty, /检查数据连接/);
   assert.match(partial, /部分数据暂不可用/);
   assert.match(partial, /时间安排暂不可用/);
   assert.match(conflict, /Plan revision conflict/);

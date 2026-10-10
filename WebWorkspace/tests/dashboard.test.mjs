@@ -345,7 +345,8 @@ test("makes Now, 4 weeks, and 12 weeks distinct and normalizes intensity to the 
     [1, 4, 12],
   );
   assert.equal(now[0].buckets[0].intensity, 3);
-  assert.match(now[0].accessibleSummary, /across 1 week\./);
+  assert.match(now[0].accessibleSummary, /1 周内共 \d+ 条学习记录。/);
+  assert.equal(now[0].buckets[0].label, "本周");
 });
 
 test("makes overload and zero availability explicit in capacity state", () => {
@@ -357,16 +358,16 @@ test("makes overload and zero availability explicit in capacity state", () => {
   assert.equal(capacity.status, "over");
   assert.equal(capacity.overCapacityMinutes, 200);
   assert.equal(capacity.warningSegment?.minutes, 200);
-  assert.match(capacity.accessibleSummary, /exceeds.*200 minutes/i);
-  assert.match(capacity.warning, /over capacity/i);
+  assert.match(capacity.accessibleSummary, /超出 200 分钟/);
+  assert.match(capacity.warning, /多 200 分钟/);
 
   overloaded.capacity.availableMinutes = 0;
   const zero = deriveCapacityAllocation([overloaded]);
   assert.equal(zero.status, "over");
   assert.ok(zero.segments.every((segment) => Number.isFinite(segment.percent)));
   assert.equal(zero.warningSegment?.percent, 100);
-  assert.match(zero.accessibleSummary, /No availability is declared/i);
-  assert.doesNotMatch(zero.accessibleSummary, /0 minutes remain/i);
+  assert.match(zero.accessibleSummary, /尚未填写可用时间/);
+  assert.doesNotMatch(zero.accessibleSummary, /还剩 0 分钟/);
 });
 
 test("excludes archived projects from active cards", () => {

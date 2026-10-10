@@ -630,8 +630,8 @@ export function deriveMeaningfulActivityBuckets(
       return {
         label:
           weeksAgo === 0
-            ? "This week"
-            : `${weeksAgo} week${weeksAgo === 1 ? "" : "s"} ago`,
+            ? "本周"
+            : `${weeksAgo} 周前`,
         count,
         intensity: intensity as 0 | 1 | 2 | 3,
       };
@@ -641,7 +641,7 @@ export function deriveMeaningfulActivityBuckets(
       projectId: demo.project.id,
       projectName: demo.project.name,
       buckets,
-      accessibleSummary: `${demo.project.name}: ${total} meaningful events across ${bucketCount} week${bucketCount === 1 ? "" : "s"}.`,
+      accessibleSummary: `${demo.project.name}：${bucketCount} 周内共 ${total} 条学习记录。`,
     };
   });
 }
@@ -672,7 +672,7 @@ export function deriveCapacityAllocation(
   if (remainingMinutes > 0) {
     segments.push({
       projectId: "remaining",
-      label: "Available",
+      label: "剩余可用时间",
       minutes: remainingMinutes,
       percent: (remainingMinutes / denominator) * 100,
       color: "#e5e7eb",
@@ -689,16 +689,16 @@ export function deriveCapacityAllocation(
       overCapacityMinutes,
       segments,
       warningSegment: {
-        label: "Over capacity",
+        label: "超出可用时间",
         minutes: overCapacityMinutes,
         percent: zeroAvailability
           ? 100
           : Math.min(100, (overCapacityMinutes / plannedMinutes) * 100),
       },
-      warning: `Capacity is over capacity by ${overCapacityMinutes} minutes.`,
+      warning: `计划时间比可用时间多 ${overCapacityMinutes} 分钟。`,
       accessibleSummary: zeroAvailability
-        ? `No availability is declared; ${plannedMinutes} planned minutes need a capacity decision.`
-        : `${plannedMinutes} planned minutes exceeds ${availableMinutes} available by ${overCapacityMinutes} minutes.`,
+        ? `尚未填写可用时间；已计划 ${plannedMinutes} 分钟，需要确认如何安排。`
+        : `已计划 ${plannedMinutes} 分钟，可用 ${availableMinutes} 分钟，超出 ${overCapacityMinutes} 分钟。`,
     };
   }
 
@@ -711,7 +711,7 @@ export function deriveCapacityAllocation(
       overCapacityMinutes,
       segments,
       accessibleSummary:
-        "No planned time or availability is declared for the next 2 weeks.",
+        "未来两周尚未安排学习时间，也未填写可用时间。",
     };
   }
 
@@ -724,8 +724,8 @@ export function deriveCapacityAllocation(
     segments,
     accessibleSummary:
       plannedMinutes === availableMinutes
-        ? `${plannedMinutes} planned minutes use all ${availableMinutes} available minutes.`
-        : `${plannedMinutes} planned minutes of ${availableMinutes} available; ${remainingMinutes} minutes remain.`,
+        ? `已计划 ${plannedMinutes} 分钟，用满全部 ${availableMinutes} 分钟可用时间。`
+        : `已计划 ${plannedMinutes} 分钟，可用 ${availableMinutes} 分钟，还剩 ${remainingMinutes} 分钟。`,
   };
 }
 
