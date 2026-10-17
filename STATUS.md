@@ -4,7 +4,7 @@
 任务状态：进行中
 当前任务：内容进度 MVP V0.1 实施，当前处于 P0 跨端技术验证
 工作分支：feat/content-progress-mvp
-关联 PR：尚未创建
+关联 PR：https://github.com/Panhe-C/self-study-studio/pull/7
 
 ## 已完成
 - PR #6（产品基线、实现方案、实施计划）已合并进 main（258c432）；本地 main 已同步，文档任务分支 docs/mvp-v0-1-product-design 已在本地和远程删除。
