@@ -5,6 +5,7 @@ public struct ProgressRootView: View {
     @State private var path: [UUID] = []
     @State private var activeDraft: ContentProgress.Draft?
     @State private var showingLockSettings = false
+    @State private var showingLegacy = false
 
     public init(session: ProgressApplicationSession) { self.session = session }
 
@@ -53,9 +54,7 @@ public struct ProgressRootView: View {
                         if let draft = session.drafts.first {
                             Button("继续创建草稿") { activeDraft = draft }
                         }
-                        NavigationLink("查看旧版学习记录") {
-                            LegacyJournalHostView()
-                        }
+                        Button("查看旧版学习记录") { showingLegacy = true }
                         Button("应用锁定设置") { showingLockSettings = true }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -64,6 +63,9 @@ public struct ProgressRootView: View {
             }
             .navigationDestination(for: UUID.self) { id in
                 ProgressDetailView(session: session, projectID: id)
+            }
+            .navigationDestination(isPresented: $showingLegacy) {
+                LegacyJournalHostView()
             }
             .sheet(item: $activeDraft) { draft in
                 ProgressDraftView(session: session, initialDraft: draft) { project in
