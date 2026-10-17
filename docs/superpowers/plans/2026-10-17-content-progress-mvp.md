@@ -30,7 +30,7 @@ P0 跨端技术验证
 
 **输入：** 已确认的双端范围、现有 CloudKit 容器配置、开发账号、可运行 Web 环境。
 
-- [ ] 检查 `Sync/CKSyncEngineDatabaseClient.swift` 和 `WebWorkspace/lib/cloudkit.ts` 的可复用传输边界，确认新 adapter 不经过旧 Journal decoder。
+- [x] 检查 `Sync/CKSyncEngineDatabaseClient.swift` 和 `WebWorkspace/lib/cloudkit.ts` 的可复用传输边界，确认新 adapter 不经过旧 Journal decoder。（结果见 [P0 验证记录](2026-10-17-content-progress-mvp-p0-verification.md) 第 1 节）
 - [ ] 在 development 环境验证 iPhone 与 Web 各自创建 `ContentProgressZoneV1`，新用户无需先打开另一端。
 - [ ] 用同一 Apple 账号验证 `ContentProgressProject` 的创建、读取、带 change tag 更新，以及过期 tag 被拒绝。
 - [ ] 验证不同账号隔离，记录容器、环境和 zone 的对应关系；不在文档保存凭据。
