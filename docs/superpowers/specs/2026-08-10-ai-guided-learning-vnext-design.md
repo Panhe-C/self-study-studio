@@ -1,5 +1,7 @@
 # Self Study Studio vNext：AI 引导式学习执行 Spec
 
+> 历史方案：本文保留旧版设计与实施背景。2026-10-17 确认的改版首版范围以 [MVP V0.1 产品设计](../../PRODUCT_VNEXT.md) 为准；本文的时间管理、教学、记录与复盘要求不适用于新基线。
+
 日期：2026-08-10  
 状态：Proposed  
 平台：iPhone-first，iOS 17+  

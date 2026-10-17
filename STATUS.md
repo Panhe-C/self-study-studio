@@ -1,32 +1,31 @@
 # 开发交接
 
-更新时间：2026-09-30（Asia/Shanghai）
-任务状态：已完成
-当前任务：保留本地 vNext 工作并整合全部任务分支；代码整合与自动验证已完成，合并状态以关联 PR 为准。
-工作分支：chore/consolidate-main → main
-关联 PR：https://github.com/Panhe-C/self-study-studio/pull/3
+更新时间：2026-10-17 11:38（Asia/Shanghai）
+任务状态：已完成（产品基线、实现方案和计划文档；代码尚未实施）
+当前任务：根据 MVP V0.1 编写 iPhone 与 Web 同期改版及跨端同步的实现方案和实施计划
+工作分支：docs/mvp-v0-1-product-design
+关联 PR：https://github.com/Panhe-C/self-study-studio/pull/6
 
 ## 已完成
-- 原有 110 个改动文件纳入版本管理，哈希核对确认内容全部保留，涵盖 vNext 代码、测试、产品文档和维护 Skill。
-- 整合 Agent 交接规范和免费 Apple ID 安装分支，保留双方提交历史。
-- 免费签名使用独立权限文件，默认 CloudKit 权限保持完整。
-- 安装脚本改为读取 main；已有仓库必须干净且位于 main，更新仅允许快进。
+- `docs/PRODUCT_VNEXT.md`：确认的产品范围及本轮用户确认的双端同期、跨端同步要求。
+- `docs/superpowers/specs/2026-10-17-content-progress-mvp-design.md`：基于源码核对的模块复用边界、项目聚合契约、独立 CloudKit zone、双端存储、冲突处理、AI 与历史兼容方案。
+- `docs/superpowers/plans/2026-10-17-content-progress-mvp.md`：P0–P7 依赖、文件入口、测试和发布门禁，全部标为未执行。
+- README 与 CODE_MAP 补充方案和计划入口；旧设计继续作为历史参考。
 
 ## 下次从这里继续
-1. 从远程 main 拉取最新代码后，按新任务建立分支。
-2. 按 docs/d1-acceptance-runbook.md 完成真机、真实 AI 服务、CloudKit 双设备及可访问性验收。
-3. 免费 Apple ID 安装流程见 docs/FREE_APPLE_ID_INSTALL.md，仍需真机签名验证。
+1. 从实施计划 P0 开始验证新 zone 的双端独立创建、change tag、单记录容量和 Web 代理运行环境。
+2. 真实 CloudKit 验证需要开发账号、容器权限、Web 配置和可运行客户端；若缺少环境，先做独立契约工作，但保留在线门禁未通过。
+3. 代码实施前确认 PR #6 是否合并，再按计划第 1 节建立实现分支；不要假定新模块已经存在。
 
 ## 验证情况
-- Swift 728 项测试通过（初次受沙箱缓存权限限制，正常权限重试成功）。
-- Web 构建、67 项测试和 lint 通过。
-- iOS 无签名模拟器构建通过。
-- 免费安装脚本 bash -n、两份 entitlements 的 plutil 检查通过。
-- 未执行真机安装、真实 AI 服务或 CloudKit 双设备验收；自动检查不代表这些验收通过。
+- 已执行：核对 Swift 模型、实际 app 入口、AI client、Repository/mapper 和 Web CloudKit/writer；Markdown 相对链接、范围覆盖与 `git diff --check` 检查通过。
+- 未执行：P0 技术验证、应用测试、真实 provider、真机/Web 和在线 CloudKit 验收；本轮只更新文档。
 
 ## 已知问题 / 待决定
-- 产品功能和待验收项见 README.md 与 docs/FEATURE_TREE.md。
+- 独立 zone、单记录聚合、工程容量限制及 Web AI 代理属于本轮提出的技术方案，需 P0 验证，不是已上线能力。
+- 用户明确要求两端同期及跨端同步；不得降为 iPhone 本地首发。
 
 ## 恢复开发所需信息
-- 全部原有未提交文件已纳入整合；没有遗漏在本机的原有工作。
-- 无需新增依赖或迁移步骤，使用仓库现有构建流程。
+- 新旧存储和 zone 隔离；旧数据不自动换算进度。
+- 原视频任务仍在 `docs/product-demo-video` / PR #5，本次未整合该分支。
+- 无未提交的其他任务修改；本轮未更改应用源码、依赖或云端配置。

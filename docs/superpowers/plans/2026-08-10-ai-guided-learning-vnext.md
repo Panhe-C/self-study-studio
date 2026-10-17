@@ -1,5 +1,7 @@
 # Self Study Studio vNext 实施计划
 
+> 历史方案：本文保留旧版设计与实施背景。2026-10-17 确认的改版首版范围以 [MVP V0.1 产品设计](../../PRODUCT_VNEXT.md) 为准；本文的时间管理、教学、记录与复盘要求不适用于新基线。
+
 > 实施前先阅读 [`docs/PRODUCT_VNEXT.md`](../../PRODUCT_VNEXT.md) 和 [`vNext Spec`](../specs/2026-08-10-ai-guided-learning-vnext-design.md)。本计划使用测试优先、小提交、可回滚的顺序；不得把自动化测试等同于真机、CloudKit、通知、附件或 VoiceOver 验收。
 
 **目标：** 在保留现有 Journal、Plan Revision、CloudKit、Calendar 和 Proof 数据兼容性的前提下，把 iPhone 主体验收敛为“AI 草稿 → 用户确认 → Today 执行 → 完成检查 → 确认记录 → 动态调整”。
