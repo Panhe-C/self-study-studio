@@ -4,6 +4,8 @@
 
 按功能查看实现范围与缺口，见 [产品功能树](FEATURE_TREE.md)。
 
+新版拟建模块与双端同步边界见 [实现方案](superpowers/specs/2026-10-17-content-progress-mvp-design.md)，任务顺序见 [实施计划](superpowers/plans/2026-10-17-content-progress-mvp.md)；下表仍描述现有源码。
+
 ## 仓库结构
 
 | 路径 | 职责 |
