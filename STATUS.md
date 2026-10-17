@@ -1,32 +1,28 @@
 # 开发交接
 
-更新时间：2026-09-30（Asia/Shanghai）
-任务状态：已完成
-当前任务：保留本地 vNext 工作并整合全部任务分支；代码整合与自动验证已完成，合并状态以关联 PR 为准。
-工作分支：chore/consolidate-main → main
-关联 PR：https://github.com/Panhe-C/self-study-studio/pull/3
+更新时间：2026-10-17 11:11（Asia/Shanghai）
+任务状态：已完成（产品文档更新，待评审；功能待实施）
+当前任务：将确认的极简 AI 辅助内容进度管理 MVP V0.1 更新到既有产品设计文档
+工作分支：docs/mvp-v0-1-product-design
+关联 PR：待创建，链接见交接回复
 
 ## 已完成
-- 原有 110 个改动文件纳入版本管理，哈希核对确认内容全部保留，涵盖 vNext 代码、测试、产品文档和维护 Skill。
-- 整合 Agent 交接规范和免费 Apple ID 安装分支，保留双方提交历史。
-- 免费签名使用独立权限文件，默认 CloudKit 权限保持完整。
-- 安装脚本改为读取 main；已有仓库必须干净且位于 main，更新仅允许快进。
+- 原位更新 `docs/PRODUCT_VNEXT.md`：产品定位、Project / LearningUnit、等权进度、四项功能、两页流程、范围排除和待实施验收标准。
+- 补充空列表、取消完成、乱序完成、增删排序及暂停恢复的实施口径。
+- 更新 README 与代码导航入口；早期产品设计、旧 vNext Spec 和旧实施计划加历史说明，保留原内容。
 
 ## 下次从这里继续
-1. 从远程 main 拉取最新代码后，按新任务建立分支。
-2. 按 docs/d1-acceptance-runbook.md 完成真机、真实 AI 服务、CloudKit 双设备及可访问性验收。
-3. 免费 Apple ID 安装流程见 docs/FREE_APPLE_ID_INSTALL.md，仍需真机签名验证。
+1. 评审 `docs/PRODUCT_VNEXT.md`，按第 6 节拆分实现与验收任务。
+2. 实施前从 `docs/CODE_MAP.md` 核对现有 Project、计划、持久化与同步入口，确定旧数据保留和 LearningUnit 落地方式。
 
 ## 验证情况
-- Swift 728 项测试通过（初次受沙箱缓存权限限制，正常权限重试成功）。
-- Web 构建、67 项测试和 lint 通过。
-- iOS 无签名模拟器构建通过。
-- 免费安装脚本 bash -n、两份 entitlements 的 plutil 检查通过。
-- 未执行真机安装、真实 AI 服务或 CloudKit 双设备验收；自动检查不代表这些验收通过。
+- 已执行：`git diff --check`；修改文档的相对链接检查；逐项核对用户要求，均通过。
+- 未执行：应用测试、浏览器和设备验收；本轮只更新 Markdown，不改变功能。
 
 ## 已知问题 / 待决定
-- 产品功能和待验收项见 README.md 与 docs/FEATURE_TREE.md。
+- 新模型与既有数据的兼容、存储及同步方式留待实施设计；本次未迁移或删除数据。
 
 ## 恢复开发所需信息
-- 全部原有未提交文件已纳入整合；没有遗漏在本机的原有工作。
-- 无需新增依赖或迁移步骤，使用仓库现有构建流程。
+- 本文档任务从 `origin/main` 建立独立分支。
+- 原视频任务保留在 `docs/product-demo-video` 和 PR #5，本次未合并或改动该任务。
+- 无归属不明的未提交修改。
