@@ -1,8 +1,10 @@
 # 内容进度 MVP P0 验证记录
 
 日期：2026-10-17
-状态：进行中。P0-1（传输边界源码检查）已完成；P0-2～P0-6 在线验证等待环境，门禁保持未通过。
-执行入口：[分阶段实施计划](2026-10-17-content-progress-mvp.md) 第 2 节
+状态：保留既有检查证据。旧 P0-1 源码检查已完成；旧 P0-2～P0-5 云端在线验证移至新 P5，在两端 P4 独立功能验收通过后执行。旧 P0-6 AI 代理运行时验证移至新 P3/P4。尚未执行的在线检查仍未通过，但不再阻塞功能开发。
+
+本文保留原文件名和旧 P0 编号以便追溯；执行顺序以最新版实施计划为准。
+执行入口：[分阶段实施计划](2026-10-17-content-progress-mvp.md) 第 7 节（新 P5）
 技术依据：[实现方案](../specs/2026-10-17-content-progress-mvp-design.md)
 
 ## 1. P0-1：可复用传输边界（已完成，本地源码检查）
@@ -30,11 +32,11 @@
 | 传输层 | 可复用：`cloudkit.ts` 的类型、脚本加载与容器配置无 Journal 耦合；zone 按请求传入 | `cloudkit.ts:63-93, 130-158` |
 | zone 配置 | 需隔离：全局 `cloudKitConfig.zoneName` 默认 `LearningJournalZone`；进度模块使用独立常量 `ContentProgressZoneV1`，不改写全局配置 | `cloudkit.ts:100-113` |
 | 条件写入 | 类型已具备：`modifyRecords` 选项含 `atomic` 与 `ifServerRecordUnchanged` | `cloudkit.ts:38-41` |
-| 建区能力 | 缺失：`CloudKitDatabase` 类型只暴露 `fetchRecordZoneChanges` / `modifyRecords` / `fetchRecords`，无任何建区方法；Web 独立建区未证明，是 P0-2 的首要验证点 | `cloudkit.ts:63-75` |
+| 建区能力 | 缺失：`CloudKitDatabase` 类型只暴露 `fetchRecordZoneChanges` / `modifyRecords` / `fetchRecords`，无任何建区方法；Web 独立建区未证明，是新 P5 的首要验证点 | `cloudkit.ts:63-75` |
 | 写入白名单 | 不可复用：`WebWriteOperation` 是 7 种旧操作的封闭联合，payload 类型绑定 journal-contract | `journal-writer.ts:30-51` |
 | change tag 守卫模式 | 作为 Web progress writer 参考：`GuardedWriteRecord` / `RevisionGuardExpectation` 与 Swift 侧同构 | `journal-writer.ts:22-42` |
 
-## 2. P0-2～P0-6：在线验证（未执行，等待环境）
+## 2. 旧 P0-2～P0-6：在线验证清单（未执行，按新阶段安排）
 
 以下项目必须有真实环境，不用 mock 代替结果。
 
@@ -46,7 +48,7 @@
 | P0-5 单记录容量与请求上限 | development 环境与最大样例数据 |
 | P0-6 Web 部署运行时承载同源 AI 代理与受限公网读取 | 目标部署运行时与 provider 端点允许列表 |
 
-环境就绪后的冒烟顺序：
+两端 P4 验收通过且环境就绪后，在新 P5 执行云端冒烟验证；旧 P0-6 的 AI 代理验证提前在新 P3/P4 执行。云端冒烟顺序：
 
 1. iPhone：调试入口调用 `ensureZone(named: "ContentProgressZoneV1")`，随后创建、读取、带过期 tag 更新一条 `ContentProgressProject` 样例。
 2. Web：先验证 CloudKit JS 能否在 private database 建区；不能建区则先修订设计（候选方向：服务端建区通道或调整 zone 策略），再重复第 1 步的双向读写。

@@ -180,7 +180,7 @@ Self Study Studio 是极简的 AI 辅助自学项目内容进度管理工具，�
 首发范围补充（2026-10-17 用户确认）：**iPhone 与 Web 同期改版，并支持跨端同步**。
 
 - [实现方案](superpowers/specs/2026-10-17-content-progress-mvp-design.md)：共享契约、双端模块、CloudKit 同步、AI 初始化与旧数据隔离。
-- [分阶段实施计划](superpowers/plans/2026-10-17-content-progress-mvp.md)：P0–P7 的代码入口、依赖、验证与完成条件；当前均未实施。
+- [分阶段实施计划](superpowers/plans/2026-10-17-content-progress-mvp.md)：P0–P4 先完成两端各自功能与验收，P5–P7 再做云端接入、同步与联合验收；已有源码检查证据单独保留。
 
 ### 历史参考
 

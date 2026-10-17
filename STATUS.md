@@ -1,30 +1,31 @@
 # 开发交接
 
-更新时间：2026-10-17 12:10（Asia/Shanghai）
-任务状态：进行中
-当前任务：内容进度 MVP V0.1 实施，当前处于 P0 跨端技术验证
+更新时间：2026-10-17 15:40（Asia/Shanghai）
+任务状态：进行中（本轮计划顺序调整已完成，功能实现尚未开始）
+当前任务：先完成 Web 与 iOS 各自功能和验证，再接入双端存储同步及联合验收
 工作分支：feat/content-progress-mvp
 关联 PR：https://github.com/Panhe-C/self-study-studio/pull/7
 
 ## 已完成
-- PR #6（产品基线、实现方案、实施计划）已合并进 main（258c432）；本地 main 已同步，文档任务分支 docs/mvp-v0-1-product-design 已在本地和远程删除。
-- 建立实施分支 feat/content-progress-mvp（基于 main 258c432）。
-- P0-1 传输边界源码检查完成：复用边界、隔离确认与 Web 建区能力缺口均已记录，见 `docs/superpowers/plans/2026-10-17-content-progress-mvp-p0-verification.md` 第 1 节。
+- PR #6 产品与技术文档已合并至 main；当前继续已有实施分支和 PR #7。
+- 旧 P0-1 传输边界源码检查已完成，证据保留在 `docs/superpowers/plans/2026-10-17-content-progress-mvp-p0-verification.md`；不表示在线验收通过。
+- 本轮按用户要求重排实施计划：P0 领域、P1 本地存储、P2 页面、P3 AI、P4 两端分别验收、P5 云端验证、P6 同步、P7 联合验收。
+- 同步更新实现方案、产品文档和旧验证记录；拆出后置的账号归属、outbox 和冲突处理，补充已有本地项目接入同步的保留与幂等规则。
 
 ## 下次从这里继续
-1. 准备 P0 在线验证环境：Apple 开发账号与容器 `iCloud.com.local.selfstudystudio` 权限、已登录 iCloud 的设备、CloudKit JS API token、Web 部署运行时（完整清单见验证记录第 2 节）。
-2. 环境就绪后按验证记录第 2 节的冒烟顺序执行；Web 独立建区能力是首要验证点，不成立时先修订设计再进入 P1。
-3. 在线门禁未通过前，不开始 P1 契约代码。
+1. 从实施计划第 2 节的新 P0 开始实现共享领域契约与规则；无需等待 CloudKit 账号、token 或建区验证。
+2. 按 P1–P4 完成本地持久化、双端页面、AI 和两端各自的功能验收；结果分别记录，不能互相代替。
+3. 两端 P4 均通过后再准备 P5 云端环境、执行 P6 同步接入及 P7 联合验收。
 
 ## 验证情况
-- 已执行：P0-1 源码边界检查（证据见验证记录）；Markdown 相对链接检查；`git diff --check`。
-- 未执行：P0-2～P0-6 在线验证（缺开发账号、容器权限、API token、部署运行时）；应用构建、测试、真机与 Web 验收（本轮为文档与分支变更，未改动源码）。
+- 已执行：检查现有分支、远程与 PR；Markdown 链接、阶段依赖、旧编号映射和 `git diff --check` 检查通过。
+- 未执行：应用代码修改与测试、真实 AI、设备/Web 功能验收、CloudKit 在线验证。本轮仅调整文档。
 
 ## 已知问题 / 待决定
-- Web 端 CloudKit JS 独立建区能力未证明，是 P0 首要风险；若不成立需修订设计（候选方向见验证记录第 2 节）。
-- P0 在线验证所需账号、token 与部署环境需要用户提供。
+- CloudKit 独立建区、容量与账号隔离尚未在线验证，后置到 P5，不阻塞 P0–P4。
+- P4 仍需真实 AI、浏览器和设备验收；各自功能通过不代表跨端同步通过。
 
 ## 恢复开发所需信息
-- 产品基线 `docs/PRODUCT_VNEXT.md`、实现方案与实施计划均在 main；P0 进度见上述验证记录。
-- 原视频任务仍在 docs/product-demo-video / PR #5，与本任务无关。
-- 无未提交的其他任务修改；本轮未更改应用源码、依赖或云端配置。
+- 最新任务顺序见 `docs/superpowers/plans/2026-10-17-content-progress-mvp.md`；旧验证文件名和旧检查编号仅供追溯。
+- 本地存储必须先做；后置的是云端存储和同步链路，不能以临时内存数据代替各端持久化。
+- 原视频任务 `docs/product-demo-video` / PR #5 与本任务无关；本轮未修改源码、依赖或云端配置。
