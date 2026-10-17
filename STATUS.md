@@ -1,31 +1,29 @@
 # 开发交接
 
-更新时间：2026-10-17 11:38（Asia/Shanghai）
-任务状态：已完成（产品基线、实现方案和计划文档；代码尚未实施）
-当前任务：根据 MVP V0.1 编写 iPhone 与 Web 同期改版及跨端同步的实现方案和实施计划
-工作分支：docs/mvp-v0-1-product-design
-关联 PR：https://github.com/Panhe-C/self-study-studio/pull/6
+更新时间：2026-10-17 22:24（Asia/Shanghai）
+任务状态：已完成（官网 UI 与动效研究；未修改应用代码）
+当前任务：研究 Ambi 官网的 UI、信息架构和动效，并提炼对 Self Study Studio 可复用的设计方法
+工作分支：docs/ambi-ui-motion-research
+关联 PR：https://github.com/Panhe-C/self-study-studio/pull/8
 
 ## 已完成
-- `docs/PRODUCT_VNEXT.md`：确认的产品范围及本轮用户确认的双端同期、跨端同步要求。
-- `docs/superpowers/specs/2026-10-17-content-progress-mvp-design.md`：基于源码核对的模块复用边界、项目聚合契约、独立 CloudKit zone、双端存储、冲突处理、AI 与历史兼容方案。
-- `docs/superpowers/plans/2026-10-17-content-progress-mvp.md`：P0–P7 依赖、文件入口、测试和发布门禁，全部标为未执行。
-- README 与 CODE_MAP 补充方案和计划入口；旧设计继续作为历史参考。
+- 新增 `docs/research/ambi-ui-motion-study-2026-10-17.md`，覆盖 Ambi 首页、Features、Hardware、Trust 和 About。
+- 区分官网可观察事实与设计判断，整理信息架构、色彩、字体、网格、图像、滚动叙事、微交互和减少动态效果。
+- 提炼对 Self Study Studio 可直接采用、改造后采用和不建议照搬的设计方向。
+- 本任务从 `origin/main` 建立独立文档分支，未混入 `feat/content-progress-mvp`；应用源码、依赖和云端配置均未修改。
 
 ## 下次从这里继续
-1. 从实施计划 P0 开始验证新 zone 的双端独立创建、change tag、单记录容量和 Web 代理运行环境。
-2. 真实 CloudKit 验证需要开发账号、容器权限、Web 配置和可运行客户端；若缺少环境，先做独立契约工作，但保留在线门禁未通过。
-3. 代码实施前确认 PR #6 是否合并，再按计划第 1 节建立实现分支；不要假定新模块已经存在。
+1. 如要落实建议，先选一个明确范围，例如“完成当前单元 → 更新进度 → 下一单元成为当前”的状态接力动效。
+2. 在独立功能分支实现，并分别验证桌面、390 px 窄屏和 `prefers-reduced-motion`；不要把官网营销页的多视口滚动锁定搬进高频工作区。
 
 ## 验证情况
-- 已执行：核对 Swift 模型、实际 app 入口、AI client、Repository/mapper 和 Web CloudKit/writer；Markdown 相对链接、范围覆盖与 `git diff --check` 检查通过。
-- 未执行：P0 技术验证、应用测试、真实 provider、真机/Web 和在线 CloudKit 验收；本轮只更新文档。
+- 已执行：Ambi 官网桌面端与 390 × 844 移动视口检查；核对首页滚动、Features 滚动同步面板、响应式导航、计算样式和减少动态效果规则；`git diff --check` 通过。
+- 未执行：未取得 Ambi 源码或设计源文件；未对 Ambi 产品、硬件和服务能力做实际验收；未实施 Self Study Studio 界面改动。
 
 ## 已知问题 / 待决定
-- 独立 zone、单记录聚合、工程容量限制及 Web AI 代理属于本轮提出的技术方案，需 P0 验证，不是已上线能力。
-- 用户明确要求两端同期及跨端同步；不得降为 iPhone 本地首发。
+- 官网动效效果来自公开页面的渲染与交互观察，无法据此确认内部动效引擎版本或完整实现算法。
+- 若进入实现，需要先决定应用于首次使用、首页还是项目详情；三者的信息密度和动效强度不应相同。
 
 ## 恢复开发所需信息
-- 新旧存储和 zone 隔离；旧数据不自动换算进度。
-- 原视频任务仍在 `docs/product-demo-video` / PR #5，本次未整合该分支。
-- 无未提交的其他任务修改；本轮未更改应用源码、依赖或云端配置。
+- 研究入口：`docs/research/ambi-ui-motion-study-2026-10-17.md`。
+- 原内容进度任务继续使用远程分支 `feat/content-progress-mvp` / PR #7；本研究分支未修改其工作。
