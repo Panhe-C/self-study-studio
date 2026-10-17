@@ -46,12 +46,12 @@ P0 共享领域契约与规则（无需 CloudKit）
 
 **主要文件：** 拟建 `ContentProgress/ProgressDomain.swift`、`ProgressProjection.swift`、`ProgressService.swift`；Web `lib/content-progress/domain.ts`、`projection.ts`、`commands.ts`；共享 `Resources/ContentProgressContract/`。
 
-- [ ] 固定领域 schemaVersion、UUID、日期/null、来源字段、长度算法与本地序列化；云端 recordType、recordName 和容量门禁留到 P5。容量暂按实现方案建议值作为本地上限，标注待云端验证。
-- [ ] 建立新 Project / LearningUnit 类型，避免与旧 Project 混用；保持旧 `Domain.swift`、Journal schema 与 CloudKit type 不变。
-- [ ] 实现纯投影：0/0、全部完成、当前/下一单元、x/y 和百分比。
-- [ ] 实现 create、setCompleted、rename、add、delete、reorder、setPaused 命令；clock 与 UUID 生成可注入。
-- [ ] 固定取消完成清空时间、重复完成保留时间、重排不重建 ID、增删重算进度等规则。
-- [ ] 为 Swift/TS 使用同一 valid/invalid fixtures，包含 Unicode 长度、未知版本、重复 ID、断裂顺序和状态时间不一致。
+- [x] 固定领域 schemaVersion、UUID、日期/null、长度算法与本地序列化；来源文本仅在初始化草稿中使用，P1 存储草稿；云端 recordType、recordName 和容量门禁留到 P5。容量暂按实现方案建议值作为本地上限，标注待云端验证。
+- [x] 建立新 Project / LearningUnit 类型，避免与旧 Project 混用；保持旧 `Domain.swift`、Journal schema 与 CloudKit type 不变。
+- [x] 实现纯投影：0/0、全部完成、当前/下一单元、x/y 和百分比。
+- [x] 实现 create、setCompleted、rename、add、delete、reorder、setPaused 命令；clock 与 UUID 生成可注入。
+- [x] 固定取消完成清空时间、重复完成保留时间、重排不重建 ID、增删重算进度等规则。
+- [x] 为 Swift/TS 使用同一 valid/invalid fixtures，包含 Unicode 长度、未知版本、重复 ID、断裂顺序和状态时间不一致。
 
 **必要测试：** `ProgressDomainTests`、`ProgressProjectionTests`、Web `content-progress-domain.test.mjs`；两端读相同 fixture 产生相同投影与错误分类。
 
