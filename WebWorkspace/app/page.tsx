@@ -1,13 +1,5 @@
-import { WorkspaceApp } from "./workspace-app";
+import { ProgressApp } from "./progress-app";
 
 export default function Home() {
-  const initialAsOf = new Date().toISOString();
-  const initialTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-  return (
-    <WorkspaceApp
-      initialAsOf={initialAsOf}
-      initialTimeZone={initialTimeZone}
-    />
-  );
+  return <ProgressApp />;
 }
