@@ -4,7 +4,7 @@
 任务状态：已完成（产品文档更新，待评审；功能待实施）
 当前任务：将确认的极简 AI 辅助内容进度管理 MVP V0.1 更新到既有产品设计文档
 工作分支：docs/mvp-v0-1-product-design
-关联 PR：待创建，链接见交接回复
+关联 PR：https://github.com/Panhe-C/self-study-studio/pull/6
 
 ## 已完成
 - 原位更新 `docs/PRODUCT_VNEXT.md`：产品定位、Project / LearningUnit、等权进度、四项功能、两页流程、范围排除和待实施验收标准。
