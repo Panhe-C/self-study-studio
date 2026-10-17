@@ -20,6 +20,12 @@ public final class ProgressApplicationSession: ObservableObject {
         }
     }
 
+    init(repository: any ContentProgressRepository) {
+        self.repository = repository
+        do { try reload() }
+        catch { errorMessage = error.localizedDescription }
+    }
+
     public func reload() throws {
         guard let repository else { throw StoreError.unavailable }
         // Publish only after both reads succeed. A damaged store is not an empty store.

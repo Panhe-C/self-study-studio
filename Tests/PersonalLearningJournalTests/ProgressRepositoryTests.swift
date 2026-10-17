@@ -42,4 +42,80 @@ final class ProgressRepositoryTests: XCTestCase {
         let reopened = try SwiftDataProgressRepository(url: url)
         XCTAssertEqual(try reopened.project(id: project.id), project)
     }
+
+    func testSessionKeepsSavedDataWhenDraftWriteFails() throws {
+        let backing = try SwiftDataProgressRepository.inMemory()
+        let project = try ContentProgress.createProject(name: "CS336", titles: ["Lecture 1"])
+        let draft = ContentProgress.Draft(name: "React", units: [.init(title: "JSX")])
+        try backing.save(project)
+        try backing.save(draft)
+        let repository = FailingProgressRepository(backing: backing)
+        let session = ProgressApplicationSession(repository: repository)
+
+        var edited = draft
+        edited.name = "React 19"
+        repository.failNextDraftSave = true
+        XCTAssertFalse(session.saveDraft(edited))
+        XCTAssertNotNil(session.errorMessage)
+        XCTAssertEqual(session.projects, [project])
+        XCTAssertEqual(session.drafts, [draft])
+        XCTAssertEqual(try backing.draft(id: draft.id), draft)
+
+        XCTAssertTrue(session.saveDraft(edited))
+        XCTAssertEqual(session.drafts, [edited])
+        XCTAssertNil(session.errorMessage)
+    }
+
+    func testSessionKeepsDraftWhenConfirmationWriteFails() throws {
+        let backing = try SwiftDataProgressRepository.inMemory()
+        let draft = ContentProgress.Draft(name: "React", units: [.init(title: "JSX")])
+        try backing.save(draft)
+        let repository = FailingProgressRepository(backing: backing)
+        let session = ProgressApplicationSession(repository: repository)
+
+        repository.failNextConfirmation = true
+        XCTAssertNil(session.confirmDraft(id: draft.id))
+        XCTAssertNotNil(session.errorMessage)
+        XCTAssertEqual(session.drafts, [draft])
+        XCTAssertTrue(session.projects.isEmpty)
+        XCTAssertEqual(try backing.draft(id: draft.id), draft)
+        XCTAssertNil(try backing.project(id: draft.id))
+
+        XCTAssertEqual(session.confirmDraft(id: draft.id)?.id, draft.id)
+        XCTAssertTrue(session.drafts.isEmpty)
+        XCTAssertEqual(session.projects.map(\.id), [draft.id])
+        XCTAssertNil(session.errorMessage)
+    }
+}
+
+@MainActor
+private final class FailingProgressRepository: ContentProgressRepository {
+    let backing: SwiftDataProgressRepository
+    var failNextDraftSave = false
+    var failNextConfirmation = false
+
+    init(backing: SwiftDataProgressRepository) { self.backing = backing }
+
+    func projects() throws -> [ContentProgress.Project] { try backing.projects() }
+    func project(id: UUID) throws -> ContentProgress.Project? { try backing.project(id: id) }
+    func save(_ project: ContentProgress.Project) throws { try backing.save(project) }
+    func draft(id: UUID) throws -> ContentProgress.Draft? { try backing.draft(id: id) }
+    func drafts() throws -> [ContentProgress.Draft] { try backing.drafts() }
+    func save(_ draft: ContentProgress.Draft) throws {
+        if failNextDraftSave {
+            failNextDraftSave = false
+            throw Failure.write
+        }
+        try backing.save(draft)
+    }
+    func removeDraft(id: UUID) throws { try backing.removeDraft(id: id) }
+    func confirmDraft(id: UUID, now: Date) throws -> ContentProgress.Project {
+        if failNextConfirmation {
+            failNextConfirmation = false
+            throw Failure.write
+        }
+        return try backing.confirmDraft(id: id, now: now)
+    }
+
+    private enum Failure: Error { case write }
 }
