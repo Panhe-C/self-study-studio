@@ -4,7 +4,7 @@
 任务状态：已完成（官网 UI 与动效研究；未修改应用代码）
 当前任务：研究 Ambi 官网的 UI、信息架构和动效，并提炼对 Self Study Studio 可复用的设计方法
 工作分支：docs/ambi-ui-motion-research
-关联 PR：尚未创建
+关联 PR：https://github.com/Panhe-C/self-study-studio/pull/8
 
 ## 已完成
 - 新增 `docs/research/ambi-ui-motion-study-2026-10-17.md`，覆盖 Ambi 首页、Features、Hardware、Trust 和 About。
