@@ -10,7 +10,8 @@ public extension ContentProgress {
         let units = titles.enumerated().map { index, title in
             LearningUnit(id: makeID(), title: trimmed(title), order: index)
         }
-        let project = Project(id: makeID(), name: trimmed(name), createdAt: now, updatedAt: now, units: units)
+        let timestamp = millisecondPrecision(now)
+        let project = Project(id: makeID(), name: trimmed(name), createdAt: timestamp, updatedAt: timestamp, units: units)
         try validate(project)
         return project
     }
@@ -25,8 +26,8 @@ public extension ContentProgress {
         if project.units[index].isCompleted == completed { return project }
         var updated = project
         updated.units[index].isCompleted = completed
-        updated.units[index].completedAt = completed ? now : nil
-        updated.updatedAt = max(now, project.updatedAt)
+        updated.units[index].completedAt = completed ? millisecondPrecision(now) : nil
+        updated.updatedAt = max(millisecondPrecision(now), project.updatedAt)
         try validate(updated)
         return updated
     }
@@ -36,7 +37,7 @@ public extension ContentProgress {
     ) throws -> Project {
         var updated = project
         updated.units.append(LearningUnit(id: id, title: trimmed(title), order: project.units.count))
-        updated.updatedAt = max(now, project.updatedAt)
+        updated.updatedAt = max(millisecondPrecision(now), project.updatedAt)
         try validate(updated)
         return updated
     }
@@ -51,7 +52,7 @@ public extension ContentProgress {
         if project.units[index].title == normalized { return project }
         var updated = project
         updated.units[index].title = normalized
-        updated.updatedAt = max(now, project.updatedAt)
+        updated.updatedAt = max(millisecondPrecision(now), project.updatedAt)
         try validate(updated)
         return updated
     }
@@ -65,7 +66,7 @@ public extension ContentProgress {
         var updated = project
         updated.units.removeAll { $0.id == unitID }
         normalizeOrder(&updated)
-        updated.updatedAt = max(now, project.updatedAt)
+        updated.updatedAt = max(millisecondPrecision(now), project.updatedAt)
         try validate(updated)
         return updated
     }
@@ -83,7 +84,7 @@ public extension ContentProgress {
         var updated = project
         updated.units = ids.compactMap { byID[$0] }
         normalizeOrder(&updated)
-        updated.updatedAt = max(now, project.updatedAt)
+        updated.updatedAt = max(millisecondPrecision(now), project.updatedAt)
         try validate(updated)
         return updated
     }
@@ -94,7 +95,7 @@ public extension ContentProgress {
         if project.isPaused == paused { return project }
         var updated = project
         updated.isPaused = paused
-        updated.updatedAt = max(now, project.updatedAt)
+        updated.updatedAt = max(millisecondPrecision(now), project.updatedAt)
         try validate(updated)
         return updated
     }

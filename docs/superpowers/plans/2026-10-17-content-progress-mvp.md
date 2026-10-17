@@ -1,7 +1,7 @@
 # 内容进度 MVP V0.1 实施计划
 
 更新日期：2026-10-17
-状态：顺序已按用户要求调整；仅已完成旧 P0-1 传输边界源码检查，其余阶段尚未完成
+状态：P0 已完成；P1 本地存储核心已实现，故障注入和两端完整验收待做；P2 开发中
 产品基线：[MVP V0.1 产品设计](../../PRODUCT_VNEXT.md)
 技术依据：[实现方案](../specs/2026-10-17-content-progress-mvp-design.md)
 
@@ -63,13 +63,13 @@ P0 共享领域契约与规则（无需 CloudKit）
 
 **主要文件：** 拟建 `ProgressRepository.swift`、`SwiftDataProgressRepository.swift`、`ProgressDraftStore.swift`；Web `repository.ts`、`draft-store.ts`。
 
-- [ ] 为新模型建立独立 SwiftData store 和 IndexedDB 数据库；保留旧 Journal 文件及缓存。
-- [ ] 单次本地事务保存项目及其单元；写入失败则整体回滚。repository 接口与业务层分离，本阶段不实现 serverBase、outbox、同步 token 或云端队列。
-- [ ] 创建确认固定 project/unit ID，支持重复点击、崩溃恢复与重试，不生成重复项目。
-- [ ] 保存初始化输入与预览草稿，重启后可恢复；取消创建只清理本草稿。
-- [ ] 草稿确认和正式项目提交以稳定 ID 对账：即使提交后、删除草稿前崩溃，再次确认也不创建重复记录。
-- [ ] 真实本地数据与 demo 数据使用独立命名空间；Web 无需 CloudKit 登录即可完成真实本地功能，不能把本地项目当演示数据。
-- [ ] 保留稳定项目/单元 ID 和存储 schema 版本，为 P6 接入同步提供可迁移基础；账号归属与上传预览在 P6 实施。
+- [x] 为新模型建立独立 SwiftData store 和 IndexedDB 数据库；保留旧 Journal 文件及缓存。
+- [x] 单次本地事务保存项目及其单元；写入失败则整体回滚。repository 接口与业务层分离，本阶段不实现 serverBase、outbox、同步 token 或云端队列。
+- [x] 创建确认固定 project/unit ID，支持重复点击、崩溃恢复与重试，不生成重复项目。
+- [x] 保存初始化输入与预览草稿，重启后可恢复；取消创建只清理本草稿。
+- [x] 草稿确认和正式项目提交以稳定 ID 对账：即使提交后、删除草稿前崩溃，再次确认也不创建重复记录。
+- [x] 真实本地数据与 demo 数据使用独立命名空间；Web 无需 CloudKit 登录即可完成真实本地功能，不能把本地项目当演示数据。
+- [x] 保留稳定项目/单元 ID 和存储 schema 版本，为 P6 接入同步提供可迁移基础；账号归属与上传预览在 P6 实施。
 - [ ] 对磁盘满、数据库打开失败、浏览器存储被拒绝或配额不足显示错误；不以空库覆盖故障数据。
 
 **必要测试：** `ProgressRepositoryTests`、`ProgressDraftStoreTests`；Web IndexedDB adapter 的事务中断、重启、真实本地/demo 隔离测试。内存 mock 用于服务测试，另需真实 IndexedDB 浏览器测试与 SwiftData 持久化重开测试。

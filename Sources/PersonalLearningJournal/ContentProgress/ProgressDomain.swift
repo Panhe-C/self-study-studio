@@ -23,6 +23,23 @@ public enum ContentProgress {
             self.isCompleted = isCompleted
             self.completedAt = completedAt
         }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, title, order, isCompleted, completedAt
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(id, forKey: .id)
+            try container.encode(title, forKey: .title)
+            try container.encode(order, forKey: .order)
+            try container.encode(isCompleted, forKey: .isCompleted)
+            if let completedAt {
+                try container.encode(completedAt, forKey: .completedAt)
+            } else {
+                try container.encodeNil(forKey: .completedAt)
+            }
+        }
     }
 
     public struct Project: Codable, Equatable, Identifiable, Sendable {
@@ -67,6 +84,10 @@ public enum ContentProgress {
         case missingUnit
         case invalidReorder
         case pausedProject
+    }
+
+    public static func millisecondPrecision(_ date: Date) -> Date {
+        Date(timeIntervalSince1970: floor(date.timeIntervalSince1970 * 1_000) / 1_000)
     }
 
     public static func trimmed(_ value: String) -> String {
