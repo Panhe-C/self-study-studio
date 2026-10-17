@@ -6,13 +6,13 @@ import test from "node:test";
 import { createRunnableDevEnvironment, createServer } from "vite";
 import { projectDemos } from "../lib/journal.ts";
 
-async function render() {
+async function render(pathname = "/legacy") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request("http://localhost/", {
+    new Request(`http://localhost${pathname}`, {
       headers: { accept: "text/html" },
     }),
     {
@@ -67,7 +67,7 @@ async function renderDashboard(props) {
 
 test("threads one server initialAsOf through the production Dashboard boundary", async () => {
   const [pageSource, workspaceSource, dashboardSource] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/legacy/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/workspace-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
   ]);
@@ -154,7 +154,7 @@ test("server-renders the learning workspace", async () => {
   assert.match(html, /aria-pressed="true"/);
   assert.match(html, /meaningful activity over 6 weeks/i);
   assert.match(html, /planned minutes of .* available/i);
-  assert.match(html, /<title>Self Study Studio — Learning Workspace<\/title>/i);
+  assert.match(html, /<title>Self Study Studio — 学习内容进度<\/title>/i);
   assert.match(html, /Your learning portfolio/);
   assert.match(html, /Active Projects/);
   assert.match(html, /Electric guitar improvisation/);
@@ -401,10 +401,11 @@ test("server-renders empty, partial, conflict, loading, and error snapshot state
   assert.match(error, /Snapshot unavailable/);
 });
 
-test("removes disposable starter UI and keeps CloudKit explicit", async () => {
-  const [page, layout, packageJson, cloudKit, hosting] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+test("removes disposable starter UI and keeps legacy CloudKit explicit", async () => {
+  const [page, layout, legacyLayout, packageJson, cloudKit, hosting] = await Promise.all([
+    readFile(new URL("../app/legacy/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/legacy/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../lib/cloudkit.ts", import.meta.url), "utf8"),
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
@@ -413,7 +414,8 @@ test("removes disposable starter UI and keeps CloudKit explicit", async () => {
   await assert.rejects(access(new URL("../app/_sites-preview", import.meta.url)));
   assert.doesNotMatch(page, /_sites-preview|SkeletonPreview/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
-  assert.match(layout, /cdn\.apple-cloudkit\.com\/ck\/2\/CloudKit\.js/);
+  assert.match(legacyLayout, /cdn\.apple-cloudkit\.com\/ck\/2\/CloudKit\.js/);
+  assert.doesNotMatch(layout, /cdn\.apple-cloudkit\.com\/ck\/2\/CloudKit\.js/);
   assert.match(cloudKit, /iCloud\.com\.local\.selfstudystudio/);
   assert.match(cloudKit, /LearningJournalZone/);
   assert.match(cloudKit, /privateCloudDatabase\.fetchRecordZoneChanges/);
@@ -433,4 +435,12 @@ test("removes disposable starter UI and keeps CloudKit explicit", async () => {
     await readFile(new URL("../README.md", import.meta.url), "utf8"),
     /Self Study Studio Web Workspace/,
   );
+});
+
+
+test("new home route renders the local progress entry while legacy remains available", async () => {
+  const html = await (await render("/")).text();
+  assert.match(html, /正在读取本地项目/);
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /ProgressApp/);
 });

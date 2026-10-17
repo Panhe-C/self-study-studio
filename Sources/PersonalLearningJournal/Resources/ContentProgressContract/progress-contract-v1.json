@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "recordType": "ContentProgressProject",
+  "fields": [
+    "schemaVersion",
+    "id",
+    "name",
+    "isPaused",
+    "createdAt",
+    "updatedAt",
+    "units"
+  ],
+  "unitFields": [
+    "id",
+    "title",
+    "order",
+    "isCompleted",
+    "completedAt"
+  ],
+  "limits": {
+    "projectNameScalars": 120,
+    "unitTitleScalars": 200,
+    "units": 300,
+    "encodedBytes": 262144
+  },
+  "dateFormat": "utcIso8601OptionalFraction",
+  "percentageRounding": "nearestIntegerHalfUp"
+}

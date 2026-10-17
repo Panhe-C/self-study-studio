@@ -126,6 +126,16 @@
 		10000000000000000000017D /* ProjectTrailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000027D /* ProjectTrailView.swift */; };
 		10000000000000000000017E /* LearningCoachService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000027E /* LearningCoachService.swift */; };
 		10000000000000000000017F /* LearningCoachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000027F /* LearningCoachView.swift */; };
+		F0000000000000000000010 /* ProgressDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000020 /* ProgressDomain.swift */; };
+		F0000000000000000000011 /* ProgressProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000021 /* ProgressProjection.swift */; };
+		F0000000000000000000012 /* ProgressService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000022 /* ProgressService.swift */; };
+		F0000000000000000000013 /* progress-contract-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000023 /* progress-contract-v1.json */; };
+		F0000000000000000000014 /* progress-fixtures-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000024 /* progress-fixtures-v1.json */; };
+		F0000000000000000000015 /* ProgressRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000025 /* ProgressRepository.swift */; };
+		F0000000000000000000016 /* SwiftDataProgressRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000026 /* SwiftDataProgressRepository.swift */; };
+		F0000000000000000000017 /* ProgressApplicationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000027 /* ProgressApplicationSession.swift */; };
+		F0000000000000000000018 /* ProgressRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000028 /* ProgressRootView.swift */; };
+		F0000000000000000000019 /* ProgressPlanProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000029 /* ProgressPlanProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -251,6 +261,16 @@
 		100000000000000000000258 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		100000000000000000000259 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		100000000000000000000301 /* SelfStudyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SelfStudyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F0000000000000000000020 /* ProgressDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ContentProgress/ProgressDomain.swift; sourceTree = SOURCE_ROOT; };
+		F0000000000000000000021 /* ProgressProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ContentProgress/ProgressProjection.swift; sourceTree = SOURCE_ROOT; };
+		F0000000000000000000022 /* ProgressService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ContentProgress/ProgressService.swift; sourceTree = SOURCE_ROOT; };
+		F0000000000000000000023 /* progress-contract-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Sources/PersonalLearningJournal/Resources/ContentProgressContract/progress-contract-v1.json; sourceTree = SOURCE_ROOT; };
+		F0000000000000000000024 /* progress-fixtures-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Sources/PersonalLearningJournal/Resources/ContentProgressContract/progress-fixtures-v1.json; sourceTree = SOURCE_ROOT; };
+		F0000000000000000000025 /* ProgressRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ContentProgress/ProgressRepository.swift; sourceTree = SOURCE_ROOT; };
+		F0000000000000000000026 /* SwiftDataProgressRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ContentProgress/SwiftDataProgressRepository.swift; sourceTree = SOURCE_ROOT; };
+		F0000000000000000000027 /* ProgressApplicationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ContentProgress/ProgressApplicationSession.swift; sourceTree = SOURCE_ROOT; };
+		F0000000000000000000028 /* ProgressRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ContentProgress/ProgressRootView.swift; sourceTree = SOURCE_ROOT; };
+		F0000000000000000000029 /* ProgressPlanProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/PersonalLearningJournal/ContentProgress/ProgressPlanProvider.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -275,6 +295,16 @@
 		100000000000000000000502 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				F0000000000000000000020 /* ProgressDomain.swift */,
+				F0000000000000000000021 /* ProgressProjection.swift */,
+				F0000000000000000000022 /* ProgressService.swift */,
+				F0000000000000000000023 /* progress-contract-v1.json */,
+				F0000000000000000000024 /* progress-fixtures-v1.json */,
+				F0000000000000000000025 /* ProgressRepository.swift */,
+				F0000000000000000000026 /* SwiftDataProgressRepository.swift */,
+				F0000000000000000000027 /* ProgressApplicationSession.swift */,
+				F0000000000000000000028 /* ProgressRootView.swift */,
+				F0000000000000000000029 /* ProgressPlanProvider.swift */,
 				100000000000000000000201 /* AddProofView.swift */,
 				100000000000000000000202 /* AttachmentStore.swift */,
 				100000000000000000000203 /* Domain.swift */,
@@ -468,6 +498,8 @@
 			files = (
 				100000000000000000000157 /* Localizable.strings in Resources */,
 				100000000000000000000158 /* Assets.xcassets in Resources */,
+				F0000000000000000000013 /* progress-contract-v1.json in Resources */,
+				F0000000000000000000014 /* progress-fixtures-v1.json in Resources */,
 				10000000000000000000015A /* contract-v1.json in Resources */,
 				10000000000000000000015B /* fixtures-v1.json in Resources */,
 			);
@@ -480,6 +512,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F0000000000000000000010 /* ProgressDomain.swift in Sources */,
+				F0000000000000000000011 /* ProgressProjection.swift in Sources */,
+				F0000000000000000000012 /* ProgressService.swift in Sources */,
+				F0000000000000000000015 /* ProgressRepository.swift in Sources */,
+				F0000000000000000000016 /* SwiftDataProgressRepository.swift in Sources */,
+				F0000000000000000000017 /* ProgressApplicationSession.swift in Sources */,
+				F0000000000000000000018 /* ProgressRootView.swift in Sources */,
+				F0000000000000000000019 /* ProgressPlanProvider.swift in Sources */,
 				100000000000000000000101 /* AddProofView.swift in Sources */,
 				100000000000000000000102 /* AttachmentStore.swift in Sources */,
 				100000000000000000000103 /* Domain.swift in Sources */,

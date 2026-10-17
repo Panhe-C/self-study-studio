@@ -1,0 +1,366 @@
+{
+  "version": 1,
+  "valid": [
+    {
+      "id": "empty",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": []
+      },
+      "expected": {
+        "total": 0,
+        "completed": 0,
+        "percentage": 0,
+        "currentUnitID": null,
+        "nextUnitID": null,
+        "isAllCompleted": false
+      }
+    },
+    {
+      "id": "partial",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "组件与 JSX",
+            "order": 0,
+            "isCompleted": true,
+            "completedAt": "2026-10-17T03:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "title": "State",
+            "order": 1,
+            "isCompleted": false,
+            "completedAt": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "title": "Hooks",
+            "order": 2,
+            "isCompleted": false,
+            "completedAt": null
+          }
+        ]
+      },
+      "expected": {
+        "total": 3,
+        "completed": 1,
+        "percentage": 33,
+        "currentUnitID": "00000000-0000-4000-8000-000000000003",
+        "nextUnitID": "00000000-0000-4000-8000-000000000004",
+        "isAllCompleted": false
+      }
+    },
+    {
+      "id": "all",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "组件与 JSX",
+            "order": 0,
+            "isCompleted": true,
+            "completedAt": "2026-10-17T03:00:00Z"
+          }
+        ]
+      },
+      "expected": {
+        "total": 1,
+        "completed": 1,
+        "percentage": 100,
+        "currentUnitID": null,
+        "nextUnitID": null,
+        "isAllCompleted": true
+      }
+    },
+    {
+      "id": "paused",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": true,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "组件与 JSX",
+            "order": 0,
+            "isCompleted": true,
+            "completedAt": "2026-10-17T03:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "title": "State",
+            "order": 1,
+            "isCompleted": false,
+            "completedAt": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "title": "Hooks",
+            "order": 2,
+            "isCompleted": false,
+            "completedAt": null
+          }
+        ]
+      },
+      "expected": {
+        "total": 3,
+        "completed": 1,
+        "percentage": 33,
+        "currentUnitID": "00000000-0000-4000-8000-000000000003",
+        "nextUnitID": "00000000-0000-4000-8000-000000000004",
+        "isAllCompleted": false
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "version",
+      "payload": {
+        "schemaVersion": 2,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": []
+      },
+      "error": "unsupportedSchema"
+    },
+    {
+      "id": "blank-name",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "  ",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": []
+      },
+      "error": "invalidName"
+    },
+    {
+      "id": "name-scalars",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": []
+      },
+      "error": "invalidName"
+    },
+    {
+      "id": "title-scalars",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍🐍",
+            "order": 0,
+            "isCompleted": true,
+            "completedAt": "2026-10-17T03:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "title": "State",
+            "order": 1,
+            "isCompleted": false,
+            "completedAt": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "title": "Hooks",
+            "order": 2,
+            "isCompleted": false,
+            "completedAt": null
+          }
+        ]
+      },
+      "error": "invalidTitle"
+    },
+    {
+      "id": "duplicate-id",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "组件与 JSX",
+            "order": 0,
+            "isCompleted": true,
+            "completedAt": "2026-10-17T03:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "State",
+            "order": 1,
+            "isCompleted": false,
+            "completedAt": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "title": "Hooks",
+            "order": 2,
+            "isCompleted": false,
+            "completedAt": null
+          }
+        ]
+      },
+      "error": "duplicateUnitID"
+    },
+    {
+      "id": "wrong-order",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "组件与 JSX",
+            "order": 0,
+            "isCompleted": true,
+            "completedAt": "2026-10-17T03:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "title": "State",
+            "order": 4,
+            "isCompleted": false,
+            "completedAt": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "title": "Hooks",
+            "order": 2,
+            "isCompleted": false,
+            "completedAt": null
+          }
+        ]
+      },
+      "error": "invalidOrder"
+    },
+    {
+      "id": "missing-time",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "组件与 JSX",
+            "order": 0,
+            "isCompleted": true,
+            "completedAt": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "title": "State",
+            "order": 1,
+            "isCompleted": false,
+            "completedAt": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "title": "Hooks",
+            "order": 2,
+            "isCompleted": false,
+            "completedAt": null
+          }
+        ]
+      },
+      "error": "invalidCompletionTime"
+    },
+    {
+      "id": "time-while-incomplete",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-17T03:00:00Z",
+        "units": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "组件与 JSX",
+            "order": 0,
+            "isCompleted": true,
+            "completedAt": "2026-10-17T03:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "title": "State",
+            "order": 1,
+            "isCompleted": false,
+            "completedAt": "2026-10-17T03:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "title": "Hooks",
+            "order": 2,
+            "isCompleted": false,
+            "completedAt": null
+          }
+        ]
+      },
+      "error": "invalidCompletionTime"
+    },
+    {
+      "id": "bad-timestamps",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "学习 React",
+        "isPaused": false,
+        "createdAt": "2026-10-17T03:00:00Z",
+        "updatedAt": "2026-10-16T03:00:00Z",
+        "units": []
+      },
+      "error": "invalidTimestamps"
+    }
+  ]
+}

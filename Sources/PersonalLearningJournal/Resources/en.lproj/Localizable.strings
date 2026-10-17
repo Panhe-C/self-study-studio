@@ -315,7 +315,7 @@
 "ai.settings.api_key" = "API Key";
 "ai.settings.preset_footer" = "Endpoint and recommended models are provided automatically. You only need an API key from the selected provider.";
 "ai.settings.configured" = "This provider will be used for planning, learning records, completion checks, adjustments, and reviews.";
-"ai.settings.fallback" = "AI features use their local evidence-based fallback until an API key is saved.";
+"ai.settings.fallback" = "Configure an API key for online AI. Manual flows remain available without it.";
 "ai.settings.clear_key" = "Clear Saved API Key";
 "ai.settings.cancel" = "Cancel";
 "ai.settings.save" = "Save";

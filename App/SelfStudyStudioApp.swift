@@ -2,7 +2,9 @@ import SwiftUI
 
 @main
 struct SelfStudyStudioApp: App {
-    @StateObject private var session: JournalApplicationSession
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var session: ProgressApplicationSession
+    @StateObject private var appLock = AppLockController.shared
 
     init() {
         let documents = FileManager.default.urls(
@@ -10,17 +12,36 @@ struct SelfStudyStudioApp: App {
             in: .userDomainMask
         ).first ?? FileManager.default.temporaryDirectory
         _session = StateObject(
-            wrappedValue: JournalApplicationSession(documentsDirectory: documents)
+            wrappedValue: ProgressApplicationSession(documentsDirectory: documents)
         )
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(
-                viewModel: session.viewModel,
-                calendarViewModel: session.calendarViewModel
-            )
-            .id(ObjectIdentifier(session.viewModel))
+            ProgressRootView(session: session)
+                .overlay {
+                    if appLock.showsPrivacyCover || !appLock.isUnlocked {
+                        ZStack {
+                            Color(.systemBackground).ignoresSafeArea()
+                            VStack(spacing: 14) {
+                                Image(systemName: "lock.shield.fill").font(.largeTitle)
+                                Text("Self Study Studio").font(.headline)
+                                Button("解锁") { Task { _ = await appLock.unlock() } }
+                                    .buttonStyle(.borderedProminent)
+                            }
+                        }
+                    }
+                }
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    switch phase {
+                    case .active:
+                        Task { await appLock.applicationDidBecomeActive() }
+                    case .background, .inactive:
+                        appLock.applicationDidEnterBackground()
+                    @unknown default:
+                        appLock.applicationDidEnterBackground()
+                    }
+                }
         }
     }
 }
