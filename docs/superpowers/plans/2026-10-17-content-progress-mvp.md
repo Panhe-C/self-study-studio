@@ -1,7 +1,7 @@
 # 内容进度 MVP V0.1 实施计划
 
 更新日期：2026-10-17
-状态：P0 已完成；P1 本地存储核心已实现，故障注入待做；P2 双端手动流程已接入，iPhone 交互与无障碍验收待做
+状态：P0 已完成；P1 本地存储核心已实现；P2 双端手动流程已接入；P3 双端 AI 主题/目录链路已接入；故障注入、真实设备/服务与链接读取仍待验收
 产品基线：[MVP V0.1 产品设计](../../PRODUCT_VNEXT.md)
 技术依据：[实现方案](../specs/2026-10-17-content-progress-mvp-design.md)
 
@@ -102,14 +102,14 @@ P0 共享领域契约与规则（无需 CloudKit）
 
 **主要文件：** 拟建 `ProgressPlanProvider.swift`、Web `plan-provider.ts`、`app/api/progress-plan/route.ts`、`app/api/course-outline/route.ts`；复用 iPhone `AIReviewSettingsStore`、`OpenAICompatibleStructuredClient`。
 
-- [ ] 固定只含标题列表的响应 schema 与两端 validator；AI 无 repository 写权限。
-- [ ] 名称必填、目录和链接可选；不要求目标、周期、每日时长。
+- [x] 固定只含标题列表的响应 schema 与两端 validator；AI 无 repository 写权限。
+- [ ] 名称必填、目录和链接可选；不要求目标、周期、每日时长。主题与粘贴目录已接入；未读取的链接当前明确报错，链接读取仍待实现与验收。
 - [ ] 实现公开资料读取的超时、体积、目标地址和重定向限制；来源失败必须显式反馈。
 - [ ] Web 同源 AI 代理使用用户 key、允许端点、大小与速率限制；key 不持久化、不写日志、不进入 CloudKit。
-- [ ] 实现 generationID、取消、过期响应丢弃与重生成替换确认。
-- [ ] 草稿预览支持增删改排序；确认后原子创建本端正式项目并本地保存，AI 不再自动修改它。
+- [x] 实现 generationID、取消、过期响应丢弃与重生成替换确认。
+- [x] 草稿预览支持增删改排序；确认后原子创建本端正式项目并本地保存，AI 不再自动修改它。
 - [ ] 配置缺失、401、429、超时、非法 JSON、空列表、超限及资料不可读均保留输入和旧草稿。
-- [ ] 对比发送给 provider 的请求，确认没有旧 Journal 或其他项目上下文。
+- [x] 对比发送给 provider 的请求，确认没有旧 Journal 或其他项目上下文（模拟传输测试；真实 provider 仍待验收）。
 
 **必要测试：** fake transport 的请求/响应契约、取消竞态和错误路径；两端真实 provider 各至少跑主题、粘贴目录和读取失败回退场景；公开页面成功读取需独立验收。
 

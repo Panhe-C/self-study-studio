@@ -1,8 +1,10 @@
 # Self Study Studio Web Workspace
 
-The browser planning and review surface for the Personal Learning Journal. The
-first implementation slice includes the Dashboard, Project Workspace, Plan,
-Practice, Proof, Learning Trail, Review Inbox, and Sync & Conflicts workspace.
+The `/` route is the new content-progress MVP: local projects, ordered learning
+units, completion, pause/resume, draft creation, and optional AI outline
+generation. Confirmed projects and drafts are stored in a separate IndexedDB
+database. They are currently **only in this browser**; cross-device sync is a
+later stage. The previous Personal Learning Journal remains at `/legacy`.
 
 ## Run locally
 
@@ -11,13 +13,21 @@ npm install
 npm run dev
 ```
 
-The app starts in an explicitly labeled **Demo** mode backed by deterministic
-fixtures. Use the visible **Real journal** mode switch to read the same private
-CloudKit journal used by iPhone. Real mode never falls back to Demo data: missing
-configuration, authentication, schema, or zone failures remain visible as a
-blocked, signed-out, partial, or error state.
+The new home needs no CloudKit login. To enable its AI draft generator, set
+server-only `PROGRESS_AI_ENDPOINT` to an HTTPS OpenAI-compatible
+`/chat/completions` URL and `PROGRESS_AI_MODELS` to a comma-separated allowlist.
+The user enters their own API key in the create dialog; it stays in page memory
+and is sent through the same-origin proxy for that request. Neither the key nor
+the AI response is stored with a confirmed project. Without configuration,
+manual creation works. Automatic course-link reading is not enabled yet: paste
+a course outline, or clear the link to generate from the topic.
 
-To configure Real mode locally, copy `.env.example` to `.env.local` and add the
+The `/legacy` route starts in an explicitly labeled **Demo** mode backed by
+deterministic fixtures. Its **Real journal** switch reads the older private
+CloudKit journal used by iPhone. Real mode never falls back to Demo data:
+missing configuration, authentication, schema, or zone failures remain visible.
+
+To configure legacy Real mode locally, copy `.env.example` to `.env.local` and add the
 Web API token created in CloudKit Dashboard. Credentials and site origins are
 environment/configuration only and must never be committed.
 
@@ -52,5 +62,7 @@ npm run lint
 npx tsc --noEmit
 ```
 
-Canonical Journal records remain in CloudKit. D1 and R2 are intentionally not
-configured; browser storage holds only recoverable unpublished drafts.
+`npx tsc --noEmit` currently reports missing `Fetcher` and `D1Database` types in
+the pre-existing `worker/index.ts`; the build, tests, and lint are separate
+checks. Canonical legacy Journal records remain in CloudKit. D1 and R2 are
+intentionally not configured.

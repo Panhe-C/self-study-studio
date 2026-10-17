@@ -315,7 +315,7 @@
 "ai.settings.api_key" = "API Key";
 "ai.settings.preset_footer" = "接口地址和推荐模型已自动配置，你只需填写所选服务商的 API Key。";
 "ai.settings.configured" = "该服务商将用于课程规划、学习记录、完成检查、计划调整和学习回顾。";
-"ai.settings.fallback" = "保存 API Key 前，AI 功能会使用本地的证据型降级方案。";
+"ai.settings.fallback" = "配置 API Key 后可使用在线 AI；未配置时手动流程仍可使用。";
 "ai.settings.clear_key" = "清除已保存的 API Key";
 "ai.settings.cancel" = "取消";
 "ai.settings.save" = "保存";

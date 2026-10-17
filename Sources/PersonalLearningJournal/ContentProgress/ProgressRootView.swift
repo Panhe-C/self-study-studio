@@ -257,6 +257,12 @@ private struct ProgressDraftView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var session: ProgressApplicationSession
     @State var draft: ContentProgress.Draft
+    @State private var isGenerating = false
+    @State private var generationID = UUID()
+    @State private var generationTask: Task<Void, Never>?
+    @State private var generationError: String?
+    @State private var showingReplaceConfirmation = false
+    @State private var showingAISettings = false
     let onCreated: (ContentProgress.Project) -> Void
 
     init(
@@ -276,6 +282,34 @@ private struct ProgressDraftView: View {
                     TextField("例如：学习 React", text: $draft.name)
                 }
                 Section {
+                    TextField("公开课程链接", text: Binding(
+                        get: { draft.courseURL ?? "" },
+                        set: { draft.courseURL = $0.isEmpty ? nil : $0 }
+                    ))
+                    TextEditor(text: $draft.outlineText)
+                        .frame(minHeight: 100)
+                        .accessibilityLabel("粘贴课程目录")
+                } header: {
+                    Text("可选学习资料")
+                } footer: {
+                    Text("粘贴目录优先。当前链接尚不能自动读取；使用链接时请同时粘贴目录。")
+                }
+                Section {
+                    Button("AI 生成内容结构", systemImage: "sparkles") {
+                        if draft.units.isEmpty { generate() }
+                        else { showingReplaceConfirmation = true }
+                    }
+                    .disabled(isGenerating || draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if isGenerating {
+                        HStack { ProgressView(); Text("正在生成…") }
+                        Button("取消生成") { cancelGeneration() }
+                    }
+                    if let generationError {
+                        Text(generationError).foregroundStyle(.red)
+                    }
+                    Button("AI 设置") { showingAISettings = true }
+                }
+                Section {
                     ForEach($draft.units) { $unit in
                         TextField("学习单元", text: $unit.title)
                     }
@@ -287,26 +321,28 @@ private struct ProgressDraftView: View {
                 } header: {
                     Text("学习单元")
                 } footer: {
-                    Text("当前可手动建立内容结构；AI 初始化将在下一阶段接入。")
+                    Text("可在确认前修改、删除或排序；确认后 AI 不会自动修改学习内容。")
                 }
             }
             .navigationTitle("创建学习项目")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
+                        cancelGeneration()
                         session.discardDraft(id: draft.id)
                         if session.errorMessage == nil { dismiss() }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("确认创建") {
+                        cancelGeneration()
                         guard session.saveDraft(draft) else { return }
                         if let project = session.confirmDraft(id: draft.id) {
                             dismiss()
                             onCreated(project)
                         }
                     }
-                    .disabled(!canConfirm)
+                    .disabled(!canConfirm || isGenerating)
                 }
                 #if os(iOS)
                 ToolbarItem(placement: .secondaryAction) { EditButton() }
@@ -317,6 +353,13 @@ private struct ProgressDraftView: View {
                 saved.updatedAt = ContentProgress.millisecondPrecision(Date())
                 session.saveDraft(saved)
             }
+            .confirmationDialog("用 AI 结果替换现有单元？", isPresented: $showingReplaceConfirmation) {
+                Button("重新生成并替换") { generate() }
+            } message: {
+                Text("现有草稿会在新结果成功后替换；生成失败时保持不变。")
+            }
+            .sheet(isPresented: $showingAISettings) { AIReviewSettingsView() }
+            .onDisappear { cancelGeneration() }
             .interactiveDismissDisabled()
         }
     }
@@ -324,6 +367,51 @@ private struct ProgressDraftView: View {
     private var canConfirm: Bool {
         !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         draft.units.allSatisfy { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    private func generate() {
+        cancelGeneration()
+        generationError = nil
+        let settingsStore = AIReviewSettingsStore()
+        guard let settings = settingsStore.settings(),
+              let key = settingsStore.apiKey(), !key.isEmpty else {
+            generationError = "请先配置 AI 服务商和 API Key。"
+            showingAISettings = true
+            return
+        }
+        let original = draft
+        let requestID = UUID()
+        generationID = requestID
+        isGenerating = true
+        generationTask = Task { @MainActor in
+            do {
+                let titles = try await ProgressPlanProvider(settings: settings, apiKey: key)
+                    .generate(.init(
+                        name: original.name,
+                        outlineText: original.outlineText,
+                        courseURL: original.courseURL
+                    ))
+                guard !Task.isCancelled, generationID == requestID else { return }
+                guard draft == original else {
+                    generationError = "草稿在生成期间已修改，旧结果已丢弃。"
+                    isGenerating = false
+                    return
+                }
+                draft.units = titles.map { .init(title: $0) }
+                isGenerating = false
+            } catch {
+                guard !Task.isCancelled, generationID == requestID else { return }
+                generationError = error.localizedDescription
+                isGenerating = false
+            }
+        }
+    }
+
+    private func cancelGeneration() {
+        generationTask?.cancel()
+        generationTask = nil
+        generationID = UUID()
+        isGenerating = false
     }
 }
 

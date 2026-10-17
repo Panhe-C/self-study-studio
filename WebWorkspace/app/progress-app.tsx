@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { addUnit, deleteUnit, renameUnit, reorder, setCompleted, setPaused } from "../lib/content-progress/commands";
 import { projectProgress } from "../lib/content-progress/projection";
 import { BrowserProgressRepository, type ProgressDraft } from "../lib/content-progress/repository";
+import { decodePlanUnits } from "../lib/content-progress/plan-provider";
 import type { ProgressProject } from "../lib/content-progress/domain";
 import "./progress.css";
 
@@ -15,8 +16,14 @@ export function ProgressApp() {
   const [newTitle, setNewTitle] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [apiKey, setApiKey] = useState("");
+  const [models, setModels] = useState<string[]>([]);
+  const [model, setModel] = useState("");
+  const [generating, setGenerating] = useState(false);
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const operationPending = useRef(false);
+  const generationID = useRef(0);
+  const generationController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,6 +38,15 @@ export function ProgressApp() {
       setLoading(false);
     }).catch((cause) => { if (!cancelled) { setError(String(cause)); setLoading(false); } });
     return () => { cancelled = true; opened?.close(); };
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/progress-plan", { cache: "no-store" }).then((response) => response.json())
+      .then((value: { models?: unknown }) => {
+        const available = Array.isArray(value.models) ? value.models.filter((item): item is string => typeof item === "string") : [];
+        setModels(available);
+        setModel(available[0] ?? "");
+      }).catch(() => setModels([]));
   }, []);
 
   useEffect(() => {
@@ -58,10 +74,50 @@ export function ProgressApp() {
     try { await store.saveDraft(next); setDraft(next); setError(""); } catch (cause) { setError(String(cause)); }
   }
   function editDraft(change: Partial<ProgressDraft>) {
+    cancelGeneration();
     setDraft((current) => current ? { ...current, ...change, updatedAt: new Date().toISOString() } : null);
+  }
+  function cancelGeneration() {
+    generationID.current += 1;
+    generationController.current?.abort();
+    generationController.current = null;
+    setGenerating(false);
+  }
+  async function generate() {
+    if (!draft) return;
+    if (draft.units.length > 0 && !window.confirm("用新的 AI 结果替换现有学习单元？生成失败时草稿保持不变。")) return;
+    if (!apiKey || !model) { setError("请先输入 API Key，并配置可用的 AI 模型。"); return; }
+    cancelGeneration();
+    const requestID = generationID.current;
+    const controller = new AbortController();
+    generationController.current = controller;
+    setGenerating(true);
+    setError("");
+    try {
+      const response = await fetch("/api/progress-plan", {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, name: draft.name, outlineText: draft.outlineText, courseURL: draft.courseURL }),
+      });
+      const result: unknown = await response.json();
+      if (!response.ok) throw new Error((result as { error?: string }).error ?? "AI 生成失败");
+      const titles = decodePlanUnits(result);
+      if (generationID.current !== requestID) return;
+      setDraft((current) => current === draft ? {
+        ...current,
+        units: titles.map((title) => ({ id: crypto.randomUUID(), title })),
+        updatedAt: new Date().toISOString(),
+      } : current);
+    } catch (cause) {
+      if (generationID.current === requestID) setError(String(cause));
+    } finally {
+      if (generationID.current === requestID) { setGenerating(false); generationController.current = null; }
+    }
   }
   async function confirm() {
     if (!store || !draft) return;
+    cancelGeneration();
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
     try {
       await store.saveDraft(draft);
@@ -71,11 +127,13 @@ export function ProgressApp() {
   }
   async function cancel() {
     if (!store || !draft) return;
+    cancelGeneration();
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
     try { await store.removeDraft(draft.id); setDraft(null); setError(""); } catch (cause) { setError(String(cause)); }
   }
   async function saveAndClose() {
     if (!store || !draft) return;
+    cancelGeneration();
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
     try { await store.saveDraft(draft); setDraft(null); setError(""); }
     catch (cause) { setError(String(cause)); }
@@ -124,7 +182,7 @@ export function ProgressApp() {
   if (!store) return <main className="progress-shell"><p role="alert">无法打开本地项目：{error}</p></main>;
   return <main className="progress-shell">
     <header><div><small>SELF STUDY STUDIO</small><h1>学习内容进度</h1></div><span>仅保存在此浏览器</span></header>
-    {error && <p role="alert" className="progress-error">{error}</p>}
+    {error && !draft && <p role="alert" className="progress-error">{error}</p>}
     {selected ? <section aria-label="项目详情">
       <button className="progress-link" onClick={() => setSelectedID(null)}>← 返回项目</button>
       <div className="progress-row"><div><small>{selected.isPaused ? "已暂停" : "进行中"}</small><h2>{selected.name}</h2></div>
@@ -153,8 +211,17 @@ export function ProgressApp() {
     </section>}
     {draft && <div className="progress-overlay"><div role="dialog" aria-modal="true" aria-label="创建学习项目" className="progress-dialog">
       <small>NEW PROJECT</small><h2>创建学习项目</h2>
+      {error && <p role="alert" className="progress-error">{error}</p>}
       <label>项目名称<input autoFocus placeholder="例如：学习 React" value={draft.name} onChange={(event) => editDraft({ name: event.target.value })} /></label>
-      <p>当前可手动建立内容结构；AI 初始化将在下一阶段接入。</p>
+      <label>课程链接（可选）<input type="url" placeholder="https://…" value={draft.courseURL ?? ""} onChange={(event) => editDraft({ courseURL: event.target.value || null })} /></label>
+      <label>课程目录（可选，优先使用）<textarea placeholder="粘贴课程章节或目录" value={draft.outlineText} onChange={(event) => editDraft({ outlineText: event.target.value })} /></label>
+      <p>当前链接尚不能自动读取；使用链接时请同时粘贴目录。也可只用项目名称生成。</p>
+      <div className="progress-ai-config"><label>AI 模型<select value={model} onChange={(event) => setModel(event.target.value)} disabled={models.length === 0}>
+        {models.length === 0 ? <option value="">本站尚未配置 AI 服务</option> : models.map((value) => <option key={value} value={value}>{value}</option>)}
+      </select></label><label>API Key（仅保存在当前页面内存）<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /></label>
+        <button disabled={generating || !draft.name.trim()} onClick={() => void generate()}>{generating ? "正在生成…" : draft.units.length > 0 ? "重新生成" : "AI 生成内容结构"}</button>
+        {generating && <button onClick={cancelGeneration}>取消生成</button>}
+      </div>
       <h3>学习单元</h3><ol>{draft.units.map((unit, index) => <li key={unit.id}><input aria-label={`第 ${index + 1} 个单元标题`} value={unit.title} onChange={(event) => editDraft({ units: draft.units.map((item) => item.id === unit.id ? { ...item, title: event.target.value } : item) })} /><button aria-label={`上移第 ${index + 1} 个单元`} disabled={index === 0} onClick={() => moveDraftUnit(unit.id, -1)}>↑</button><button aria-label={`下移第 ${index + 1} 个单元`} disabled={index === draft.units.length - 1} onClick={() => moveDraftUnit(unit.id, 1)}>↓</button><button onClick={() => editDraft({ units: draft.units.filter((item) => item.id !== unit.id) })}>删除</button></li>)}</ol>
       <button onClick={() => editDraft({ units: [...draft.units, { id: crypto.randomUUID(), title: "" }] })}>添加单元</button>
       <div className="progress-dialog-actions"><button onClick={() => void cancel()}>取消</button><button onClick={() => void saveAndClose()}>保存草稿并返回</button><button className="progress-primary" disabled={!draft.name.trim() || draft.units.some((unit) => !unit.title.trim())} onClick={() => void confirm()}>确认创建</button></div>

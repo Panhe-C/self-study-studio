@@ -1,7 +1,7 @@
 # 开发交接
 
-更新时间：2026-10-17 17:42（Asia/Shanghai）
-任务状态：进行中（P0 已完成；P1 存储核心已实现；P2 双端手动流程已接入，验收未完成）
+更新时间：2026-10-17 17:54（Asia/Shanghai）
+任务状态：进行中（P0 已完成；P1–P3 核心链路已接入，真实验收与同步未完成）
 当前任务：内容进度 MVP 开发，先完成 Web 与 iOS 各自功能和验证，再接入跨端同步
 工作分支：feat/content-progress-mvp
 关联 PR：https://github.com/Panhe-C/self-study-studio/pull/7
@@ -17,21 +17,24 @@
 - P1 新增独立 SwiftData 与 IndexedDB 项目/草稿 repository；确认草稿与删除草稿为同一事务，稳定 ID 支持重试幂等。旧 Journal 存储未改。
 - P2 iPhone 主入口改为内容进度首页/详情和本地草稿创建；旧 Journal 仅从历史入口按需初始化，并保留旧迁移检查与 App Lock。
 - P2 Web 主入口改为本地项目；旧 Workspace 在 `/legacy`。浏览器已验证创建、完成进度、排序、暂停/恢复、刷新后项目及显式保存草稿的恢复。
+- P3 iPhone 新增严格标题列表 provider，使用已有 Keychain AI 配置；Web 增加仅接受配置端点/模型的同源代理，API Key 只存当前页面内存。双端草稿可主题/粘贴目录生成、取消和重生成，未经读取的链接明确报错，不伪称已使用。
 
 ## 下次从这里继续
-1. 完成 P2 剩余项：双端 AI 设置入口、界面流程图及双语资源；在可用模拟器/真机验证 iPhone 触摸排序、焦点、VoiceOver 和旧数据迁移。
-2. 按实施计划 P3 实现双端 AI 初始化，再分别完成 P4；P1 浏览器配额/SwiftData 写入失败等故障注入待补。
+1. 完成 P2/P3 剩余项：双语资源、界面图、安全课程链接读取或明确禁用、Web 代理可部署的限流/运行时验证；配置真实 provider 分别测试两端主题、目录、错误与重生成。
+2. 在可用模拟器/真机验证 iPhone 触摸排序、焦点、VoiceOver 和旧数据迁移；补 P1 浏览器配额/SwiftData 写入失败等故障注入，再分别完成 P4。
 3. 两端 P4 均通过后再准备 P5 云端环境、执行 P6 同步接入及 P7 联合验收。
 
 ## 验证情况
-- 已执行：Swift `ProgressDomainTests` 4 项、`ProgressRepositoryTests` 3 项、`ProgressApplicationSessionTests` 1 项通过；Web `npm test` 71 项、`npm run lint` 通过；iOS 无签名 Simulator build、`plutil -lint`、`git diff --check` 通过。浏览器手动创建 2 单元，完成 1 单元为 50%，重排、暂停/恢复，刷新后状态保留；显式保存草稿后重开恢复；`/legacy` 页面可打开。
-- 未执行：P1 故障注入、P2 iPhone 设备交互/VoiceOver、P3 AI、CloudKit 在线验证。CoreSimulator 服务本轮不可用；静态构建和会话测试不等于设备验收。
+- 已执行：Swift 全量 `swift test` 738 项通过（含 `ProgressPlanProviderTests` 2 项）；Web `npm test` 73 项、`npm run lint` 通过；iOS 无签名 Simulator build、`plutil -lint`、`git diff --check` 通过。浏览器手动创建 2 单元，完成 1 单元为 50%，重排、暂停/恢复，刷新后状态保留；显式保存草稿后重开恢复；`/legacy` 页面可打开。Web AI 无配置错误可见并保留草稿。
+- 未执行：P1 故障注入、P2 iPhone 设备交互/VoiceOver、P3 真实 provider 与链接读取、CloudKit 在线验证。CoreSimulator 服务本轮不可用；静态构建、模拟 provider 和会话测试不等于设备或真实 AI 验收。
+- `npx tsc --noEmit` 未通过：既有 `worker/index.ts` 缺少 `Fetcher`、`D1Database` 类型；本轮 Web 构建、测试及 ESLint 均通过，未把全局类型检查宣称为通过。
 
 ## 已知问题 / 待决定
 - CloudKit 独立建区、容量与账号隔离尚未在线验证，后置到 P5，不阻塞 P0–P4。
 - P4 仍需真实 AI、浏览器和设备验收；各自功能通过不代表跨端同步通过。
 - Web 草稿自动保存有短延时，立即刷新可能丢最后一次未提交的输入；已提供“保存草稿并返回”的确定保存操作，P4 再验收异常退出场景。
 - `git push` 返回成功；随后两次 `git ls-remote` 因 github.com DNS 解析失败，远程引用尚未独立复核。
+- Web AI 代理的限流目前为单实例内存窗口，部署时需验证或改为共享限流；课程链接读取保持禁用，直至能验证目标地址与重定向安全约束。
 
 ## 恢复开发所需信息
 - 最新任务顺序见 `docs/superpowers/plans/2026-10-17-content-progress-mvp.md`；旧验证文件名和旧检查编号仅供追溯。
