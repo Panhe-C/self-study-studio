@@ -444,3 +444,22 @@ test("new home route renders the local progress entry while legacy remains avail
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /ProgressApp/);
 });
+
+test("progress experience keeps its soft workspace visual and accessibility contract", async () => {
+  const [source, styles] = await Promise.all([
+    readFile(new URL("../app/progress-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/progress.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(source, /跳到主要内容/);
+  assert.match(source, /仅保存在此浏览器/);
+  assert.match(source, /role="progressbar"/);
+  assert.match(source, /标记完成/);
+  assert.match(styles, /--progress-canvas: #dedfdd/);
+  assert.match(styles, /--progress-paper: #f1f1ed/);
+  assert.match(styles, /--progress-ink: #304b47/);
+  assert.match(styles, /--progress-mint: #78a697/);
+  assert.match(styles, /min-height: calc\(100dvh - 32px\)/);
+  assert.match(styles, /min-height: 44px/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+});
