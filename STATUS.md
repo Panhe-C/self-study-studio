@@ -1,10 +1,10 @@
 # 开发交接
 
-更新时间：2026-10-18 09:36（Asia/Shanghai）
+更新时间：2026-10-18 09:37（Asia/Shanghai）
 任务状态：已完成（等待评审）
 当前任务：将 Ambi 风格的编辑感视觉、克制动效和清晰信息层级移植到 Web 内容进度页面，同时保留现有本地数据与项目操作行为
 工作分支：feat/ambi-inspired-web-visuals
-关联 PR：尚未创建
+关联 PR：https://github.com/Panhe-C/self-study-studio/pull/9
 
 ## 已完成
 - 基于 `feat/content-progress-mvp` 建立独立视觉任务分支，未改动 IndexedDB 数据结构、内容进度领域模型或 AI 接口。
