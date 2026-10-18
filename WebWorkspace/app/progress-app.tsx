@@ -64,6 +64,10 @@ export function ProgressApp() {
     if (currentID) document.getElementById(`progress-unit-${currentID}`)?.scrollIntoView({ block: "center" });
   }, [selected]);
   async function refresh() { if (store) setProjects(await store.projects()); }
+  function openProject(id: string | null) {
+    setSelectedID(id);
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+  }
   async function startDraft() {
     if (!store) return;
     if (draft) return;
@@ -124,7 +128,7 @@ export function ProgressApp() {
     try {
       await store.saveDraft(draft);
       const project = await store.confirmDraft(draft.id);
-      await refresh(); setSelectedID(project.id); setDraft(null); setError("");
+      await refresh(); openProject(project.id); setDraft(null); setError("");
     } catch (cause) { setError(String(cause)); }
   }
   async function cancel() {
@@ -192,11 +196,11 @@ export function ProgressApp() {
     </header>
     {error && !draft && <p role="alert" className="progress-error">{error}</p>}
     {selected ? <section id="progress-content" className="progress-detail" aria-label="项目详情">
-      <button className="progress-link" onClick={() => setSelectedID(null)}><span aria-hidden="true">←</span> 返回所有项目</button>
-      <div className="progress-detail-hero"><div><small>{selected.isPaused ? "PROJECT PAUSED" : "CURRENT PROJECT"}</small><h1>{selected.name}</h1><p>每次只推进一个单元。完成后，下一步会自然接上。</p></div>
+      <button className="progress-link" aria-label="返回所有项目" onClick={() => openProject(null)}><span aria-hidden="true">←</span><em>返回所有项目</em></button>
+      <div className="progress-detail-hero"><div><small>{selected.isPaused ? "已暂停" : "进行中"}</small><h1>{selected.name}</h1><p>每次只推进一个单元。</p></div>
         <button className="progress-secondary" onClick={() => void run(() => setPaused(selected, !selected.isPaused))}>{selected.isPaused ? "恢复项目" : "暂停项目"}</button></div>
       <Summary project={selected} variant="detail" />
-      <div className="progress-section-heading"><div><small>CONTENT PATH</small><h2>学习单元</h2></div><p>完成一项，进度和当前单元会一起更新。</p></div>
+      <div className="progress-section-heading"><div><small>LEARNING PATH</small><h2>学习单元</h2></div><p>完成一项，当前单元会自然移动到下一项。</p></div>
       {selected.units.length === 0 && <div className="progress-inline-empty"><p>尚无学习单元。</p><span>在下方添加第一项，让项目开始移动。</span></div>}
       <ol className="progress-units">{selected.units.map((unit, index) => <li className={unit.isCompleted ? "is-complete" : unit.id === selectedProgress?.currentUnitID ? "is-current" : "is-upcoming"} key={unit.id} id={`progress-unit-${unit.id}`} draggable
         onDragStart={(event) => event.dataTransfer.setData("text/plain", unit.id)}
@@ -208,15 +212,16 @@ export function ProgressApp() {
           <button aria-label={`下移 ${unit.title}`} disabled={index === selected.units.length - 1} onClick={() => move(unit.id, 1)}>↓</button>
           <button onClick={() => { const title = window.prompt("修改学习单元", unit.title); if (title !== null) void run(() => renameUnit(selected, unit.id, title)); }}>修改</button>
           <button className="progress-danger" onClick={() => { if (window.confirm(`删除「${unit.title}」及其完成状态？`)) void run(() => deleteUnit(selected, unit.id)); }}>删除</button></div>
+        {!unit.isCompleted && unit.id === selectedProgress?.currentUnitID && <button className="progress-complete-action" disabled={selected.isPaused} onClick={() => void run(() => setCompleted(selected, unit.id, true))}>标记完成</button>}
       </li>)}</ol>
       <div className="progress-add"><input aria-label="新学习单元标题" placeholder="添加学习单元" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} />
         <button className="progress-primary" disabled={!newTitle.trim()} onClick={() => { void run(() => addUnit(selected, newTitle)).then((saved) => { if (saved) setNewTitle(""); }); }}>添加单元</button></div>
     </section> : <section id="progress-content" className="progress-home" aria-label="项目首页">
-      <div className="progress-hero"><div><small>YOUR LEARNING, IN MOTION</small><h1>把要学的内容，<span>变成下一步。</span></h1><p>用一条清楚的内容路径记住进度。你决定什么算完成，系统负责把下一步带回来。</p></div><button className="progress-primary progress-hero-action" onClick={() => void startDraft()}>创建学习项目</button></div>
-      <div className="progress-projects-heading"><div><small>YOUR PROJECTS</small><h2>从上次停下的地方继续。</h2></div><p><strong>{projects.length}</strong> 个项目<br />仅保存在此浏览器</p></div>
+      <div className="progress-hero"><div><small>LEARNING PROJECTS</small><h1>从上次停下的地方继续</h1><p>拆解目标、跟踪进度，一步一步完成。</p></div><button className="progress-primary progress-hero-action" onClick={() => void startDraft()}><span aria-hidden="true">＋</span>创建学习项目</button></div>
+      <div className="progress-projects-heading"><div><small>YOUR PROJECTS</small><h2>学习项目</h2></div><p><strong>{projects.length}</strong> 个项目<br />仅保存在此浏览器</p></div>
       {projects.length === 0 && <div className="progress-empty"><span className="progress-empty-mark" aria-hidden="true" /><div><small>START HERE</small><h2>你的第一条学习路径，从一个项目开始。</h2><p>输入主题或粘贴课程目录，确认后再正式开始。</p></div><button className="progress-secondary" onClick={() => void startDraft()}>创建第一个项目</button></div>}
-      <div className="progress-project-list">{projects.map((project) => <button className="progress-card" key={project.id} onClick={() => setSelectedID(project.id)}>
-        <span className="progress-card-topline"><small>{project.isPaused ? "PROJECT PAUSED" : "LEARNING PROJECT"}</small><span>打开项目 <i aria-hidden="true">→</i></span></span><strong>{project.name}</strong><Summary project={project} />
+      <div className="progress-project-list">{projects.map((project) => <button className="progress-card" key={project.id} onClick={() => openProject(project.id)}>
+        <span className="progress-card-topline"><small>{project.isPaused ? "已暂停" : "进行中"}</small><span aria-hidden="true"><i>→</i></span></span><strong>{project.name}</strong><Summary project={project} />
       </button>)}</div>
     </section>}
     {draft && <div className="progress-overlay"><div role="dialog" aria-modal="true" aria-label="创建学习项目" className="progress-dialog">
@@ -244,7 +249,7 @@ function Summary({ project, variant = "card" }: { project: ProgressProject; vari
   const value = projectProgress(project);
   const current = project.units.find((unit) => unit.id === value.currentUnitID);
   const next = project.units.find((unit) => unit.id === value.nextUnitID);
-  return <div className={`progress-summary progress-summary--${variant}`}><span className="progress-summary-ghost" aria-hidden="true">{value.percentage}%</span><div className="progress-summary-number"><strong>{value.percentage}<i>%</i></strong><span>{value.completed} / {value.total} 已完成</span></div>
+  return <div className={`progress-summary progress-summary--${variant}`}><div className="progress-summary-number"><strong>{value.percentage}<i>%</i></strong><span>{value.completed} / {value.total} 已完成</span></div>
     <div className="progress-meter" role="progressbar" aria-label={`${project.name} 完成进度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value.percentage}><span style={{ width: `${value.percentage}%` }} /></div>
     <div className="progress-summary-steps"><div><small>正在进行</small><p>{current?.title ?? (value.isAllCompleted ? "全部完成" : "尚无学习单元")}</p></div><div><small>接下来</small><p>{next?.title ?? "无下一单元"}</p></div></div>
   </div>;
